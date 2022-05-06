@@ -1,14 +1,6 @@
-# KUZH API
+# KUZH BACKEND API
 
-- `GET /`
-
-  `GET /index.html`
-
-- `GET /assets/...`
-
-  Serves static files.
-
-- `POST /api/assembly`
+- `POST /assembly`
 
   Body:
   `assembly name as a string UTF-8`
@@ -21,7 +13,7 @@
   }
   ```
 
-- `GET /api/assembly/:id/state`
+- `GET /assembly/:id/state`
 
   Header `X-ASSEMBLY-SECRET`.
 
@@ -44,7 +36,7 @@
   }
   ```
 
-- `GET /api/assembly/:id/history`
+- `GET /assembly/:id/history`
 
   Header `X-ASSEMBLY-SECRET`.
 
@@ -53,7 +45,7 @@
   {
       "members": [
           {
-              "pk": "PUBLIC KEY DATA (PKCS) - SHA-256",
+              "pk_sha": "PUBLIC KEY DATA (PKCS) - SHA-256",
               "name": "John"
           }
       ],
@@ -72,7 +64,7 @@
   }
   ```
 
-- `POST /api/assembly/:id/ws/:event_id`
+- `POST /assembly/:id/ws/:event_id`
 
   Header `X-ASSEMBLY-SECRET`.
 
@@ -86,4 +78,3 @@
 
   Response:
   establishement of the WebSocket communication.
-  ```
