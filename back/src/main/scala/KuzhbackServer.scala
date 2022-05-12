@@ -4,16 +4,16 @@ import cats.effect.{Async, Resource}
 import cats.syntax.all.*
 import com.comcast.ip4s.*
 import fs2.Stream
-import org.http4s.ember.client.EmberClientBuilder
 import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.implicits.*
 import org.http4s.server.middleware.Logger
+import cats.effect.LiftIO
 
 object KuzhbackServer:
-  def stream[F[_]: Async]: Resource[F, Nothing] =
-    val helloWorldAlg = HelloWorld.impl[F]
+  def stream[F[_]: Async: LiftIO]: Resource[F, Nothing] =
+    val assemblyAlg = Assembly.impl[F]
     val httpApp = (
-      KuzhbackRoutes.helloWorldRoutes[F](helloWorldAlg)
+      KuzhbackRoutes.assemblyRoutes[F](assemblyAlg)
     ).orNotFound
 
     // With Middlewares in place

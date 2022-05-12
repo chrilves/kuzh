@@ -37,9 +37,6 @@ export default class App extends React.Component<{}, AppState> {
         break;
       };
     }
-    return <div>
-      page = {this.state.page}
-      {page}
-    </div>;
+    return page;
   }
 }
