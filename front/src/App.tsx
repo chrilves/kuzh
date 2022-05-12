@@ -1,58 +1,45 @@
 import React from 'react';
-import logo from './logo.svg';
 import './App.css';
+import AssemblyPage from './Assembly';
+import Menu from './Menu';
+
+type pages = "menu" | "assembly";
 
 type AppState = {
-  last_assembly: Boolean
+  page: pages;
 }
 
 export default class App extends React.Component<{}, AppState> {
   constructor(props: {}) {
     super(props);
-    this.state = { last_assembly: true }
+    this.goToMenu = this.goToMenu.bind(this);
+    this.goToAssembly = this.goToAssembly.bind(this);
+    this.state = { page: "assembly" };
+  }
+
+  goToMenu() {
+    this.setState({page: 'menu'});
+  }
+
+  goToAssembly() {
+    this.setState({page: 'assembly'});
   }
 
   render(): JSX.Element {
-    return <div className="App">
-            <header className="App-header">
-              <h1>Kuzh</h1>
-              { this.state.last_assembly ?
-                <div className="kuzh-rejoin-last-assembly">
-                  <h2 className="kuzh-style-action">Revenir à la dernière Assemblée</h2>
-                  <form>
-                    <input type="button" name="join_last_assembly" value="Revenir à la dernière Assemblée"/>
-                  </form>
-                </div>
-                : null
-              }
-              <div className="kuzh-join-assembly">
-                <h2 className="kuzh-style-action">Rejoindre une Assemblée existante</h2>
-                <form>
-                  <input type="text" name="assembly_key" placeholder="clef de connexion de l'assemblée"></input>
-                  <input type="button" name="join_assembly" value="Rejoindre l'Assemblée"/>
-                </form>
-              </div>
-              <div className="kuzh-create-assembly">
-                <h2 className="kuzh-style-action">Créer une nouvelle Assemblée</h2>
-                <form>
-                  <input type="text" name="assembly_name" placeholder="nom de l'assemblée"></input>
-                  <input type="button" name="create_assembly" value="Créer l'Assemblée"/>
-                </form>
-              </div>
-
-              {/* <img src={logo} className="App-logo" alt="logo" />
-              <p>
-                Edit <code>src/App.tsx</code> and save to reload.
-              </p>
-              <a
-                className="App-link"
-                href="https://reactjs.org"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Learn React
-            </a> */}
-            </header>
-          </div>;
+    let page;
+    switch (this.state.page) {
+      case "menu": {
+        page = <Menu goToMenu={this.goToMenu} goToAssembly={this.goToAssembly}/>;
+        break;
+      };
+      case "assembly": {
+        page = <AssemblyPage uuid="" name="" secret="" goToMenu={this.goToMenu}/>;
+        break;
+      };
+    }
+    return <div>
+      page = {this.state.page}
+      {page}
+    </div>;
   }
 }

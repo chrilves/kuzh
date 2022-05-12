@@ -22,7 +22,7 @@ object KuzhbackRoutes:
     import dsl._
     HttpRoutes.of[F] { case GET -> Root / "assembly" / id / "ws" =>
       for
-        greeting <- H.hello(HelloWorld.Name(name))
+        greeting <- H.hello(HelloWorld.Name(id))
         resp     <- Ok(greeting)
       yield resp
     }

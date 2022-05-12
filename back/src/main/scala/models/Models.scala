@@ -1,6 +1,4 @@
-package models
-
-package chrilves.kuzhback
+package chrilves.kuzhback.models
 
 import cats.Applicative
 import cats.implicits.*
@@ -10,7 +8,7 @@ object Assembly:
     enum Harvest[A]:
         val path: List[Member.Fingerprint]
 
-        case Question(path: Member.Fingerprint) extends Harvest[String]
+        case Question(path: List[Member.Fingerprint]) extends Harvest[String]
         case Answer(question: String, path: List[Member.Fingerprint]) extends Harvest[Boolean]
 
     object Harvest:
