@@ -1,15 +1,21 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
-import App from './App';
-import reportWebVitals from './reportWebVitals';
+import App from './components/App';
+import { LocalStorageAPI, StorageAPI } from './lib/StorageAPI';
+//import reportWebVitals from './reportWebVitals';
+
+/////////////////////////////
+// Initialisation!
+
+const storageAPI: StorageAPI = new LocalStorageAPI;
 
 const root: ReactDOM.Root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
 );
 root.render(
   <React.StrictMode>
-    <App />
+    <App storageAPI={storageAPI}/>
   </React.StrictMode>
 );
 

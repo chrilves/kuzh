@@ -12,7 +12,7 @@ import models.*
 trait MemberChannel[F[_]]
 
 object MemberChannel:
-    enum Connection:
-        case Initial
-        case ChallengeSent(publicKey: Member.PK, challenge: String)
-        case Verified(publicKey: Member.PK)
+  enum Connection:
+    case Initial
+    case ChallengeSent(publicKey: Member.PK, challenge: String)
+    case Verified(publicKey: Member.PK)
