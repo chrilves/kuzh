@@ -1,16 +1,16 @@
 import { Mutex } from "async-mutex";
-import { Assembly } from "./Model"; 
+import { Membership } from "./Model"; 
 
 export interface StorageAPI {
-  fetchLastAssembly(): Assembly | null 
-  storeLastAssembly(assembly: Assembly): void
+  fetchLastMembership(): Promise<Membership | null>
+  storeLastMembership(assembly: Membership): Promise<void>
   getMutex(): Mutex
 }
 
 export class LocalStorageAPI implements StorageAPI {
   readonly mutex = new Mutex;
   
-  fetchLastAssembly(): Assembly | null {
+  fetchLastMembership(): Membership | null {
     let asm = window.localStorage.getItem("LAST_ASSEMBLY");
     if (asm) {
       return JSON.parse(asm);
@@ -18,8 +18,9 @@ export class LocalStorageAPI implements StorageAPI {
       return null;
     }
   }
-  storeLastAssembly(assembly: Assembly): void {
-    window.localStorage.setItem("LAST_ASSEMBLY", JSON.stringify(assembly));
+  async storeLastMembership(membership: Membership): Promise<void> {
+    const json = await Membership.serialize(membership);
+    return window.localStorage.setItem("LAST_MEMBERSHIP", JSON.stringify(json));
   }
 
   getMutex = () => this.mutex;

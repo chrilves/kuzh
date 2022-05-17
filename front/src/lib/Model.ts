@@ -1,17 +1,63 @@
-export type Nickname = {
-  index: number,
-  name: string
+export type KeyPair = {
+  readonly privateKey: CryptoKey,
+  readonly publicKey: CryptoKey
 }
 
-export type KeyPair = {
-  privateKey: CryptoKey,
-  publicKey: CryptoKey
+
+export type SerializedKeyPair = {
+  readonly privateKey: JsonWebKey,
+  readonly publicKey: JsonWebKey
+}
+
+export namespace KeyPair {
+  export async function serializeCryptoKey(key: CryptoKey): Promise<JsonWebKey> {
+    return await window.crypto.subtle.exportKey("jwk", key)
+  } 
+
+  export async function serialize(kp: KeyPair): Promise<SerializedKeyPair> {
+    const privateKey = await serializeCryptoKey(kp.privateKey);
+    const publicKey  = await serializeCryptoKey(kp.publicKey);
+    return {
+      privateKey: privateKey,
+      publicKey: publicKey
+    }
+  }
+}
+
+export namespace SerializedKeyPair {
+  export async function deSerializeCryptoKey(key: JsonWebKey): Promise<CryptoKey> {
+    return await window.crypto.subtle.importKey(
+      "jwk",
+      key,
+      {
+        name: "RSA-OAEP",
+        hash: "SHA-256"
+      },
+      true,
+      ((key.key_ops ? key.key_ops : []) as KeyUsage[])
+    );
+  } 
+
+  export async function deSerialize(kp: SerializedKeyPair): Promise<KeyPair> {
+    const privateKey = await deSerializeCryptoKey(kp.privateKey);
+    const publicKey  = await deSerializeCryptoKey(kp.publicKey);
+    return {
+      privateKey: privateKey,
+      publicKey: publicKey
+    }
+  }
 }
 
 export type Me = {
   readonly signKeyPair: KeyPair,
   readonly encryptKeyPair: KeyPair,
-  nickname: Nickname
+  readonly nickname: string
+}
+
+export type SerializedMe = {
+  readonly signKeyPair: SerializedKeyPair,
+  readonly encryptKeyPair: SerializedKeyPair,
+  readonly nickname: string
 }
 
 export namespace Me {
@@ -75,10 +121,7 @@ export namespace Me {
         privateKey: decryptKey,
         publicKey: encryptKey
       },
-      nickname: {
-        index: 0,
-        name: nickname
-      }
+      nickname: nickname
     }
   }
 
@@ -102,13 +145,63 @@ export namespace Me {
     )
   }
 
+  export async function serialize(me: Me): Promise<SerializedMe> {
+    const signKeyPair = await KeyPair.serialize(me.signKeyPair);
+    const encryptKeyPair = await KeyPair.serialize(me.encryptKeyPair);
+    return {
+      signKeyPair: signKeyPair,
+      encryptKeyPair: encryptKeyPair,
+      nickname: me.nickname
+    }
+  }
+}
+
+export namespace SerializedMe {
+  export async function deSerialize(me: SerializedMe): Promise<Me> {
+    const signKeyPair = await SerializedKeyPair.deSerialize(me.signKeyPair);
+    const encryptKeyPair = await SerializedKeyPair.deSerialize(me.encryptKeyPair);
+    return {
+      signKeyPair: signKeyPair,
+      encryptKeyPair: encryptKeyPair,
+      nickname: me.nickname
+    }
+  }
 }
 
 export type Assembly = {
-  uuid: string,
-  secret: string,
-  name: string,
-  me: Me
+  readonly uuid: string,
+  readonly secret: string,
+  readonly name: string
 }
 
-export type MemberStatus = "absent" | "busy" | "ready"
+export type Membership = {
+  readonly assembly: Assembly,
+  readonly me: Me
+}
+
+export type SerializedMembership = {
+  readonly assembly: Assembly,
+  readonly me: SerializedMe
+}
+
+export namespace Membership {
+  export async function serialize(m: Membership): Promise<SerializedMembership> {
+    const me = await Me.serialize(m.me);
+    return  {
+      assembly: m.assembly,
+      me: me
+    }
+  } 
+}
+
+export namespace SerializedMembership {
+  export async function deSerialize(m: SerializedMembership): Promise<Membership> {
+    const me = await SerializedMe.deSerialize(m.me);
+    return  {
+      assembly: m.assembly,
+      me: me
+    }
+  }
+}
+
+export type MemberStatus = "LOST" | "BUSY" | "READY"

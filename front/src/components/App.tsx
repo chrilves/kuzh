@@ -1,8 +1,8 @@
 import React from 'react';
-import AssemblyPage from './Assembly';
-import Menu from './Menu';
+import Menu from './MenuPage';
 import { StorageAPI } from '../lib/StorageAPI';
-import { Init as AssemblyInit } from './Assembly'
+import AssemblyPage from './AssemblyPage'
+import { Init as AssemblyInit } from './AssemblyPage'
 
 //////////////////////////////////////////////////////////////////////////////
 // Props
