@@ -1,4 +1,4 @@
-package chrilves.kuzhback
+package chrilves.kuzh.back
 
 import cats.Applicative
 import cats.implicits.*
@@ -14,5 +14,5 @@ trait MemberChannel[F[_]]
 object MemberChannel:
   enum Connection:
     case Initial
-    case ChallengeSent(publicKey: Member.PK, challenge: String)
-    case Verified(publicKey: Member.PK)
+    case ChallengeSent(challenge: String)
+    case Verified
