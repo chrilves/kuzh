@@ -1,93 +1,133 @@
-import React from "react";
-import AssemblyPage from "./ConnectionPage";
-import Menu from "./MenuPage";
-import { StorageAPI } from "../services/StorageAPI";
-import { Init as ConnectionInit } from "./ConnectionPage";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { AppState } from "../model/AppState";
+import { CryptoMembership } from "../model/Crypto";
+import { Operation } from "../model/Operation";
 import { AssemblyAPI } from "../services/AssemblyAPI";
+import { Services } from "../services/Services";
+import AssemblyPage from "./AssemblyPage";
+import Menu from "./Menu";
 
-//////////////////////////////////////////////////////////////////////////////
-// Props
+export default function App(props: { services: Services }): JSX.Element {
+  const [appState, setAppState] = useState<AppState>(AppState.menu);
+  const navigate = useNavigate();
 
-type AppProps = {
-  storageAPI: StorageAPI;
-  assemblyAPI: AssemblyAPI;
-  assemblyKey: {id: string, secret: string} | null
-};
-
-//////////////////////////////////////////////////////////////////////////////
-// STATES
-
-export namespace State {
-  export type Menu = {
-    page: "menu";
-  };
-
-  export const menu: Menu = { page: "menu" };
-
-  export type Assembly = {
-    page: "assembly";
-    init: ConnectionInit;
-  };
-
-  export function assembly(init: ConnectionInit): Assembly {
-    return {
-      page: "assembly",
-      init: init,
-    };
+  function menu() {
+    setAppState(AppState.menu);
+    navigate("/");
   }
 
-  export type DirectJoin = {
-    page: "directJoin";
-  };
+  function assembly(cryptoMembership: CryptoMembership) {
+    console.log(
+      `Navigation vers l'assemblée ${cryptoMembership.assembly.uuid}`
+    );
+    setAppState(AppState.assembly(cryptoMembership));
+    navigate(`/assembly/${cryptoMembership.assembly.uuid}`);
+  }
 
-  export const directJoin: DirectJoin = { page: "directJoin" };
+  async function prepare(operation: Operation) {
+    setAppState(AppState.prepare(operation));
+    try {
+      let cryptoMembership: CryptoMembership = await AssemblyAPI.fold(
+        props.services.assemblyAPI
+      )(operation);
+      assembly(cryptoMembership);
+    } catch (e) {
+      setAppState(AppState.failure(`${e}`));
+    }
+  }
 
+  let page: JSX.Element;
+
+  switch (appState.tag) {
+    case "menu":
+      page = (
+        <Menu
+          storageAPI={props.services.storageAPI}
+          prepare={prepare}
+          assembly={assembly}
+        />
+      );
+      break;
+    case "prepare":
+      switch (appState.operation.tag) {
+        case "create":
+          page = <Create create={appState.operation} />;
+          break;
+        case "join":
+          page = <Join join={appState.operation} />;
+          break;
+      }
+      break;
+
+    case "failure":
+      page = <Failure reason={appState.reason} menu={menu} />;
+      break;
+
+    case "assembly":
+      page = (
+        <AssemblyPage
+          cryptoMembership={appState.cryptoMembership}
+          menu={menu}
+        />
+      );
+      break;
+  }
+
+  return (
+    <div>
+      <h1>kuzh</h1>
+      {page}
+    </div>
+  );
 }
 
-type State = State.Menu | State.DirectJoin | State.Assembly;
+function Create(props: { create: Operation.Create }): JSX.Element {
+  return (
+    <div>
+      <p>Création d'une nouvelle assemblée</p>
+      <ul>
+        <li>
+          <span className="listKey">Nom de l'assemblée:</span>{" "}
+          <span className="assemblyId">{props.create.assemblyName}</span>
+        </li>
+        <li>
+          <span className="listKey">Votre pesudo:</span>{" "}
+          <span className="nickName">{props.create.nickname}</span>.
+        </li>
+      </ul>
+    </div>
+  );
+}
 
-//////////////////////////////////////////////////////////////////////////////
-// COMPONENTS
+function Join(props: { join: Operation.Join }): JSX.Element {
+  return (
+    <div>
+      <p>Connection à une assemblée existance.</p>
+      <ul>
+        <li>
+          <span className="listKey">Identifiant de l'assemblée:</span>{" "}
+          <span className="assemblyId">{props.join.uuid}</span>
+        </li>
+        <li>
+          <span className="listKey">Votre pesudo:</span>{" "}
+          <span className="nickName">{props.join.nickname}</span>.
+        </li>
+      </ul>
+    </div>
+  );
+}
 
-export default class App extends React.Component<AppProps, State> {
-  constructor(props: AppProps) {
-    super(props);
-    this.state = State.menu;
-  }
-
-  goToMenu = () => this.setState(State.menu);
-  goToAssembly = (init: ConnectionInit) => this.setState(State.assembly(init));
-
-  render(): JSX.Element {
-    let page: JSX.Element;
-    switch (this.state.page) {
-      case "menu":
-        page = (
-          <Menu
-            storageAPI={this.props.storageAPI}
-            goToMenu={this.goToMenu}
-            goToAssembly={this.goToAssembly}
-          />
-        );
-        break;
-      case "directJoin":
-        break;
-      case "assembly":
-        page = (
-          <AssemblyPage
-            storageAPI={this.props.storageAPI}
-            assemblyAPI={this.props.assemblyAPI}
-            goToMenu={this.goToMenu}
-            init={this.state.init}
-          />
-        );
-        break;
-    }
-    return (
-      <div>
-        <h1>Kuzh</h1>
-        {page}
-      </div>
-    );
-  }
+function Failure(props: { reason: string; menu(): void }): JSX.Element {
+  return (
+    <div>
+      <button type="button" onClick={props.menu}>
+        Menu
+      </button>
+      <h1>Erreur:</h1>
+      <p>
+        <span className="error">{props.reason}</span>.
+      </p>
+    </div>
+  );
 }

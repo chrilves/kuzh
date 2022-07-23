@@ -48,7 +48,7 @@ export class BackCachingIdentityProofStore {
       result.push(id);
     }
 
-    if (toFetch.size != 0) {
+    if (toFetch.size !== 0) {
       const ids: IdentityProof[] = Array.from(this.store.values());
       const value = JSON.stringify(ids);
       console.log(`Saving members ${value}`);

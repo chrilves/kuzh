@@ -2,6 +2,7 @@ import { Mutex } from "async-mutex";
 import { BackAPI } from "./BackAPI";
 import { CryptoMe, CryptoMembership, Membership } from "../model/Crypto";
 import { StorageAPI } from "./StorageAPI";
+import { Operation } from "../model/Operation";
 
 export interface AssemblyAPI {
   create(assemblyName: string, nickname: string): Promise<CryptoMembership>;
@@ -11,6 +12,28 @@ export interface AssemblyAPI {
     nickname: string
   ): Promise<CryptoMembership>;
   connect(cryptoMembership: CryptoMembership): Promise<void>;
+}
+
+export namespace AssemblyAPI {
+  export function fold(
+    assemblyAPI: AssemblyAPI
+  ): (operation: Operation) => Promise<CryptoMembership> {
+    return async function (operation: Operation) {
+      switch (operation.tag) {
+        case "join":
+          return await assemblyAPI.join(
+            operation.uuid,
+            operation.secret,
+            operation.nickname
+          );
+        case "create":
+          return await assemblyAPI.create(
+            operation.assemblyName,
+            operation.nickname
+          );
+      }
+    };
+  }
 }
 
 export class MutexedAssemblyAPI implements AssemblyAPI {

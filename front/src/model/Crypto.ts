@@ -7,7 +7,7 @@ export namespace CryptoConfig {
 
 export namespace Valid {
   export function nickname(n: string): boolean {
-    if (n && n != "") {
+    if (n && n !== "") {
       return true;
     } else {
       return false;
@@ -15,7 +15,7 @@ export namespace Valid {
   }
 
   export function uuid(u: string): boolean {
-    if (u && u != "") {
+    if (u && u !== "") {
       return true;
     } else {
       return false;
@@ -23,7 +23,7 @@ export namespace Valid {
   }
 
   export function secret(s: string): boolean {
-    if (s && s != "") {
+    if (s && s !== "") {
       return true;
     } else {
       return false;
@@ -298,7 +298,7 @@ export namespace CryptoMe {
       new Uint8Array(fingerprintAB)
     );
 
-    if (me.fingerprint != fingerprint)
+    if (me.fingerprint !== fingerprint)
       throw new Error(
         `registered fingerprint ${me.fingerprint} does not match computed fingerprint ${fingerprint}.`
       );
@@ -339,7 +339,7 @@ export namespace CryptoMe {
       new Uint8Array(fingerprintAB)
     );
 
-    if (fingerprint != i.fingerprint) {
+    if (fingerprint !== i.fingerprint) {
       throw new Error(
         `[KO] Fingerprints ${fingerprint} and ${i.fingerprint} don't match!`
       );

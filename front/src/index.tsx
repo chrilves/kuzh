@@ -1,29 +1,35 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import "./index.css";
-import App from "./components/App";
 import { LocalStorageAPI, StorageAPI } from "./services/StorageAPI";
 import { BackAPI, RealBackAPI } from "./services/BackAPI";
 import { AssemblyAPI, RealAssemblyAPI } from "./services/AssemblyAPI";
-import { findRoute } from "./lib/Router";
+import { Services } from "./services/Services";
+import App from "./components/App";
 //import reportWebVitals from './reportWebVitals';
 
 /////////////////////////////
 // Initialisation!
 
-
-
 const storageAPI: StorageAPI = new LocalStorageAPI();
 const backAPI: BackAPI = new RealBackAPI("http://localhost:8081");
 const assemblyAPI: AssemblyAPI = new RealAssemblyAPI(storageAPI, backAPI);
-const assemblyKey = findRoute();
+
+const services: Services = {
+  storageAPI: storageAPI,
+  assemblyAPI: assemblyAPI,
+};
 
 const root: ReactDOM.Root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement
 );
+
 root.render(
   <React.StrictMode>
-    <App storageAPI={storageAPI} assemblyAPI={assemblyAPI} assemblyKey={assemblyKey}/>
+    <BrowserRouter>
+      <App services={services} />
+    </BrowserRouter>
   </React.StrictMode>
 );
 
