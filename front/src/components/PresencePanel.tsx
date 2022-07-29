@@ -40,9 +40,9 @@ export default function PresencePanel(props: Props): JSX.Element {
       array: [Name, Fingerprint, number][]
     ) => (
       <tr key={value[1]}>
-        <td>value[0]</td>
-        <td>value[1]</td>
-        <td>(new Date(value[2])).toLocaleString()</td>
+        <td>{value[0]}</td>
+        <td>{value[1]}</td>
+        <td>{new Date(value[2]).toLocaleString()}</td>
       </tr>
     )
   );

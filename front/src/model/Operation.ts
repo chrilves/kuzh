@@ -17,15 +17,15 @@ export namespace Operation {
 
   export type Join = {
     tag: "join";
-    uuid: string;
+    id: string;
     secret: string;
     nickname: string;
   };
 
-  export function join(uuid: string, secret: string, nickname: string): Join {
+  export function join(id: string, secret: string, nickname: string): Join {
     return {
       tag: "join",
-      uuid: uuid,
+      id: id,
       secret: secret,
       nickname: nickname,
     };
@@ -33,14 +33,14 @@ export namespace Operation {
 
   export function fold<R>(
     create: (assemblyName: string, nickname: string) => R,
-    join: (uuid: string, secret: string, nickname: string) => R
+    join: (id: string, secret: string, nickname: string) => R
   ): (op: Operation) => R {
     return function (op: Operation): R {
       switch (op.tag) {
         case "create":
           return create(op.assemblyName, op.nickname);
         case "join":
-          return join(op.uuid, op.secret, op.nickname);
+          return join(op.id, op.secret, op.nickname);
       }
     };
   }

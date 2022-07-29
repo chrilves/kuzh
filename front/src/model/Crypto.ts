@@ -14,7 +14,7 @@ export namespace Valid {
     }
   }
 
-  export function uuid(u: string): boolean {
+  export function id(u: string): boolean {
     if (u && u !== "") {
       return true;
     } else {
@@ -386,7 +386,7 @@ export namespace CryptoMe {
 }
 
 export type AssemblyInfo = {
-  readonly uuid: string;
+  readonly id: string;
   readonly secret: string;
   readonly name: string;
 };

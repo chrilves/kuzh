@@ -1,18 +1,23 @@
 import { CryptoMembership } from "../model/Crypto";
+import { QRCodeSVG } from "qrcode.react";
 
 type Props = {
   cryptoMembership: CryptoMembership;
 };
 
 export default function CryptoMembershipPanel(props: Props): JSX.Element {
+  function connectionURL(): string {
+    const loc = window.location;
+    return `${loc.protocol}//${loc.host}/assembly/${props.cryptoMembership.assembly.id}?secret=${props.cryptoMembership.assembly.secret}`;
+  }
+
   async function connectionKeyToClipboard() {
-    await navigator.clipboard.writeText(
-      `${props.cryptoMembership.assembly.uuid},${props.cryptoMembership.assembly.secret}`
-    );
+    await navigator.clipboard.writeText(connectionURL());
   }
 
   return (
     <div>
+      <h3>Information de l'assemblée</h3>
       <table>
         <thead>
           <tr>
@@ -25,7 +30,7 @@ export default function CryptoMembershipPanel(props: Props): JSX.Element {
           <tr>
             <td>Assemblée</td>
             <td>{props.cryptoMembership.assembly.name}</td>
-            <td>{props.cryptoMembership.assembly.uuid}</td>
+            <td>{props.cryptoMembership.assembly.id}</td>
           </tr>
           <tr>
             <td>Moi</td>
@@ -35,8 +40,11 @@ export default function CryptoMembershipPanel(props: Props): JSX.Element {
         </tbody>
       </table>
       <button type="button" onClick={connectionKeyToClipboard}>
-        Copier la clef de connection de l'assemblée dans le presse passier.
+        Copier le lien vers l'assemblée dans le presse passier.
       </button>
+      <div>
+        <QRCodeSVG value={connectionURL()} />
+      </div>
     </div>
   );
 }

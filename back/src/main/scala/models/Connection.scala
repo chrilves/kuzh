@@ -6,15 +6,14 @@ import cats.syntax.all.*
 import cats.effect.std.Queue
 import cats.effect.kernel.Async
 import cats.effect.kernel.Ref
-import chrilves.kuzh.back.models.Assembly.AssemblyEvent
 import io.circe.*
-import io.circe.generic.auto.*
 import io.circe.syntax.*
 import io.circe.parser.*
 import java.util.Base64
 import org.bouncycastle.util.encoders.Base64Encoder
 
 import chrilves.kuzh.back.*
+import chrilves.kuzh.back.models.assembly.*
 import chrilves.kuzh.back.lib.crypto.*
 import chrilves.kuzh.back.services.*
 import scodec.bits.ByteVector
@@ -32,23 +31,23 @@ object Connection:
       status     <- Ref.of[F, Status[F]](Status.Initial[F]())
       queue      <- Queue.unbounded[F, Option[WebSocketFrame]]
     yield
-      def onClose(from: String): F[Unit] =
+      inline def sendHandshake(handshake: Handshake): F[Unit] =
+        queue.offer(Some(WebSocketFrame.Text(handshake.asJson.noSpaces)))
+
+      def onClose(message: String): F[Unit] =
         import Status.*
         val terminate =
-          status.set(Status.Terminated[F]()).void *> queue.offer(None).attempt.void
+          queue.offer(None).attempt.void
 
-        Async[F].delay(println(s"=> Closing connection from $from")) *>
+        Async[F].delay(println(s"=> Closing connection because of $message")) *>
           status.get.flatMap {
             case Initial() | _: Challenged[F] =>
-              terminate
+              sendHandshake(Handshake.Error(message, true)) *> terminate
             case Established(assembly, member) =>
               for
-                _   <- terminate
-                now <- Async[F].realTimeInstant
-                _   <- assembly.memberPresence(member, Member.Presence.Absent(now)).attempt
+                _ <- terminate
+                _ <- assembly.removeMember(member).attempt
               yield ()
-            case Terminated() =>
-              Async[F].pure(())
           }
 
       val send: fs2.Stream[F, WebSocketFrame] =
@@ -57,19 +56,19 @@ object Connection:
       def receive(input: fs2.Stream[F, WebSocketFrame]): fs2.Stream[F, Unit] =
         import WebSocketFrame.*
 
-        def read[A: Decoder](s: String)(f: A => F[Unit]): F[Unit] =
+        def read[A: Decoder](from: String)(s: String)(f: A => F[Unit]): F[Unit] =
           Async[F].delay {
-            println(s"Received websocket message: ${s}")
+            println(s"[${from}] Received websocket message: ${s}")
           } *>
             (parse(s) match
               case Left(e) =>
-                onClose(s"Parsing error of ${s}: ${e}")
+                onClose(s"[${from}] Parsing error of ${s}: ${e}")
               case Right(json) =>
                 json.as[A] match
                   case Left(e) =>
-                    onClose(s"Decoding error of ${json}: ${e}")
+                    onClose(s"[${from}] Decoding error of ${json}: ${e}")
                   case Right(a) =>
-                    f(a).handleErrorWith(e => onClose(s"Treatement errror of ${a}: ${e}"))
+                    f(a).handleErrorWith(e => onClose(s"[${from}] Treatement errror of ${a}: ${e}"))
             )
 
         input.foreach {
@@ -77,62 +76,59 @@ object Connection:
             import Status.*
             status.get.flatMap {
               case Initial() =>
-                read[ConnectionParameters](t.str) { cp =>
-                  assemblies.withAssembly(cp.id, cp.secret) {
-                    case Some(asm) =>
-                      for
-                        challenge           <- lib.Random.bytes(32)
-                        storedIdentityProof <- asm.identityProofs(Set(cp.member)).map(_.headOption)
-                        _ <- status.set(Challenged(asm, cp.member, challenge, storedIdentityProof))
-                        _ <- queue.offer(
-                          Some(
-                            WebSocketFrame.Text(
-                              Json
-                                .obj(
-                                  "challenge" -> Json.fromString(
-                                    Base64UrlEncoded.encode(challenge).asString
-                                  ),
-                                  "identity_proof_needed" -> Json.fromBoolean(
-                                    storedIdentityProof.isEmpty
-                                  )
-                                )
-                                .noSpaces
-                            )
+                read[Handshake]("initial")(t.str) {
+                  case cp @ Handshake.Crententials(id, secret, member) =>
+                    assemblies.withAssembly(id, secret) {
+                      case Some(asm) =>
+                        for
+                          challenge           <- lib.Random.bytes(32)
+                          storedIdentityProof <- asm.identityProof(member)
+                          _ <- status.set(Challenged(asm, member, challenge, storedIdentityProof))
+                          _ <- sendHandshake(
+                            Handshake.Challenge(challenge, storedIdentityProof.isEmpty)
                           )
-                        )
-                      yield ()
-                    case None =>
-                      onClose(s"No Assembly or wrong secret for ${cp}")
-                  }
+                        yield ()
+                      case None =>
+                        onClose(s"No Assembly or wrong secret for ${cp}")
+                    }
+                  case h =>
+                    val msg = s"Protocol Error: wrong message ${h}"
+                    sendHandshake(Handshake.Error(msg, true)) *> onClose(msg)
                 }
 
               case Challenged(assembly, member, challenge, storedIdentityProof) =>
-                read[ChallengeResponse](t.str) { cr =>
-                  cr.check(member, storedIdentityProof, challenge) match
-                    case Some(id) =>
-                      val registerIdentityproof =
-                        if storedIdentityProof.isEmpty
-                        then assembly.registerMember(id)
-                        else Async[F].pure(())
+                read[Handshake]("challenged")(t.str) {
+                  case cr: Handshake.ChallengeResponse =>
+                    cr.check(member, storedIdentityProof, challenge) match
+                      case Some(id) =>
+                        def handler(message: AssemblyEvent): F[Unit] =
+                          queue.offer(Some(WebSocketFrame.Text(message.asJson.noSpaces)))
 
-                      def handler(message: Assembly.AssemblyEvent): F[Unit] =
-                        queue.offer(Some(WebSocketFrame.Text(message.asJson.noSpaces)))
+                        for
+                          _ <- status.set(Status.Established[F](assembly, member))
+                          _ <-
+                            (if storedIdentityProof.isEmpty
+                             then
+                               assembly
+                                 .registerMember(id)
+                                 .handleErrorWith(e => onClose(s"Member registration error ${e}"))
+                             else Async[F].pure(()))
+                          _ <- sendHandshake(Handshake.Established)
+                          _ <- assembly
+                            .memberChannel(member, handler)
+                            .handleErrorWith(e => onClose(s"Member channel error ${e}"))
+                        yield ()
+                      case None =>
+                        onClose("Identity Proof did not pass check!")
 
-                      for
-                        _ <- status.set(Status.Established[F](assembly, member))
-                        _ <- assembly
-                          .memberChannel(member, handler)
-                          .handleErrorWith(e => onClose(s"Member channel error ${e}"))
-                      yield ()
-                    case None =>
-                      onClose("Checking terminated on error.")
+                  case h =>
+                    onClose(s"Protocol Error: wrong message ${h}")
                 }
+
               case Established(assembly, member) =>
-                read[Assembly.MemberEvent](t.str) { mfm =>
+                read[MemberEvent]("established")(t.str) { mfm =>
                   assembly.memberMessage(member, mfm)
                 }
-              case Terminated() =>
-                Async[F].pure(())
             }
           case Ping(s) =>
             Async[F].delay(println(s"Recevied PING ${s}"))
@@ -166,54 +162,4 @@ object Connection:
     case Established[F[_]](
         assembly: Assembly[F],
         member: Member.Fingerprint
-    )                       extends Status[F]
-    case Terminated[F[_]]() extends Status[F]
-
-  final case class ConnectionParameters(
-      id: Assembly.Info.Id,
-      secret: Assembly.Info.Secret,
-      member: Member.Fingerprint
-  )
-
-  object ConnectionParameters:
-    given challengeResponseDecoder: Decoder[ConnectionParameters] with
-      def apply(c: HCursor): Decoder.Result[ConnectionParameters] =
-        import Decoder.resultInstance.*
-        for
-          id     <- c.downField("id").as[Assembly.Info.Id]
-          secret <- c.downField("secret").as[Assembly.Info.Secret]
-          member <- c.downField("member").as[Member.Fingerprint]
-        yield ConnectionParameters(id, secret, member)
-
-  final case class ChallengeResponse(
-      signature: Signature[Array[Byte]],
-      identityProof: Option[IdentityProof]
-  ):
-    def check(
-        member: Member.Fingerprint,
-        storedIdentityProof: Option[IdentityProof],
-        challenge: Array[Byte]
-    ): Option[IdentityProof] =
-      // Validity + Cohenrence
-      if (
-        identityProof.map(_.isValid).getOrElse(true) &&
-        identityProof.flatMap(id1 => storedIdentityProof.map(id2 => id1 === id2)).getOrElse(true)
-      )
-      then
-        storedIdentityProof.orElse(identityProof).flatMap { id =>
-          lib.crypto.withVerify[Option[IdentityProof]](id.verifyKey) { f =>
-            if f[Array[Byte]](Signed(challenge, signature))
-            then Some(id)
-            else None
-          }
-        }
-      else None
-
-  object ChallengeResponse:
-    given challengeResponseDecoder: Decoder[ChallengeResponse] with
-      def apply(c: HCursor): Decoder.Result[ChallengeResponse] =
-        import Decoder.resultInstance.*
-        for
-          sig <- c.downField("signature").as[String].map(Signature.fromString[Array[Byte]](_))
-          id  <- c.downField("identity_proof").as[Option[IdentityProof]]
-        yield ChallengeResponse(sig, id)
+    ) extends Status[F]

@@ -1,5 +1,6 @@
 import { CryptoMembership } from "./Crypto";
 import { Operation } from "./Operation";
+import * as AssemblyModel from "./Assembly";
 
 export namespace AppState {
   export type Menu = {
@@ -36,13 +37,13 @@ export namespace AppState {
 
   export type Assembly = {
     tag: "assembly";
-    cryptoMembership: CryptoMembership;
+    assembly: AssemblyModel.default;
   };
 
-  export function assembly(cryptoMembership: CryptoMembership): Assembly {
+  export function assembly(assembly: AssemblyModel.default): Assembly {
     return {
       tag: "assembly",
-      cryptoMembership: cryptoMembership,
+      assembly: assembly,
     };
   }
 }

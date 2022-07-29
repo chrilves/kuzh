@@ -7,6 +7,7 @@ import { BackAPI, RealBackAPI } from "./services/BackAPI";
 import { AssemblyAPI, RealAssemblyAPI } from "./services/AssemblyAPI";
 import { Services } from "./services/Services";
 import App from "./components/App";
+import { BackCachingIdentityProofStoreFactory } from "./services/IdentityProofStore";
 //import reportWebVitals from './reportWebVitals';
 
 /////////////////////////////
@@ -15,10 +16,14 @@ import App from "./components/App";
 const storageAPI: StorageAPI = new LocalStorageAPI();
 const backAPI: BackAPI = new RealBackAPI("http://localhost:8081");
 const assemblyAPI: AssemblyAPI = new RealAssemblyAPI(storageAPI, backAPI);
+const identityProofStoreFactory = new BackCachingIdentityProofStoreFactory(
+  backAPI
+);
 
 const services: Services = {
   storageAPI: storageAPI,
   assemblyAPI: assemblyAPI,
+  identityProofStoreFactory: identityProofStoreFactory,
 };
 
 const root: ReactDOM.Root = ReactDOM.createRoot(

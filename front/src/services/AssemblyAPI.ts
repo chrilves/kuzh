@@ -3,15 +3,19 @@ import { BackAPI } from "./BackAPI";
 import { CryptoMe, CryptoMembership, Membership } from "../model/Crypto";
 import { StorageAPI } from "./StorageAPI";
 import { Operation } from "../model/Operation";
+import Assembly from "../model/Assembly";
+import { AssemblyEvent } from "../model/PublicEvent";
+import ConnectionController from "../model/ConnectionController";
+import { ConnectionEvent } from "../model/ConnectionEvent";
 
 export interface AssemblyAPI {
   create(assemblyName: string, nickname: string): Promise<CryptoMembership>;
-  join(
-    uuid: string,
-    secret: string,
-    nickname: string
-  ): Promise<CryptoMembership>;
-  connect(cryptoMembership: CryptoMembership): Promise<void>;
+  join(id: string, secret: string, nickname: string): Promise<CryptoMembership>;
+  connect(
+    cryptoMembership: CryptoMembership,
+    updateAssembly: (state: AssemblyEvent) => void,
+    updateConnection: (event: ConnectionEvent) => void
+  ): Promise<ConnectionController>;
 }
 
 export namespace AssemblyAPI {
@@ -22,7 +26,7 @@ export namespace AssemblyAPI {
       switch (operation.tag) {
         case "join":
           return await assemblyAPI.join(
-            operation.uuid,
+            operation.id,
             operation.secret,
             operation.nickname
           );
@@ -54,18 +58,22 @@ export class MutexedAssemblyAPI implements AssemblyAPI {
   }
 
   join(
-    uuid: string,
+    id: string,
     secret: string,
     nickname: string
   ): Promise<CryptoMembership> {
     return this.mutex.runExclusive(() =>
-      this.baseAPI.join(uuid, secret, nickname)
+      this.baseAPI.join(id, secret, nickname)
     );
   }
 
-  connect(cryptoMembership: CryptoMembership): Promise<void> {
+  connect(
+    cryptoMembership: CryptoMembership,
+    updateAssembly: (state: AssemblyEvent) => void,
+    updateConnection: (event: ConnectionEvent) => void
+  ): Promise<ConnectionController> {
     return this.mutex.runExclusive(() =>
-      this.baseAPI.connect(cryptoMembership)
+      this.baseAPI.connect(cryptoMembership, updateAssembly, updateConnection)
     );
   }
 }
@@ -88,7 +96,7 @@ export class RealAssemblyAPI implements AssemblyAPI {
   ): Promise<CryptoMembership> {
     console.log(`Creating assembly ${assemblyName} for ${nickname}`);
     const assembly = await this.backAPI.createAssembly(assemblyName);
-    console.log(`[OK] Successfully created assembly ${assembly.uuid}.`);
+    console.log(`[OK] Successfully created assembly ${assembly.id}.`);
     const me = await CryptoMe.generate(nickname);
     const cryptoMembership = new Membership(assembly, me);
     await this.storageAPI.storeLastCryptoMembership(cryptoMembership);
@@ -96,22 +104,22 @@ export class RealAssemblyAPI implements AssemblyAPI {
   }
 
   async join(
-    uuid: string,
+    id: string,
     secret: string,
     nickname: string
   ): Promise<CryptoMembership> {
     let cryptoMembership: CryptoMembership;
 
     const last = await this.storageAPI.fetchLastCryptoMembership();
-    if (last && last.assembly.uuid === uuid) {
+    if (last && last.assembly.id === id) {
       cryptoMembership = last;
     } else {
       console.log("Getting assembly name");
-      const assemblyName = await this.backAPI.assemblyName(uuid, secret);
+      const assemblyName = await this.backAPI.assemblyName(id, secret);
       if (assemblyName) {
         console.log("Generating a new identity");
         const assembly = {
-          uuid: uuid,
+          id: id,
           secret: secret,
           name: assemblyName,
         };
@@ -119,7 +127,7 @@ export class RealAssemblyAPI implements AssemblyAPI {
         cryptoMembership = new Membership(assembly, me);
       } else {
         throw new Error(
-          `The assembly ${uuid} does not exist or the secret is wrong.`
+          `The assembly ${id} does not exist or the secret is wrong.`
         );
       }
     }
@@ -128,25 +136,15 @@ export class RealAssemblyAPI implements AssemblyAPI {
     return cryptoMembership;
   }
 
-  async connect(cryptoMembership: CryptoMembership): Promise<void> {
-    /*
-    console.log(`Creating identity proof in assembly ${assemblyName} for ${nickname}`);
-    const identityProof = await CryptoMe.identityProof(cryptoMembership.me);
-    
-    console.log(`Verifying identity proof in assembly ${assemblyName} for ${nickname}`);
-    await CryptoMe.verifyIdentityProof(identityProof);
-    
-    if (novel) {
-      console.log(`Storing new membership.`);
-      await this.storageAPI.storeLastCryptoMembership(cryptoMembership);
-    }
-
-    
-    const identityProof = await CryptoMe.identityProof(cryptoMembership.me);
-    await CryptoMe.verifyIdentityProof(identityProof);
-    await this.storageAPI.storeLastCryptoMembership(cryptoMembership);*/
-
-    await this.backAPI.connect(cryptoMembership, (x) => {});
-    return;
+  async connect(
+    cryptoMembership: CryptoMembership,
+    updateAssembly: (state: AssemblyEvent) => void,
+    updateConnection: (event: ConnectionEvent) => void
+  ): Promise<ConnectionController> {
+    return await this.backAPI.connect(
+      cryptoMembership,
+      updateAssembly,
+      updateConnection
+    );
   }
 }

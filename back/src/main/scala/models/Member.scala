@@ -74,6 +74,8 @@ object Member:
               "tag" -> Json.fromString("present")
             )
 
+    given Eq[Presence] = Eq.fromUniversalEquals
+
   enum Readiness:
     case Busy, Ready
 
@@ -84,6 +86,8 @@ object Member:
           case Busy  => "busy"
           case Ready => "ready"
         )
+
+    given Eq[Readiness] = Eq.fromUniversalEquals
 
     given readinessDecoder: Decoder[Readiness] with
       def apply(c: HCursor): Decoder.Result[Readiness] =

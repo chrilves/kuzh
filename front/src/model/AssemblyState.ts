@@ -1,12 +1,12 @@
 import { Fingerprint } from "./Crypto";
 
-export type PublicState = {
+export type AssemblyState = {
   questions: string[];
   presences: MemberPresence[];
-  status: PublicState.Status;
+  status: AssemblyState.Status;
 };
 
-export namespace PublicState {
+export namespace AssemblyState {
   export type Status = Status.Waiting | Status.Harvesting;
 
   export namespace Status {
@@ -69,8 +69,19 @@ export namespace Member {
       since: number;
     };
 
+    export function absent(since: number): Absent {
+      return {
+        tag: "absent",
+        since: since,
+      };
+    }
+
     export type Present = {
       readonly tag: "present";
+    };
+
+    export const present: Present = {
+      tag: "present",
     };
   }
 }

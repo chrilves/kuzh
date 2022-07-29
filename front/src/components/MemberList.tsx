@@ -20,8 +20,8 @@ export default function MemberList(props: MemberListProps): JSX.Element {
   ): JSX.Element {
     return (
       <tr key={value[1]}>
-        <td>value[0]</td>
-        <td>value[1]</td>
+        <td>{value[0]}</td>
+        <td>{value[1]}</td>
       </tr>
     );
   }

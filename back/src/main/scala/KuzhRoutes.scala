@@ -6,7 +6,6 @@ import org.http4s.*
 import org.http4s.dsl.Http4sDsl
 import io.circe.syntax.*
 import org.http4s.circe.CirceEntityCodec.*
-import io.circe.generic.auto.*
 import cats.data.*
 import java.nio.charset.StandardCharsets
 import cats.*
@@ -14,7 +13,6 @@ import org.http4s.server.websocket.WebSocketBuilder2
 import org.http4s.websocket.WebSocketFrame
 import java.time.Instant
 import cats.effect.std.Queue
-import chrilves.kuzh.back.models.Assembly.AssemblyEvent
 import io.circe.Json
 
 import chrilves.kuzh.back.middleware.*
@@ -31,7 +29,7 @@ object KuzhRoutes:
     HttpRoutes.of[F] {
       case request @ POST -> Root / "assembly" =>
         for
-          name <- request.as[Assembly.Info.Name]
+          name <- request.as[assembly.Info.Name]
           info <- assemblies.create(name)
           resp <- Ok(info.asJson)
         yield resp
@@ -63,7 +61,11 @@ object KuzhRoutes:
       case AssemblyRequest(asm, request @ GET -> Root / "identity_proofs") =>
         (for
           fingerprints <- request.as[List[Member.Fingerprint]]
-          ids          <- asm.identityProofs(fingerprints.toSet)
-          resp         <- Ok(Json.fromValues(ids.map(_.asJson)))
+          ids <- fingerprints
+            .traverse[F, Option[IdentityProof]](asm.identityProof)
+            .map(_.traverse[Option, IdentityProof](x => x))
+          resp <- ids match
+            case Some(l) => Ok(Json.fromValues(l.map(_.asJson)))
+            case _       => NotFound()
         yield resp).handleErrorWith(e => BadRequest(e.getMessage()))
     }

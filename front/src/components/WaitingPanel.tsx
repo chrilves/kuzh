@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Fingerprint, Name } from "../model/Crypto";
-import { PublicState } from "../model/AssemblyState";
+import { AssemblyState } from "../model/AssemblyState";
 import ReadinessPanel from "./ReadinessPanel";
 
 type Props = {
-  waiting: PublicState.Status.Waiting;
+  waiting: AssemblyState.Status.Waiting;
   names: (member: Fingerprint) => Name;
 };
 
@@ -19,7 +19,7 @@ export default function WaitingPanel(props: Props): JSX.Element {
   return (
     <div>
       {harvestPanel}
-      <ReadinessPanel readiness={[]} names={(x) => "???"} />
+      <ReadinessPanel readiness={props.waiting.ready} names={(x) => "???"} />
     </div>
   );
 }

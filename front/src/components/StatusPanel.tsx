@@ -1,10 +1,10 @@
 import { Fingerprint, Name } from "../model/Crypto";
-import { PublicState } from "../model/AssemblyState";
+import { AssemblyState } from "../model/AssemblyState";
 import HarvestingPanel from "./HarvestingPanel";
 import WaitingPanel from "./WaitingPanel";
 
 type Props = {
-  status: PublicState.Status;
+  status: AssemblyState.Status;
   names: (member: Fingerprint) => Name;
 };
 

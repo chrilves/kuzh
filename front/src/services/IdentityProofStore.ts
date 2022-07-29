@@ -1,22 +1,25 @@
-import { Assembly } from "../model/Assembly";
 import { BackAPI } from "./BackAPI";
 import { AssemblyInfo, Fingerprint, IdentityProof } from "../model/Crypto";
 
 export interface IdentityProofStore {
-  fetch(member: Set<Fingerprint>): Promise<[IdentityProof]>;
+  fetch(member: Set<Fingerprint>): Promise<IdentityProof[]>;
   fetchOne(member: Fingerprint): Promise<IdentityProof>;
 }
 
-export class BackCachingIdentityProofStore {
-  readonly backAPI: BackAPI;
-  readonly assemblyInfo: AssemblyInfo;
-  readonly localStorageKey: string;
-  store = new Map<Fingerprint, IdentityProof>();
+export interface IdentityProofStoreFactory {
+  identityProofStore(assemblyInfo: AssemblyInfo): IdentityProofStore;
+}
+
+export class BackCachingIdentityProofStore implements IdentityProofStore {
+  private readonly backAPI: BackAPI;
+  private readonly assemblyInfo: AssemblyInfo;
+  private readonly localStorageKey: string;
+  private store = new Map<Fingerprint, IdentityProof>();
 
   constructor(backAPI: BackAPI, assemblyInfo: AssemblyInfo) {
     this.backAPI = backAPI;
     this.assemblyInfo = assemblyInfo;
-    this.localStorageKey = `IDENITY_PROFS_${assemblyInfo.uuid}`;
+    this.localStorageKey = `IDENITY_PROFS_${assemblyInfo.id}`;
     this.fetch = this.fetch.bind(this);
 
     const saved = window.localStorage.getItem(this.localStorageKey);
@@ -61,5 +64,20 @@ export class BackCachingIdentityProofStore {
   async fetchOne(member: Fingerprint): Promise<IdentityProof> {
     const res = await this.fetch(new Set([member]));
     return res[0];
+  }
+}
+
+export class BackCachingIdentityProofStoreFactory
+  implements IdentityProofStoreFactory
+{
+  private readonly backAPI: BackAPI;
+
+  constructor(backAPI: BackAPI) {
+    this.backAPI = backAPI;
+    this.identityProofStore = this.identityProofStore.bind(this);
+  }
+
+  identityProofStore(assemblyInfo: AssemblyInfo): IdentityProofStore {
+    return new BackCachingIdentityProofStore(this.backAPI, assemblyInfo);
   }
 }

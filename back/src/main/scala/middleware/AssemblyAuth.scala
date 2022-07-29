@@ -47,11 +47,11 @@ def AssemblyAuth[F[_]: Monad](
     then
       try
         val id =
-          Assembly.Info.Id.fromUUID(
+          assembly.Info.Id.fromUUID(
             java.util.UUID.fromString(segments(1).decoded(StandardCharsets.UTF_8))
           )
         val (_, rest) = path.splitAt(2)
-        request.headers.get[Assembly.Info.Secret] match
+        request.headers.get[assembly.Info.Secret] match
           case Some(secret) =>
             OptionT(assembies.withAssembly(id, secret) {
               case Some(asm) =>

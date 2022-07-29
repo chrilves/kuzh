@@ -1,8 +1,8 @@
 import { Fingerprint, Name } from "../model/Crypto";
-import { PublicState } from "../model/AssemblyState";
+import { AssemblyState } from "../model/AssemblyState";
 
 type Props = {
-  harvesting: PublicState.Status.Harvesting;
+  harvesting: AssemblyState.Status.Harvesting;
   names: (member: Fingerprint) => Name;
 };
 

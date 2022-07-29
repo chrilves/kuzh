@@ -11,6 +11,7 @@ import {
 } from "react-router-dom";
 import { Operation } from "../model/Operation";
 import { StorageAPI } from "../services/StorageAPI";
+import Fuse from "../lib/Fuse";
 
 interface Nav {
   prepare(operation: Operation): void;
@@ -106,34 +107,40 @@ function Join(props: Nav): JSX.Element {
   const [nickname, setNickname] = useState<string>("");
 
   async function join() {
-    const arr = assemblyKey.split(",", 2);
-    props.prepare(Operation.join(arr[0], arr[1], nickname));
+    const re = /.*[/]([^/]+)\?secret=(.*)/;
+    const match = assemblyKey.match(re);
+
+    if (match) props.prepare(Operation.join(match[1], match[2], nickname));
   }
 
   function validInput(): boolean {
-    return true;
+    const re = /.*[/]([^/]+)\?secret=(.*)/;
+    const match = assemblyKey.match(re);
+    return match !== null && !!nickname;
   }
 
   return (
     <div className="kuzh-join-assembly">
       <h2 className="kuzh-style-action">Rejoindre une Assemblée existante</h2>
       <div>
-        <label>Clef de connexion : </label>
+        <label>URL de l'assemblée : </label>
         <input
           type="text"
           name="assembly_key"
-          placeholder="clef de connexion de l'assemblée"
+          placeholder="url de l'assemblée"
           value={assemblyKey}
           onChange={(e) => setAssemblyKey(e.target.value)}
         />
       </div>
       <Nickname nickname={nickname} setNickname={setNickname} />
-      {validInput() && (
+      {validInput() ? (
         <div>
           <button type="button" onClick={join}>
             Rejoindre l'Assemblée
           </button>
         </div>
+      ) : (
+        <p>Entrées invalide!</p>
       )}
     </div>
   );
@@ -181,8 +188,8 @@ function Create(props: Nav): JSX.Element {
 function Wizzard(
   props: Nav & { lastCryptoMembership: CryptoMembership | null }
 ): JSX.Element {
-  const navigate = useNavigate();
   const { assemblyIdP } = useParams();
+  const [fuse] = useState<Fuse>(new Fuse());
 
   const [URLSearchParams] = useSearchParams();
   const secretQS = URLSearchParams.get("secret");
@@ -192,9 +199,11 @@ function Wizzard(
 
   let postAction: (() => void) | undefined = undefined;
 
-  useEffect(() => {
-    if (postAction) postAction();
-  });
+  useEffect(
+    withAsync(async () => {
+      if (postAction && (await fuse.break())) postAction();
+    })
+  );
 
   let assemblyId: string;
   if (assemblyIdP) {
@@ -205,7 +214,7 @@ function Wizzard(
 
   if (
     props.lastCryptoMembership &&
-    props.lastCryptoMembership.assembly.uuid === assemblyId
+    props.lastCryptoMembership.assembly.id === assemblyId
   ) {
     const cryptoMembership = props.lastCryptoMembership;
     postAction = () => {

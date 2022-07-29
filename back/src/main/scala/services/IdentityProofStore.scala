@@ -9,8 +9,8 @@ import chrilves.kuzh.back.models.Member
 
 trait IdentityProofStore[F[_]]:
   def store(id: IdentityProof): F[Unit]
-  def fetch(ids: Set[Member.Fingerprint]): F[List[IdentityProof]]
-  def delete(ids: Set[Member.Fingerprint]): F[Unit]
+  def fetch(ids: Member.Fingerprint): F[Option[IdentityProof]]
+  def delete(ids: Member.Fingerprint): F[Unit]
 
 object IdentityProofStore:
 
@@ -31,21 +31,13 @@ object IdentityProofStore:
               idStore.addOne(id.fingerprint -> id)
         }
 
-      def fetch(ids: Set[Member.Fingerprint]): F[List[IdentityProof]] =
+      def fetch(fp: Member.Fingerprint): F[Option[IdentityProof]] =
         Sync[F].delay {
-          val res = List.newBuilder[IdentityProof]
-
-          for
-            fp <- ids
-            id <- idStore.get(fp)
-          do res.addOne(id)
-
-          res.result()
+          idStore.get(fp)
         }
 
-      def delete(ids: Set[Member.Fingerprint]): F[Unit] =
+      def delete(fp: Member.Fingerprint): F[Unit] =
         Sync[F].delay {
-          for fp <- ids
-          do idStore.remove(fp)
+          idStore.remove(fp)
         }
     }

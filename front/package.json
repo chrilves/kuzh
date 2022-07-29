@@ -12,6 +12,7 @@
     "@types/react-dom": "^18.0.0",
     "@types/websocket": "^1.0.5",
     "async-mutex": "^0.3.2",
+    "qrcode.react": "^3.1.0",
     "react": "^18.1.0",
     "react-dom": "^18.1.0",
     "react-router-dom": "6",

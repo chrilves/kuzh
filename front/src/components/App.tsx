@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppState } from "../model/AppState";
+import Assembly from "../model/Assembly";
 import { CryptoMembership } from "../model/Crypto";
 import { Operation } from "../model/Operation";
 import { AssemblyAPI } from "../services/AssemblyAPI";
@@ -19,10 +20,18 @@ export default function App(props: { services: Services }): JSX.Element {
 
   function assembly(cryptoMembership: CryptoMembership) {
     console.log(
-      `Navigation vers l'assemblée ${cryptoMembership.assembly.uuid}`
+      `Navigation vers l'assemblée ${cryptoMembership.assembly.id}/${
+        cryptoMembership.me.fingerprint
+      } [id=${Math.random()}]`
     );
-    setAppState(AppState.assembly(cryptoMembership));
-    navigate(`/assembly/${cryptoMembership.assembly.uuid}`);
+    const asm = new Assembly(
+      props.services.identityProofStoreFactory,
+      props.services.assemblyAPI,
+      cryptoMembership
+    );
+    asm.start();
+    setAppState(AppState.assembly(asm));
+    navigate(`/assembly/${cryptoMembership.assembly.id}`);
   }
 
   async function prepare(operation: Operation) {
@@ -35,6 +44,10 @@ export default function App(props: { services: Services }): JSX.Element {
     } catch (e) {
       setAppState(AppState.failure(`${e}`));
     }
+  }
+
+  function fail(reason: string) {
+    setAppState(AppState.failure(reason));
   }
 
   let page: JSX.Element;
@@ -66,10 +79,7 @@ export default function App(props: { services: Services }): JSX.Element {
 
     case "assembly":
       page = (
-        <AssemblyPage
-          cryptoMembership={appState.cryptoMembership}
-          menu={menu}
-        />
+        <AssemblyPage assembly={appState.assembly} menu={menu} fail={fail} />
       );
       break;
   }
@@ -107,7 +117,7 @@ function Join(props: { join: Operation.Join }): JSX.Element {
       <ul>
         <li>
           <span className="listKey">Identifiant de l'assemblée:</span>{" "}
-          <span className="assemblyId">{props.join.uuid}</span>
+          <span className="assemblyId">{props.join.id}</span>
         </li>
         <li>
           <span className="listKey">Votre pesudo:</span>{" "}

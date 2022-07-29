@@ -1,4 +1,3 @@
-import { SocketAddress } from "net";
 import { Base64URL } from "../lib/Base64URL";
 import {
   AssemblyInfo,
@@ -7,19 +6,25 @@ import {
   Fingerprint,
   IdentityProof,
 } from "../model/Crypto";
-import { AssemblyEvent } from "../model/Events";
+import { AssemblyEvent } from "../model/PublicEvent";
+import ConnectionController, {
+  ConnectionStatus,
+} from "../model/ConnectionController";
+import { ConnectionEvent } from "../model/ConnectionEvent";
+import { Handshake } from "../model/Handshake";
 
 export interface BackAPI {
   createAssembly(name: string): Promise<AssemblyInfo>;
-  assemblyName(uuid: string, secret: string): Promise<string>;
+  assemblyName(id: string, secret: string): Promise<string>;
   identityProofs(
     assembly: AssemblyInfo,
     members: Set<Fingerprint>
   ): Promise<Array<IdentityProof>>;
   connect(
     cryptoMembership: CryptoMembership,
-    update: (event: AssemblyEvent) => void
-  ): Promise<void>;
+    updateAssembly: (state: AssemblyEvent) => void,
+    updateConnection: (event: ConnectionEvent) => void
+  ): Promise<ConnectionController>;
 }
 
 export class RealBackAPI implements BackAPI {
@@ -53,7 +58,7 @@ export class RealBackAPI implements BackAPI {
     return await response.json();
   }
 
-  async assemblyName(uuid: string, secret: string): Promise<string> {
+  async assemblyName(id: string, secret: string): Promise<string> {
     const myHeaders: Headers = new Headers();
     myHeaders.append("Accept", "application/json");
     myHeaders.append("Content-Type", "application/json");
@@ -66,7 +71,7 @@ export class RealBackAPI implements BackAPI {
       cache: "no-cache",
     };
 
-    const request: Request = new Request(`${this.baseURL}/assembly/${uuid}`);
+    const request: Request = new Request(`${this.baseURL}/assembly/${id}/name`);
     const response: Response = await fetch(request, init);
     return await response.json();
   }
@@ -92,7 +97,7 @@ export class RealBackAPI implements BackAPI {
     };
 
     const request: Request = new Request(
-      `${this.baseURL}/assembly/${assembly.uuid}/identity_proofs`
+      `${this.baseURL}/assembly/${assembly.id}/identity_proofs`
     );
     const response: Response = await fetch(request, init);
     const identities = await response.json();
@@ -106,7 +111,7 @@ export class RealBackAPI implements BackAPI {
         );
       }
     }
-    if (fingers.size == 0) {
+    if (fingers.size === 0) {
       return identities;
     } else {
       throw new Error(`Missing identity proofs for members ${fingers}.`);
@@ -115,23 +120,36 @@ export class RealBackAPI implements BackAPI {
 
   async connect(
     cryptoMembership: CryptoMembership,
-    update: (event: AssemblyEvent) => void
-  ): Promise<void> {
+    updateAssembly: (state: AssemblyEvent) => void,
+    updateConnection: (event: ConnectionEvent) => void
+  ): Promise<ConnectionController> {
     const assemblyUrl = `${this.baseURL.replace("http", "ws")}/connect`;
     console.log(`Connecting to ${assemblyUrl}`);
+    let status: ConnectionStatus = "handshake";
     const socket = new WebSocket(assemblyUrl);
 
-    type Status = "WAITING_CHALLENGE" | "ESTABLISHED" | "TERMINATED";
-    let status: Status = "WAITING_CHALLENGE";
+    const controller: ConnectionController = new (class
+      implements ConnectionController
+    {
+      close(): void {
+        updateConnection(ConnectionEvent.closed);
+        socket.close();
+      }
+      sendEvent(event: string): void {
+        console.log("Sending event!");
+      }
+    })();
 
     socket.onopen = (e: Event) => {
-      console.log(`Connection opened.`);
+      updateConnection(ConnectionEvent.opened);
       socket.send(
-        JSON.stringify({
-          id: cryptoMembership.assembly.uuid,
-          secret: cryptoMembership.assembly.secret,
-          member: cryptoMembership.me.fingerprint,
-        })
+        JSON.stringify(
+          Handshake.credentials(
+            cryptoMembership.assembly.id,
+            cryptoMembership.assembly.secret,
+            cryptoMembership.me.fingerprint
+          )
+        )
       );
     };
 
@@ -139,59 +157,67 @@ export class RealBackAPI implements BackAPI {
       console.log(
         `Incoming message of type ${typeof msg.data} and content ${msg.data}`
       );
+
       switch (status) {
-        case "WAITING_CHALLENGE":
-          // Expecting Challenge!
-          const challenge: {
-            challenge: string;
-            identity_proof_needed: boolean;
-          } = JSON.parse(msg.data);
-          const signature = await CryptoMe.signB64(
-            cryptoMembership.me,
-            Base64URL.getInstance().decode(challenge.challenge)
-          );
-          let identity_proof: IdentityProof | null;
+        case "handshake":
+          const message: Handshake = JSON.parse(msg.data);
+          switch (message.tag) {
+            case "challenge":
+              const response = await Handshake.replyToChallenge(
+                cryptoMembership,
+                message
+              );
+              socket.send(JSON.stringify(response));
+              break;
 
-          if (challenge.identity_proof_needed) {
-            identity_proof = await CryptoMe.identityProof(cryptoMembership.me);
-          } else {
-            identity_proof = null;
+            case "challenge_response":
+              updateConnection(
+                ConnectionEvent.error(
+                  "Protocol Error: received challenge_response.",
+                  true
+                )
+              );
+              break;
+
+            case "credentials":
+              updateConnection(
+                ConnectionEvent.error(
+                  "Protocol Error: received credentials.",
+                  true
+                )
+              );
+              break;
+
+            case "error":
+              updateConnection(
+                ConnectionEvent.error(message.reason, message.fatal)
+              );
+              break;
+
+            case "established":
+              updateConnection(ConnectionEvent.established);
+              status = "established";
+              break;
           }
-
-          status = "ESTABLISHED";
-
-          socket.send(
-            JSON.stringify({
-              signature: signature,
-              identity_proof: identity_proof,
-            })
-          );
-
           break;
 
-        case "ESTABLISHED":
+        case "established":
           const event: AssemblyEvent = JSON.parse(msg.data);
-          update(event);
-          break;
-
-        case "TERMINATED":
+          updateAssembly(event);
           break;
       }
     };
 
     socket.onclose = (ce: CloseEvent) => {
-      console.log(`The connection is closing now ${Date.now()}`);
-      setTimeout(
-        async () => await this.connect(cryptoMembership, update),
-        10000
-      );
+      updateConnection(ConnectionEvent.closed);
     };
 
     socket.onerror = (e: Event) => {
       console.log(`Connection error ${e}`);
-      socket.close();
+      updateConnection(ConnectionEvent.error(`${e}`, true));
+      controller.close();
     };
 
-    return;
+    return controller;
   }
 }
