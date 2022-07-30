@@ -1,4 +1,4 @@
-import { CryptoMembership } from "./Crypto";
+import { Membership } from "./Crypto";
 
 export namespace Operation {
   export type Create = {

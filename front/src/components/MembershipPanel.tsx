@@ -1,14 +1,14 @@
-import { CryptoMembership } from "../model/Crypto";
+import { Membership } from "../model/Crypto";
 import { QRCodeSVG } from "qrcode.react";
 
 type Props = {
-  cryptoMembership: CryptoMembership;
+  membership: Membership;
 };
 
-export default function CryptoMembershipPanel(props: Props): JSX.Element {
+export default function MembershipPanel(props: Props): JSX.Element {
   function connectionURL(): string {
     const loc = window.location;
-    return `${loc.protocol}//${loc.host}/assembly/${props.cryptoMembership.assembly.id}?secret=${props.cryptoMembership.assembly.secret}`;
+    return `${loc.protocol}//${loc.host}/assembly/${props.membership.assembly.id}?secret=${props.membership.assembly.secret}`;
   }
 
   async function connectionKeyToClipboard() {
@@ -29,13 +29,13 @@ export default function CryptoMembershipPanel(props: Props): JSX.Element {
         <tbody>
           <tr>
             <td>Assemblée</td>
-            <td>{props.cryptoMembership.assembly.name}</td>
-            <td>{props.cryptoMembership.assembly.id}</td>
+            <td>{props.membership.assembly.name}</td>
+            <td>{props.membership.assembly.id}</td>
           </tr>
           <tr>
             <td>Moi</td>
-            <td>{props.cryptoMembership.me.nickname}</td>
-            <td>{props.cryptoMembership.me.fingerprint}</td>
+            <td>{props.membership.me.nickname}</td>
+            <td>{props.membership.me.fingerprint}</td>
           </tr>
         </tbody>
       </table>

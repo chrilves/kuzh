@@ -58,14 +58,11 @@ object KuzhRoutes:
       case AssemblyRequest(asm, request @ GET -> Root / "name") =>
         Ok(asm.info.name.asJson)
 
-      case AssemblyRequest(asm, request @ GET -> Root / "identity_proofs") =>
+      case AssemblyRequest(asm, request @ GET -> Root / "identity_proof" / member) =>
         (for
-          fingerprints <- request.as[List[Member.Fingerprint]]
-          ids <- fingerprints
-            .traverse[F, Option[IdentityProof]](asm.identityProof)
-            .map(_.traverse[Option, IdentityProof](x => x))
-          resp <- ids match
-            case Some(l) => Ok(Json.fromValues(l.map(_.asJson)))
-            case _       => NotFound()
+          idOpt <- asm.identityProof(Member.Fingerprint.fromString(member))
+          resp <- idOpt match
+            case Some(id) => Ok(id.asJson)
+            case _        => NotFound()
         yield resp).handleErrorWith(e => BadRequest(e.getMessage()))
     }

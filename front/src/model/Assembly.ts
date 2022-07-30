@@ -3,15 +3,18 @@ import {
   IdentityProofStoreFactory,
 } from "../services/IdentityProofStore";
 import { PublicEvent } from "./PublicEvent";
-import { CryptoMembership, Fingerprint, IdentityProof } from "./Crypto";
-import { AssemblyState, Member, MemberReadiness } from "./AssemblyState";
+import { Membership, Fingerprint, Name } from "./Crypto";
+import { AssemblyState } from "./AssemblyState";
+import { Member, MemberReadiness } from "./Member";
 import { ChoiceStatus } from "./ChoiceStatus";
 import { AssemblyAPI } from "../services/AssemblyAPI";
 import { ConnectionEvent } from "./ConnectionEvent";
 import ConnectionController from "./ConnectionController";
 import { AssemblyEvent } from "./AssemblyEvent";
+import { MemberEvent } from "./MemberEvent";
+import { JSONNormalizedStringify } from "../lib/JSONNormalizedStringify";
 
-declare function structuredClone(value: any): any;
+export declare function structuredClone(value: any): any;
 
 export type Listerner = {
   state: (state: AssemblyState) => void;
@@ -19,18 +22,26 @@ export type Listerner = {
   connection: (status: string) => void;
 };
 
+export type RunningStatus = "stopped" | "starting" | "started" | "stopping";
+
 export default class Assembly {
+  // Services
   private _identityProofStore: IdentityProofStore;
-  private _identityProofs: Map<Fingerprint, IdentityProof> = new Map();
   private _assemblyAPI: AssemblyAPI;
-  private _cryptoMembership: CryptoMembership;
-  private _choiceStatus: ChoiceStatus = ChoiceStatus.noChoice;
+
+  // Connection Details
+  readonly membership: Membership;
+
+  // Connection Handling
   private _listeners: Listerner[] = [];
-  private _running: boolean = false;
+  private _runningStatus: RunningStatus = "stopped";
   private _connectionController: ConnectionController | null = null;
 
+  // Assembly Management
+  private _choiceStatus: ChoiceStatus = ChoiceStatus.noChoice;
   private _state: AssemblyState = {
     questions: [],
+    id: "",
     presences: [],
     status: AssemblyState.Status.waiting(null, []),
   };
@@ -38,69 +49,59 @@ export default class Assembly {
   constructor(
     identityProofStoreFactory: IdentityProofStoreFactory,
     assemblyAPI: AssemblyAPI,
-    cryptoMembership: CryptoMembership
+    membership: Membership
   ) {
     this._identityProofStore = identityProofStoreFactory.identityProofStore(
-      cryptoMembership.assembly
+      membership.assembly
     );
     this._assemblyAPI = assemblyAPI;
-    this._cryptoMembership = cryptoMembership;
-    this.updateState = this.updateState.bind(this);
-    this.updateConnection = this.updateConnection.bind(this);
-    this.myAnswer = this.myAnswer.bind(this);
-    this.myQuestion = this.myQuestion.bind(this);
-    this.resetStatus = this.resetStatus.bind(this);
-    this.cryptoMembership = this.cryptoMembership.bind(this);
-    this.start = this.start.bind(this);
-    this.stop = this.stop.bind(this);
-    this.running = this.running.bind(this);
-    this.addListener = this.addListener.bind(this);
-    this.removeListener = this.removeListener.bind(this);
-    this.clearListeners = this.clearListeners.bind(this);
-    this.propagateState = this.propagateState.bind(this);
-    this.propagateFailure = this.propagateFailure.bind(this);
-    this.propagateConnectionStatus = this.propagateConnectionStatus.bind(this);
+    this.membership = membership;
   }
 
-  addListener(f: Listerner) {
+  /////////////////////////////////
+  // Listerners
+
+  readonly addListener = (f: Listerner) => {
     for (const g of this._listeners) if (f === g) return;
     this._listeners.push(f);
     f.state(this._state);
-  }
+  };
 
-  removeListener(f: Listerner) {
+  readonly removeListener = (f: Listerner) => {
     let l = [];
     for (const g of this._listeners) if (f !== g) l.push(g);
     this._listeners = l;
-  }
+  };
 
-  clearListeners() {
+  readonly clearListeners = () => {
     this._listeners = [];
-  }
+  };
 
-  private propagateState() {
+  private readonly propagateState = () => {
     const clone = structuredClone(this._state);
     for (const l of this._listeners) {
       try {
         l.state(clone);
       } catch (e) {
         console.log(
-          `Propagate state error ${e} on state ${JSON.stringify(clone)}`
+          `Propagate state error ${e} on state ${JSONNormalizedStringify(
+            clone
+          )}`
         );
       }
     }
-  }
+  };
 
-  private propagateFailure(reason: string) {
+  private readonly propagateFailure = (reason: string) => {
     for (const l of this._listeners)
       try {
         l.failure(reason);
       } catch (e) {
         console.log(`Propagate error error ${e} on reason ${reason}`);
       }
-  }
+  };
 
-  private propagateConnectionStatus(status: string) {
+  private readonly propagateConnectionStatus = (status: string) => {
     for (const l of this._listeners)
       try {
         l.connection(status);
@@ -109,41 +110,60 @@ export default class Assembly {
           `Propagate connection status error ${e} on status ${status}`
         );
       }
-  }
+  };
 
-  async start() {
-    if (!this._running) {
-      this._running = true;
+  ////////////////////////////////////////
+  // Running
+
+  readonly runningStatus = (): RunningStatus => this._runningStatus;
+
+  readonly start = async () => {
+    if (this._runningStatus === "stopped") {
+      this._runningStatus = "starting";
       this._connectionController = await this._assemblyAPI.connect(
-        this._cryptoMembership,
+        this.membership,
         this.updateState,
         this.updateConnection
       );
+      this._runningStatus = "started";
     }
-  }
+  };
 
-  running() {
-    return this._running;
-  }
-
-  stop() {
-    if (this._running) {
-      this._running = false;
+  readonly stop = () => {
+    if (this._runningStatus === "started") {
+      this._runningStatus = "stopping";
       if (this._connectionController) this._connectionController.close();
+      this._runningStatus = "stopped";
     }
-  }
+  };
 
-  cryptoMembership(): CryptoMembership {
-    return this._cryptoMembership;
-  }
+  ////////////////////////////////////////
+  // Getters
 
-  myQuestion(question: string | null) {
-    this._choiceStatus = ChoiceStatus.question(question);
-  }
+  readonly name = async (member: Fingerprint): Promise<Name> =>
+    (await this._identityProofStore.fetch(member)).nickname.value;
 
-  myAnswer(answer: boolean) {
-    this._choiceStatus = ChoiceStatus.answer(answer);
-  }
+  ///////////////////////////////////////
+  // Question Management
+
+  readonly myQuestion = (question: string | null) => {
+    this._choiceStatus = ChoiceStatus.question(this._state.id, question);
+    this.send(MemberEvent.ready);
+  };
+
+  readonly myAnswer = (answer: boolean) => {
+    this._choiceStatus = ChoiceStatus.answer(this._state.id, answer);
+    this.send(MemberEvent.ready);
+  };
+
+  readonly send = (event: MemberEvent) => {
+    if (this._connectionController) this._connectionController.sendEvent(event);
+    else
+      console.log(`No connection controller to send ${JSON.stringify(event)}`);
+  };
+
+  //////////////////////////////////////////
+  // Status Management
 
   private resetStatus(qs: string[]) {
     this._choiceStatus = ChoiceStatus.noChoice;
@@ -160,7 +180,7 @@ export default class Assembly {
     );
   }
 
-  updateState(ev: AssemblyEvent) {
+  readonly updateState = (ev: AssemblyEvent) => {
     switch (ev.tag) {
       case "state":
         this._state = ev.state;
@@ -178,6 +198,9 @@ export default class Assembly {
             this.resetStatus(event.questions.slice(0, 1));
             break;
           case "member_presence":
+            // Ensure we have the identity proof
+            this._identityProofStore.fetch(event.member);
+            // But do not block!
             for (let i in this._state.presences)
               if (this._state.presences[i].member === event.member) {
                 this._state.presences[i].presence = event.presence;
@@ -244,9 +267,9 @@ export default class Assembly {
         break;
     }
     this.propagateState();
-  }
+  };
 
-  updateConnection(event: ConnectionEvent) {
+  readonly updateConnection = (event: ConnectionEvent) => {
     switch (event.tag) {
       case "opened":
         this.propagateConnectionStatus("poignée de main en cours.");
@@ -260,5 +283,5 @@ export default class Assembly {
       case "error":
         this.propagateFailure(event.reason);
     }
-  }
+  };
 }

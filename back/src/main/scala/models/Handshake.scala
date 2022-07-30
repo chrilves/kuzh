@@ -29,7 +29,7 @@ object Handshake:
       )
       then
         storedIdentityProof.orElse(cr.identityProof).flatMap { id =>
-          withVerify[Option[IdentityProof]](id.verifyKey) { f =>
+          withVerify[Option[IdentityProof]](id.verify.toRSAPublicKey) { f =>
             if f[Array[Byte]](Signed(challenge, cr.signature))
             then Some(id)
             else None

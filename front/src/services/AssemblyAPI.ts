@@ -1,18 +1,17 @@
 import { Mutex } from "async-mutex";
 import { BackAPI } from "./BackAPI";
-import { CryptoMe, CryptoMembership, Membership } from "../model/Crypto";
+import { Me, Membership } from "../model/Crypto";
 import { StorageAPI } from "./StorageAPI";
 import { Operation } from "../model/Operation";
-import Assembly from "../model/Assembly";
-import { AssemblyEvent } from "../model/PublicEvent";
+import { AssemblyEvent } from "../model/AssemblyEvent";
 import ConnectionController from "../model/ConnectionController";
 import { ConnectionEvent } from "../model/ConnectionEvent";
 
 export interface AssemblyAPI {
-  create(assemblyName: string, nickname: string): Promise<CryptoMembership>;
-  join(id: string, secret: string, nickname: string): Promise<CryptoMembership>;
+  create(assemblyName: string, nickname: string): Promise<Membership>;
+  join(id: string, secret: string, nickname: string): Promise<Membership>;
   connect(
-    cryptoMembership: CryptoMembership,
+    membership: Membership,
     updateAssembly: (state: AssemblyEvent) => void,
     updateConnection: (event: ConnectionEvent) => void
   ): Promise<ConnectionController>;
@@ -21,7 +20,7 @@ export interface AssemblyAPI {
 export namespace AssemblyAPI {
   export function fold(
     assemblyAPI: AssemblyAPI
-  ): (operation: Operation) => Promise<CryptoMembership> {
+  ): (operation: Operation) => Promise<Membership> {
     return async function (operation: Operation) {
       switch (operation.tag) {
         case "join":
@@ -51,29 +50,25 @@ export class MutexedAssemblyAPI implements AssemblyAPI {
     this.join = this.join.bind(this);
   }
 
-  create(assemblyName: string, nickname: string): Promise<CryptoMembership> {
+  create(assemblyName: string, nickname: string): Promise<Membership> {
     return this.mutex.runExclusive(() =>
       this.baseAPI.create(assemblyName, nickname)
     );
   }
 
-  join(
-    id: string,
-    secret: string,
-    nickname: string
-  ): Promise<CryptoMembership> {
+  join(id: string, secret: string, nickname: string): Promise<Membership> {
     return this.mutex.runExclusive(() =>
       this.baseAPI.join(id, secret, nickname)
     );
   }
 
   connect(
-    cryptoMembership: CryptoMembership,
+    membership: Membership,
     updateAssembly: (state: AssemblyEvent) => void,
     updateConnection: (event: ConnectionEvent) => void
   ): Promise<ConnectionController> {
     return this.mutex.runExclusive(() =>
-      this.baseAPI.connect(cryptoMembership, updateAssembly, updateConnection)
+      this.baseAPI.connect(membership, updateAssembly, updateConnection)
     );
   }
 }
@@ -90,41 +85,34 @@ export class RealAssemblyAPI implements AssemblyAPI {
     this.connect = this.connect.bind(this);
   }
 
-  async create(
-    assemblyName: string,
-    nickname: string
-  ): Promise<CryptoMembership> {
-    console.log(`Creating assembly ${assemblyName} for ${nickname}`);
+  async create(assemblyName: string, nickname: string): Promise<Membership> {
     const assembly = await this.backAPI.createAssembly(assemblyName);
-    console.log(`[OK] Successfully created assembly ${assembly.id}.`);
-    const me = await CryptoMe.generate(nickname);
-    const cryptoMembership = new Membership(assembly, me);
-    await this.storageAPI.storeLastCryptoMembership(cryptoMembership);
-    return cryptoMembership;
+    const me = await Me.generate(nickname);
+    const membership = new Membership(assembly, me);
+    await this.storageAPI.storeLastMembership(membership);
+    return membership;
   }
 
   async join(
     id: string,
     secret: string,
     nickname: string
-  ): Promise<CryptoMembership> {
-    let cryptoMembership: CryptoMembership;
+  ): Promise<Membership> {
+    let membership: Membership;
 
-    const last = await this.storageAPI.fetchLastCryptoMembership();
+    const last = await this.storageAPI.fetchLastMembership();
     if (last && last.assembly.id === id) {
-      cryptoMembership = last;
+      membership = last;
     } else {
-      console.log("Getting assembly name");
       const assemblyName = await this.backAPI.assemblyName(id, secret);
       if (assemblyName) {
-        console.log("Generating a new identity");
         const assembly = {
           id: id,
           secret: secret,
           name: assemblyName,
         };
-        const me = await CryptoMe.generate(nickname);
-        cryptoMembership = new Membership(assembly, me);
+        const me = await Me.generate(nickname);
+        membership = new Membership(assembly, me);
       } else {
         throw new Error(
           `The assembly ${id} does not exist or the secret is wrong.`
@@ -132,17 +120,17 @@ export class RealAssemblyAPI implements AssemblyAPI {
       }
     }
 
-    await this.storageAPI.storeLastCryptoMembership(cryptoMembership);
-    return cryptoMembership;
+    await this.storageAPI.storeLastMembership(membership);
+    return membership;
   }
 
   async connect(
-    cryptoMembership: CryptoMembership,
+    membership: Membership,
     updateAssembly: (state: AssemblyEvent) => void,
     updateConnection: (event: ConnectionEvent) => void
   ): Promise<ConnectionController> {
     return await this.backAPI.connect(
-      cryptoMembership,
+      membership,
       updateAssembly,
       updateConnection
     );

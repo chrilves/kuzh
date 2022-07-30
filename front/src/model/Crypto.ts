@@ -1,96 +1,39 @@
 import { Base64URL } from "../lib/Base64URL";
+import { JSONNormalizedStringifyD } from "../lib/JSONNormalizedStringify";
+import { Pair, PairNS } from "../lib/Pair";
+import { AssemblyInfo } from "./AssembyInfo";
 
-export namespace CryptoConfig {
+namespace CryptoConfig {
   export const hash = "SHA-256";
+
   export const encryptAlg = "RSA-OAEP-256";
-}
 
-export namespace Valid {
-  export function nickname(n: string): boolean {
-    if (n && n !== "") {
-      return true;
-    } else {
-      return false;
-    }
-  }
+  export const rsaPssParams: RsaPssParams = {
+    name: "RSA-PSS",
+    saltLength: 32,
+  };
 
-  export function id(u: string): boolean {
-    if (u && u !== "") {
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  export function secret(s: string): boolean {
-    if (s && s !== "") {
-      return true;
-    } else {
-      return false;
-    }
-  }
-}
-
-export class Pair<A> {
-  constructor(prv: A, pub: A) {
-    this.private = prv;
-    this.public = pub;
-    this.map = this.map.bind(this);
-    this.map_async = this.map_async.bind(this);
-    this.toJson = this.toJson.bind(this);
-  }
-
-  readonly private: A;
-  readonly public: A;
-
-  map<B>(f: (a: A) => B): Pair<B> {
-    return new Pair<B>(f(this.private), f(this.public));
-  }
-
-  async map_async<B>(f: (a: A) => Promise<B>): Promise<Pair<B>> {
-    const prv = await f(this.private);
-    const pub = await f(this.public);
-    return new Pair<B>(prv, pub);
-  }
-
-  toJson(): Pair.Json<A> {
+  export function getAlgorithm(encrypt: Boolean): RsaHashedKeyGenParams {
     return {
-      private: this.private,
-      public: this.public,
+      name: encrypt ? "RSA-OAEP" : "RSA-PSS",
+      modulusLength: 4096,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: CryptoConfig.hash,
     };
   }
 }
 
-export namespace Pair {
-  export type Json<A> = { private: A; public: A };
-
-  export function fromJson<A>(p: Json<A>): Pair<A> {
-    return new Pair<A>(p.private, p.public);
-  }
-}
-
 export type SerializedKey = string;
-export type KeyPair = Pair<CryptoKey>;
-export type SerializedKeyPair = Pair<SerializedKey>;
-
 export type Name = string;
 
 export namespace Serial {
-  export function serializedKey2str(s: JsonWebKey): string {
-    return JSON.stringify(s, Object.keys(s).sort());
-  }
-
-  export async function serializeCryptoKey(
-    key: CryptoKey
-  ): Promise<SerializedKey> {
+  export async function exportCryptoKey(key: CryptoKey): Promise<JsonWebKey> {
     const jwk = await window.crypto.subtle.exportKey("jwk", key);
-    return serializedKey2str(jwk);
+    jwk.ext = true;
+    return jwk;
   }
 
-  export async function deSerializeCryptoKey(
-    skey: SerializedKey
-  ): Promise<CryptoKey> {
-    const key: JsonWebKey = JSON.parse(skey);
+  export async function importCryptoKey(key: JsonWebKey): Promise<CryptoKey> {
     return await window.crypto.subtle.importKey(
       "jwk",
       key,
@@ -102,105 +45,86 @@ export namespace Serial {
       (key.key_ops ? key.key_ops : []) as KeyUsage[]
     );
   }
-}
 
-export type Signed<A> = {
-  value: A;
-  signature: string;
-};
+  export async function serializeCryptoKey(
+    key: CryptoKey
+  ): Promise<SerializedKey> {
+    return JSONNormalizedStringifyD(await exportCryptoKey(key));
+  }
+
+  export async function deSerializeCryptoKey(
+    key: SerializedKey
+  ): Promise<CryptoKey> {
+    return await importCryptoKey(JSON.parse(key));
+  }
+
+  export async function fingerprint(key: CryptoKey): Promise<Fingerprint> {
+    const verifyKey = await Serial.serializeCryptoKey(key);
+    const te = new TextEncoder();
+    const fingerprintAB = await window.crypto.subtle.digest(
+      CryptoConfig.hash,
+      te.encode(verifyKey)
+    );
+    return Base64URL.getInstance().encode(new Uint8Array(fingerprintAB));
+  }
+
+  export type Me = {
+    readonly signPair: PairNS.Json<SerializedKey>;
+    readonly encryptPair: PairNS.Json<SerializedKey>;
+    readonly nickname: Name;
+  };
+
+  export type Membership = {
+    readonly assembly: AssemblyInfo;
+    readonly me: Me;
+  };
+
+  export type IdentityProof = {
+    readonly verify: JsonWebKey;
+    readonly fingerprint: Fingerprint;
+    readonly encrypt: Signed<JsonWebKey>;
+    readonly nickname: Signed<string>;
+  };
+}
 
 export type Fingerprint = string;
 
-export type IdentityProof = {
-  verify: SerializedKey;
-  fingerprint: Fingerprint;
-  encrypt: Signed<SerializedKey>;
-  nickname: Signed<string>;
-};
-
-export class Me<A> {
-  readonly signPair: Pair<A>;
-  readonly encryptPair: Pair<A>;
+export class Me {
+  readonly signPair: Pair<CryptoKey>;
+  readonly encryptPair: Pair<CryptoKey>;
   readonly nickname: Name;
   readonly fingerprint: Fingerprint;
 
-  constructor(sgn: Pair<A>, enc: Pair<A>, nick: string, fingerprint: Name) {
+  private constructor(
+    sgn: Pair<CryptoKey>,
+    enc: Pair<CryptoKey>,
+    nick: string,
+    fingerprint: Name
+  ) {
     this.signPair = sgn;
     this.encryptPair = enc;
     this.nickname = nick;
     this.fingerprint = fingerprint;
-    this.map = this.map.bind(this);
-    this.map_async = this.map_async.bind(this);
-    this.toJson = this.toJson.bind(this);
   }
 
-  map<B>(f: (a: A) => B): Me<B> {
-    return new Me(
-      this.signPair.map(f),
-      this.encryptPair.map(f),
-      this.nickname,
-      this.fingerprint
-    );
+  static async make(sgn: Pair<CryptoKey>, enc: Pair<CryptoKey>, nick: string) {
+    const fingerprint = await Serial.fingerprint(sgn.public);
+    return new Me(sgn, enc, nick, fingerprint);
   }
 
-  async map_async<B>(f: (a: A) => Promise<B>): Promise<Me<B>> {
-    const sgn = await this.signPair.map_async(f);
-    const enc = await this.encryptPair.map_async(f);
-    return new Me<B>(sgn, enc, this.nickname, this.fingerprint);
-  }
-
-  toJson(): Me.Json<A> {
-    return {
-      signPair: this.signPair.toJson(),
-      encryptPair: this.encryptPair.toJson(),
-      nickname: this.nickname,
-      fingerprint: this.fingerprint,
-    };
-  }
-}
-
-export namespace Me {
-  export type Json<A> = {
-    signPair: Pair.Json<A>;
-    encryptPair: Pair.Json<A>;
-    nickname: Name;
-    fingerprint: Fingerprint;
-  };
-
-  export function fromJson<A>(p: Json<A>): Me<A> {
-    return new Me<A>(
-      Pair.fromJson(p.signPair),
-      Pair.fromJson(p.encryptPair),
-      p.nickname,
-      p.fingerprint
-    );
-  }
-}
-
-export type CryptoMe = Me<CryptoKey>;
-export type SerialiedMe = Me<SerializedKey>;
-
-export namespace CryptoMe {
-  export async function generate(nickname: string): Promise<Me<CryptoKey>> {
-    function getAlgorithm(encrypt: Boolean): RsaHashedKeyGenParams {
-      return {
-        name: encrypt ? "RSA-OAEP" : "RSA-PSS",
-        modulusLength: 4096,
-        publicExponent: new Uint8Array([1, 0, 1]),
-        hash: CryptoConfig.hash,
-      };
-    }
-
+  static async generate(nickname: string): Promise<Me> {
     const subtle = window.crypto.subtle;
 
-    const signKeyPair = await subtle.generateKey(getAlgorithm(false), true, [
-      "sign",
-      "verify",
-    ]);
-    const encryptKeyPair = await subtle.generateKey(getAlgorithm(true), true, [
-      "encrypt",
-      "decrypt",
-    ]);
+    const signKeyPair = await subtle.generateKey(
+      CryptoConfig.getAlgorithm(false),
+      true,
+      ["sign", "verify"]
+    );
+    const encryptKeyPair = await subtle.generateKey(
+      CryptoConfig.getAlgorithm(true),
+      true,
+      ["encrypt", "decrypt"]
+    );
 
     let decryptKey: CryptoKey;
     if (encryptKeyPair.privateKey) {
@@ -230,205 +154,218 @@ export namespace CryptoMe {
       throw new Error("Null verify public key.");
     }
 
-    const verifyKeySerial = await Serial.serializeCryptoKey(verifyKey);
-    const fingerprintAB = await window.crypto.subtle.digest(
-      CryptoConfig.hash,
-      new TextEncoder().encode(verifyKeySerial)
-    );
-    const fingerprint = Base64URL.getInstance().encode(
-      new Uint8Array(fingerprintAB)
-    );
-
-    console.log(`Fingerprint : '${fingerprint}'`);
-
-    return new Me(
+    const me = await Me.make(
       new Pair(signKey, verifyKey),
       new Pair(decryptKey, encryptKey),
-      nickname,
-      fingerprint
+      nickname
     );
+
+    return me;
   }
 
-  export async function encrypt(
-    me: Me<CryptoKey>,
-    message: BufferSource
-  ): Promise<ArrayBuffer> {
-    return await window.crypto.subtle.encrypt(
+  readonly encrypt = async (message: BufferSource): Promise<ArrayBuffer> =>
+    await window.crypto.subtle.encrypt(
       "RSA-OAEP",
-      me.encryptPair.private,
+      this.encryptPair.private,
       message
     );
-  }
 
-  export const rsaPssParams: RsaPssParams = {
-    name: "RSA-PSS",
-    saltLength: 32,
+  readonly sign = async (message: BufferSource): Promise<ArrayBuffer> =>
+    await window.crypto.subtle.sign(
+      CryptoConfig.rsaPssParams,
+      this.signPair.private,
+      message
+    );
+
+  readonly signB64 = async (message: BufferSource): Promise<string> => {
+    const arr = await this.sign(message);
+    return Base64URL.getInstance().encode(new Uint8Array(arr));
   };
 
-  export async function sign(
-    me: Me<CryptoKey>,
-    message: BufferSource
-  ): Promise<ArrayBuffer> {
-    return await window.crypto.subtle.sign(
-      rsaPssParams,
-      me.signPair.private,
-      message
+  readonly identityProof = async (): Promise<IdentityProof> =>
+    IdentityProof.make(this);
+
+  readonly toJson = async (): Promise<Serial.Me> => {
+    const serialSign = await this.signPair.map_async(Serial.serializeCryptoKey);
+    const serialEncrypt = await this.encryptPair.map_async(
+      Serial.serializeCryptoKey
     );
+
+    return {
+      signPair: serialSign,
+      encryptPair: serialEncrypt,
+      nickname: this.nickname,
+    };
+  };
+
+  static async fromJson(p: Serial.Me): Promise<Me> {
+    const sign = await Pair.fromJson(p.signPair).map_async(
+      Serial.deSerializeCryptoKey
+    );
+    const encrypt = await Pair.fromJson(p.encryptPair).map_async(
+      Serial.deSerializeCryptoKey
+    );
+    const me = Me.make(sign, encrypt, p.nickname);
+    return me;
+  }
+}
+
+export type Signed<A> = {
+  readonly value: A;
+  readonly signature: string;
+};
+
+export class IdentityProof {
+  readonly verify: CryptoKey;
+  readonly fingerprint: Fingerprint;
+  readonly encrypt: Signed<CryptoKey>;
+  readonly nickname: Signed<string>;
+
+  private constructor(
+    verify: CryptoKey,
+    fingerprint: Fingerprint,
+    encrypt: Signed<CryptoKey>,
+    nickname: Signed<string>
+  ) {
+    this.verify = verify;
+    this.fingerprint = fingerprint;
+    this.encrypt = encrypt;
+    this.nickname = nickname;
   }
 
-  export async function signB64(
-    me: Me<CryptoKey>,
-    message: BufferSource
-  ): Promise<string> {
-    const arr = await sign(me, message);
-    return Base64URL.getInstance().encode(new Uint8Array(arr));
-  }
-
-  export async function identityProof(
-    me: Me<CryptoKey>
-  ): Promise<IdentityProof> {
-    const verifyKey = await Serial.serializeCryptoKey(me.signPair.public);
-    const te = new TextEncoder();
-
-    const fingerprintAB = await window.crypto.subtle.digest(
-      CryptoConfig.hash,
-      te.encode(verifyKey)
-    );
-    const fingerprint = Base64URL.getInstance().encode(
-      new Uint8Array(fingerprintAB)
-    );
+  static async make(me: Me): Promise<IdentityProof> {
+    const fingerprint = await Serial.fingerprint(me.signPair.public);
 
     if (me.fingerprint !== fingerprint)
       throw new Error(
         `registered fingerprint ${me.fingerprint} does not match computed fingerprint ${fingerprint}.`
       );
 
+    const te = new TextEncoder();
     const encryptKey = await Serial.serializeCryptoKey(me.encryptPair.public);
-    const encryptSig = await signB64(me, te.encode(encryptKey));
+    const encryptSig = await me.signB64(te.encode(encryptKey));
 
-    const nicknameSig = await signB64(me, te.encode(me.nickname));
+    const nicknameSig = await me.signB64(te.encode(me.nickname));
 
-    return {
-      verify: verifyKey,
-      fingerprint: fingerprint,
-      encrypt: {
-        value: encryptKey,
+    return new IdentityProof(
+      me.signPair.public,
+      fingerprint,
+      {
+        value: me.encryptPair.public,
         signature: encryptSig,
       },
-      nickname: {
+      {
         value: me.nickname,
         signature: nicknameSig,
-      },
-    };
+      }
+    );
   }
 
-  export async function verifyIdentityProof(
-    i: IdentityProof
-  ): Promise<boolean> {
-    console.log("Deserializing verification key.");
-    const verifyKey: CryptoKey = await Serial.deSerializeCryptoKey(i.verify);
-    console.log("Deserialized verification key.");
+  readonly isValid = async (): Promise<boolean> => {
+    const serializedVerifyKey: string = await Serial.serializeCryptoKey(
+      this.verify
+    );
     const te = new TextEncoder();
     const base64 = Base64URL.getInstance();
 
     const fingerprintAB = await window.crypto.subtle.digest(
       CryptoConfig.hash,
-      te.encode(i.verify)
+      te.encode(serializedVerifyKey)
     );
     const fingerprint = Base64URL.getInstance().encode(
       new Uint8Array(fingerprintAB)
     );
 
-    if (fingerprint !== i.fingerprint) {
+    if (fingerprint !== this.fingerprint) {
       throw new Error(
-        `[KO] Fingerprints ${fingerprint} and ${i.fingerprint} don't match!`
+        `[KO] Fingerprints ${fingerprint} and ${this.fingerprint} don't match!`
       );
-    } else {
-      console.log(`[OK] Fingerprint ${fingerprint} is OK.`);
     }
 
+    const serializedEncryptKey: string = await Serial.serializeCryptoKey(
+      this.encrypt.value
+    );
+
     const encryptOK = await window.crypto.subtle.verify(
-      CryptoMe.rsaPssParams,
-      verifyKey,
-      base64.decode(i.encrypt.signature),
-      te.encode(i.encrypt.value)
+      CryptoConfig.rsaPssParams,
+      this.verify,
+      base64.decode(this.encrypt.signature),
+      te.encode(serializedEncryptKey)
     );
 
     if (!encryptOK) {
       throw new Error(
-        `[KO] Encrypt signature ${i.encrypt.signature} verification failed.`
-      );
-    } else {
-      console.log(
-        `[OK] Encrypt signature ${i.encrypt.signature} verification OK.`
+        `[KO] Encrypt signature ${this.encrypt.signature} verification failed.`
       );
     }
 
     const nicknameOK = await window.crypto.subtle.verify(
-      CryptoMe.rsaPssParams,
-      verifyKey,
-      base64.decode(i.nickname.signature),
-      te.encode(i.nickname.value)
+      CryptoConfig.rsaPssParams,
+      this.verify,
+      base64.decode(this.nickname.signature),
+      te.encode(this.nickname.value)
     );
 
     if (!nicknameOK) {
       throw new Error(
-        `[KO] Nickname ${i.nickname.value} signature ${i.nickname.signature} verification failed.`
-      );
-    } else {
-      console.log(
-        `[OK] Nickname ${i.nickname.value} signature ${i.nickname.signature} verification OK.`
+        `[KO] Nickname ${this.nickname.value} signature ${this.nickname.signature} verification failed.`
       );
     }
 
     return true;
+  };
+
+  readonly toJson = async (): Promise<Serial.IdentityProof> => {
+    const verify = await Serial.exportCryptoKey(this.verify);
+    const encrypt = await Serial.exportCryptoKey(this.encrypt.value);
+
+    return {
+      verify: verify,
+      fingerprint: this.fingerprint,
+      encrypt: {
+        value: encrypt,
+        signature: this.encrypt.signature,
+      },
+      nickname: this.nickname,
+    };
+  };
+
+  static async fromJson(p: Serial.IdentityProof): Promise<IdentityProof> {
+    const verify = await Serial.importCryptoKey(p.verify);
+    const encrypt = await Serial.importCryptoKey(p.encrypt.value);
+    const ip = new IdentityProof(
+      verify,
+      p.fingerprint,
+      {
+        value: encrypt,
+        signature: p.encrypt.signature,
+      },
+      p.nickname
+    );
+
+    if (await ip.isValid()) {
+      return ip;
+    } else {
+      throw new Error("Invalid json identity proof");
+    }
   }
 }
 
-export type AssemblyInfo = {
-  readonly id: string;
-  readonly secret: string;
-  readonly name: string;
-};
-
-export class Membership<A> {
+export class Membership {
   readonly assembly: AssemblyInfo;
-  readonly me: Me<A>;
+  readonly me: Me;
 
-  constructor(asm: AssemblyInfo, m: Me<A>) {
+  constructor(asm: AssemblyInfo, m: Me) {
     this.assembly = asm;
     this.me = m;
-    this.map = this.map.bind(this);
-    this.map_async = this.map_async.bind(this);
-    this.toJson = this.toJson.bind(this);
   }
 
-  map<B>(f: (a: A) => B): Membership<B> {
-    return new Membership(this.assembly, this.me.map(f));
-  }
+  readonly toJson = async (): Promise<Serial.Membership> => ({
+    assembly: this.assembly,
+    me: await this.me.toJson(),
+  });
 
-  async map_async<B>(f: (a: A) => Promise<B>): Promise<Membership<B>> {
-    const me = await this.me.map_async(f);
-    return new Membership<B>(this.assembly, me);
-  }
-
-  toJson(): Membership.Json<A> {
-    return {
-      assembly: this.assembly,
-      me: this.me.toJson(),
-    };
+  static async fromJson(p: Serial.Membership): Promise<Membership> {
+    return new Membership(p.assembly, await Me.fromJson(p.me));
   }
 }
-
-export namespace Membership {
-  export type Json<A> = { assembly: AssemblyInfo; me: Me.Json<A> };
-
-  export function fromJson<A>(p: Json<A>): Membership<A> {
-    return new Membership<A>(p.assembly, Me.fromJson(p.me));
-  }
-}
-
-export type CryptoMembership = Membership<CryptoKey>;
-export type SerializedMembership = Membership<SerializedKey>;
-
-export type MemberStatus = "LOST" | "BUSY" | "READY";

@@ -6,19 +6,25 @@ import io.circe.syntax.*
 import scala.collection.*
 
 import chrilves.kuzh.back.models.Member
+import cats.effect.kernel.Sync
+import java.util.UUID
 
 final case class State(
     questions: List[String],
     presences: immutable.Map[Member.Fingerprint, Member.Presence],
+    id: java.util.UUID,
     status: State.Status
 ):
   def question: Option[String] = questions.headOption
 
 object State:
-  val init: State = State(
-    questions = Nil,
-    presences = immutable.Map.empty,
-    status = Status.Waiting(None, immutable.Map.empty)
+  def init[F[_]: Sync]: F[State] = Sync[F].delay(
+    State(
+      questions = Nil,
+      presences = immutable.Map.empty,
+      id = java.util.UUID.randomUUID(),
+      status = Status.Waiting(None, immutable.Map.empty)
+    )
   )
 
   given stateEncoder: Encoder[State] with
@@ -31,6 +37,7 @@ object State:
             "presence" -> presence.asJson
           )
         }),
+        "id"     -> Json.fromString(ps.id.toString()),
         "status" -> ps.status.asJson
       )
 
@@ -74,25 +81,15 @@ object State:
             )
 
   enum Event:
-    case QuestionDone
-    case NewQuestions(questions: List[String])
     case MemberPresence(member: Member.Fingerprint, presence: Member.Presence)
     case MemberReady(member: Member.Fingerprint)
-    case StatusUpdate(status: Status)
+    case QuestionDone(id: UUID)
+    case NewQuestions(id: UUID, questions: List[String])
 
   object Event:
     given AssemblyEventEncoder: Encoder[Event] with
       final def apply(e: Event): Json =
         e match
-          case QuestionDone =>
-            Json.obj(
-              "tag" -> Json.fromString("question_done")
-            )
-          case NewQuestions(ql) =>
-            Json.obj(
-              "tag"       -> Json.fromString("new_questions"),
-              "questions" -> Json.fromValues(ql.map(Json.fromString))
-            )
           case MemberPresence(fp, p) =>
             Json.obj(
               "tag"      -> Json.fromString("member_presence"),
@@ -104,8 +101,14 @@ object State:
               "tag"    -> Json.fromString("member_ready"),
               "member" -> fp.asJson
             )
-          case StatusUpdate(s) =>
+          case QuestionDone(id) =>
             Json.obj(
-              "tag"    -> Json.fromString("status_update"),
-              "status" -> s.asJson
+              "tag" -> Json.fromString("question_done"),
+              "id"  -> Json.fromString(id.toString())
+            )
+          case NewQuestions(id, ql) =>
+            Json.obj(
+              "tag"       -> Json.fromString("new_questions"),
+              "id"        -> Json.fromString(id.toString()),
+              "questions" -> Json.fromValues(ql.map(Json.fromString))
             )

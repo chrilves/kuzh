@@ -10,11 +10,13 @@ import io.circe.syntax.*
 import java.time.Instant
 import scala.collection.*
 import cats.instances.StringInstances
+import com.nimbusds.jose.jwk.JWK
+import java.security.interfaces.RSAPublicKey
 
 object Member:
   opaque type Name        = String
-  opaque type VerifyPK    = String
-  opaque type EncryptPK   = String
+  opaque type VerifyPK    = JWK
+  opaque type EncryptPK   = JWK
   opaque type Fingerprint = String
 
   object Name:
@@ -26,26 +28,30 @@ object Member:
     extension (n: Name) inline def asString: String = n
 
   object VerifyPK:
-    inline given decoder: Decoder[VerifyPK]   = StringInstances.decoder
-    inline given encoder: Encoder[VerifyPK]   = StringInstances.encoder
-    inline given signable: Signable[VerifyPK] = Signable.stringSignable
-    inline given eq: Eq[VerifyPK]             = StringInstances.eq
-
-    extension (pk: VerifyPK)
-      inline def asString: String =
-        pk
+    inline given decoderVerifyPK: Decoder[VerifyPK]   = JWKInstances.decoderJWK
+    inline given encoderVerifyPK: Encoder[VerifyPK]   = JWKInstances.encoderJWK
+    inline given eqVerifyPK: Eq[VerifyPK]             = JWKInstances.eqJWK
+    inline given signableVerifyPK: Signable[VerifyPK] = JWKInstances.signableJWK
 
     extension (publicKey: VerifyPK)
       inline def fingerprint: Fingerprint =
-        Base64UrlEncoded.hash(publicKey).asString
+        JWKInstances.fingerprint(publicKey)
+
+      inline def toRSAPublicKey: RSAPublicKey =
+        JWKInstances.toRSAPublicKey(publicKey)
 
   object EncryptPK:
-    inline given decoder: Decoder[EncryptPK]   = StringInstances.decoder
-    inline given encoder: Encoder[EncryptPK]   = StringInstances.encoder
-    inline given signable: Signable[EncryptPK] = Signable.stringSignable
-    inline given eq: Eq[EncryptPK]             = StringInstances.eq
+    inline given decoderEncryptPK: Decoder[EncryptPK]   = JWKInstances.decoderJWK
+    inline given encoderEncryptPK: Encoder[EncryptPK]   = JWKInstances.encoderJWK
+    inline given eqEncryptPK: Eq[EncryptPK]             = JWKInstances.eqJWK
+    inline given signableEncryptPK: Signable[EncryptPK] = JWKInstances.signableJWK
 
-    extension (pk: EncryptPK) inline def asString: String = pk
+    extension (publicKey: EncryptPK)
+      inline def fingerprint: Fingerprint =
+        JWKInstances.fingerprint(publicKey)
+
+      inline def toRSAPublicKey: RSAPublicKey =
+        JWKInstances.toRSAPublicKey(publicKey)
 
   object Fingerprint:
     inline given decoder: Decoder[Fingerprint]   = StringInstances.decoder

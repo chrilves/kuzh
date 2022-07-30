@@ -1,5 +1,6 @@
-import { Member, AssemblyState } from "./AssemblyState";
+import { Member } from "./Member";
 import { Fingerprint } from "./Crypto";
+import { AssemblyState } from "./AssemblyState";
 
 export type PublicEvent =
   | PublicEvent.QuestionDone
@@ -33,32 +34,4 @@ export namespace PublicEvent {
     readonly tag: "status_update";
     status: AssemblyState.Status;
   };
-}
-
-export type AssemblyEvent = AssemblyEvent.StateW | AssemblyEvent.PublicEventW;
-
-export namespace AssemblyEvent {
-  export type StateW = {
-    readonly tag: "state";
-    state: AssemblyState;
-  };
-
-  export function publicSynchro(state: AssemblyState): StateW {
-    return {
-      tag: "state",
-      state: state,
-    };
-  }
-
-  export type PublicEventW = {
-    readonly tag: "public_event";
-    public_event: PublicEvent;
-  };
-
-  export function publicEvent(publicEvent: PublicEvent): PublicEventW {
-    return {
-      tag: "public_event",
-      public_event: publicEvent,
-    };
-  }
 }

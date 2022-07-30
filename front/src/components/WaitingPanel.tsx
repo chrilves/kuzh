@@ -5,21 +5,28 @@ import ReadinessPanel from "./ReadinessPanel";
 
 type Props = {
   waiting: AssemblyState.Status.Waiting;
-  names: (member: Fingerprint) => Name;
+  sendAnswer(answer: boolean): void;
+  sendQuestion(question: string | null): void;
+  name(member: Fingerprint): Promise<Name>;
 };
 
 export default function WaitingPanel(props: Props): JSX.Element {
-  let harvestPanel: JSX.Element;
+  let waitingPanel: JSX.Element;
   if (props.waiting.question) {
-    harvestPanel = <AnswerPanel question={props.waiting.question} />;
+    waitingPanel = (
+      <AnswerPanel
+        question={props.waiting.question}
+        sendAnswer={props.sendAnswer}
+      />
+    );
   } else {
-    harvestPanel = <QuestionPanel />;
+    waitingPanel = <QuestionPanel sendQuestion={props.sendQuestion} />;
   }
 
   return (
     <div>
-      {harvestPanel}
-      <ReadinessPanel readiness={props.waiting.ready} names={(x) => "???"} />
+      {waitingPanel}
+      <ReadinessPanel readiness={props.waiting.ready} name={props.name} />
     </div>
   );
 }
@@ -59,9 +66,7 @@ namespace Phase {
 
 type AnswerProps = {
   question: string;
-};
-type AnswerState = {
-  phase: Phase<boolean>;
+  sendAnswer(answer: boolean): void;
 };
 
 function AnswerPanel(props: AnswerProps): JSX.Element {
@@ -69,13 +74,29 @@ function AnswerPanel(props: AnswerProps): JSX.Element {
 
   let phasePanel: JSX.Element;
 
+  function changePhase(newPhase: Phase<boolean>) {
+    if (phase.tag === "reply" && newPhase.tag === "confirm") setPhase(newPhase);
+    else {
+      if (phase.tag === "confirm" && newPhase.tag === "confirmed") {
+        props.sendAnswer(phase.answer);
+        setPhase(newPhase);
+      } else
+        throw Error(
+          `Wrong phase answer transition ${phase.tag} to ${newPhase.tag}!`
+        );
+    }
+  }
+
   switch (phase.tag) {
     case "reply":
-      phasePanel = <AnswerPanelNS.Reply changeState={setPhase} />;
+      phasePanel = <AnswerPanelNS.Reply changeState={changePhase} />;
       break;
     case "confirm":
       phasePanel = (
-        <AnswerPanelNS.Confirm changeState={setPhase} answer={phase.answer} />
+        <AnswerPanelNS.Confirm
+          changeState={changePhase}
+          answer={phase.answer}
+        />
       );
       break;
     case "confirmed":
@@ -151,19 +172,34 @@ namespace AnswerPanelNS {
 //////////////////////////////////////////
 // Harvest Type = Question
 
-function QuestionPanel(): JSX.Element {
-  const [phase, setPhase] = useState<Phase<string | undefined>>(Phase.reply);
+function QuestionPanel(props: {
+  sendQuestion(question: string | null): void;
+}): JSX.Element {
+  const [phase, setPhase] = useState<Phase<string | null>>(Phase.reply);
+
+  function changePhase(newPhase: Phase<string | null>) {
+    if (phase.tag === "reply" && newPhase.tag === "confirm") setPhase(newPhase);
+    else {
+      if (phase.tag === "confirm" && newPhase.tag === "confirmed") {
+        props.sendQuestion(phase.answer);
+        setPhase(newPhase);
+      } else
+        throw Error(
+          `Wrong phase answer transition ${phase.tag} to ${newPhase.tag}!`
+        );
+    }
+  }
 
   let phasePanel: JSX.Element;
 
   switch (phase.tag) {
     case "reply":
-      phasePanel = <QuestionPanelNS.Reply changeState={setPhase} />;
+      phasePanel = <QuestionPanelNS.Reply changeState={changePhase} />;
       break;
     case "confirm":
       phasePanel = (
         <QuestionPanelNS.Confirm
-          changePhase={setPhase}
+          changePhase={changePhase}
           question={phase.answer}
         />
       );
@@ -183,18 +219,18 @@ function QuestionPanel(): JSX.Element {
 
 namespace QuestionPanelNS {
   type ReplyProps = {
-    changeState: (phase: Phase<string | undefined>) => void;
+    changeState: (phase: Phase<string | null>) => void;
   };
 
   export function Reply(props: ReplyProps): JSX.Element {
     const [input, setInput] = useState<string>("");
 
     function ask() {
-      props.changeState(Phase.confirm(input ? input : undefined));
+      props.changeState(Phase.confirm(input ? input : null));
     }
 
     function dontAsk() {
-      props.changeState(Phase.confirm(undefined));
+      props.changeState(Phase.confirm(null));
     }
 
     return (
@@ -222,8 +258,8 @@ namespace QuestionPanelNS {
   }
 
   type ConfirmProps = {
-    changePhase: (phase: Phase<string | undefined>) => void;
-    question: string | undefined;
+    changePhase: (phase: Phase<string | null>) => void;
+    question: string | null;
   };
 
   export function Confirm(props: ConfirmProps): JSX.Element {

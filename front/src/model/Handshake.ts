@@ -1,10 +1,5 @@
 import { Base64URL } from "../lib/Base64URL";
-import {
-  CryptoMe,
-  CryptoMembership,
-  Fingerprint,
-  IdentityProof,
-} from "./Crypto";
+import { Me, Membership, Fingerprint, Serial } from "./Crypto";
 
 export namespace Handshake {
   export type Crententials = {
@@ -47,12 +42,12 @@ export namespace Handshake {
   export type ChallengeResponse = {
     tag: "challenge_response";
     signature: string;
-    identity_proof: IdentityProof | null;
+    identity_proof: Serial.IdentityProof | null;
   };
 
   export function challengeResponse(
     signature: string,
-    identityProof: IdentityProof | null
+    identityProof: Serial.IdentityProof | null
   ): ChallengeResponse {
     return {
       tag: "challenge_response",
@@ -84,17 +79,17 @@ export namespace Handshake {
   };
 
   export async function replyToChallenge(
-    cryptoMembership: CryptoMembership,
+    membership: Membership,
     challenge: Challenge
   ): Promise<ChallengeResponse> {
-    const signature = await CryptoMe.signB64(
-      cryptoMembership.me,
+    const signature = await membership.me.signB64(
       Base64URL.getInstance().decode(challenge.challenge)
     );
-    let identityProof: IdentityProof | null;
+    let identityProof: Serial.IdentityProof | null;
 
     if (challenge.identity_proof_needed) {
-      identityProof = await CryptoMe.identityProof(cryptoMembership.me);
+      const ip = await membership.me.identityProof();
+      identityProof = await ip.toJson();
     } else {
       identityProof = null;
     }

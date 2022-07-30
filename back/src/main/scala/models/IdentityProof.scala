@@ -19,18 +19,11 @@ final case class IdentityProof(
     nickname: Signed[Member.Name]
 ) {
 
-  def verifyKey: RSAPublicKey =
-    JWK.parse(verify.asString).toRSAKey.toRSAPublicKey
-
-  def encryptKey: RSAPublicKey =
-    JWK.parse(encrypt.value.asString).toRSAKey.toRSAPublicKey
-
   def isValid: Boolean =
     val (encryptOk, nicknameOk) =
-      lib.crypto.withVerify(verifyKey) { (verify) =>
+      lib.crypto.withVerify(verify.toRSAPublicKey) { (verify) =>
         (verify[Member.EncryptPK](encrypt), verify[Member.Name](nickname))
       }
-
     (fingerprint === Member.VerifyPK.fingerprint(verify)) && encryptOk && nicknameOk
 }
 
@@ -43,7 +36,7 @@ object IdentityProof:
     final def apply(ip: IdentityProof): Json =
       Json.obj(
         "verify"      -> ip.verify.asJson,
-        "fingerprint" -> ip.verify.asJson,
+        "fingerprint" -> ip.fingerprint.asJson,
         "encrypt"     -> ip.encrypt.asJson,
         "nickname"    -> ip.nickname.asJson
       )

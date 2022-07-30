@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import Assembly, { Listerner } from "../model/Assembly";
 import { AssemblyState } from "../model/AssemblyState";
-import { CryptoMembership } from "../model/Crypto";
-import CryptoMembershipPanel from "./CryptoMembershipPanel";
+import { Membership } from "../model/Crypto";
+import MembershipPanel from "./MembershipPanel";
 import PresencePanel from "./PresencePanel";
 import StatusPanel from "./StatusPanel";
 
@@ -15,6 +15,7 @@ type Props = {
 export default function AssemblyPage(props: Props): JSX.Element {
   const [assemblyState, setAssemblyState] = useState<AssemblyState>({
     questions: [],
+    id: "",
     presences: [],
     status: AssemblyState.Status.waiting(null, []),
   });
@@ -32,18 +33,24 @@ export default function AssemblyPage(props: Props): JSX.Element {
     return () => {
       props.assembly.removeListener(listerner);
     };
-  }, [props.assembly.cryptoMembership().assembly.id]);
+  }, [props.assembly.membership.assembly.id]);
 
   return (
     <div>
       <input type="button" value="Menu" onClick={props.menu} />
       <ConnectionStatus status={connectionStatus} />
-      <StatusPanel status={assemblyState.status} names={(m) => "???"} />
-      <h2>Assemblée</h2>
-      <PresencePanel presence={assemblyState.presences} names={(x) => "???"} />
-      <CryptoMembershipPanel
-        cryptoMembership={props.assembly.cryptoMembership()}
+      <StatusPanel
+        status={assemblyState.status}
+        sendAnswer={props.assembly.myAnswer}
+        sendQuestion={props.assembly.myQuestion}
+        name={props.assembly.name}
       />
+      <h2>Assemblée</h2>
+      <PresencePanel
+        presence={assemblyState.presences}
+        name={props.assembly.name}
+      />
+      <MembershipPanel membership={props.assembly.membership} />
     </div>
   );
 }

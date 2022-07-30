@@ -3,7 +3,7 @@ import { AssemblyState } from "../model/AssemblyState";
 
 type Props = {
   harvesting: AssemblyState.Status.Harvesting;
-  names: (member: Fingerprint) => Name;
+  name: (member: Fingerprint) => Promise<Name>;
 };
 
 export default function HarvestingPanel(props: Props): JSX.Element {

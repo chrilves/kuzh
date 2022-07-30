@@ -4,3 +4,5 @@ export function withAsync<A>(f: () => Promise<A>): () => void {
     return () => {};
   };
 }
+
+export declare function structuredClone(value: any): any;

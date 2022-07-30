@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { CryptoMembership } from "../model/Crypto";
-import CryptoMembershipPanel from "./CryptoMembershipPanel";
-import { withAsync } from "../lib/withAsync";
+import { Membership } from "../model/Crypto";
+import MembershipPanel from "./MembershipPanel";
+import { withAsync } from "../lib/Utils";
 import {
   Route,
   Routes,
@@ -15,24 +15,25 @@ import Fuse from "../lib/Fuse";
 
 interface Nav {
   prepare(operation: Operation): void;
-  assembly(cryptoMembership: CryptoMembership): void;
+  assembly(membership: Membership): void;
 }
 
 export default function Menu(
   props: Nav & { storageAPI: StorageAPI }
 ): JSX.Element {
-  const [lastCryptoMembership, setlastCryptoMembership] = useState<
-    CryptoMembership | null | undefined
+  const [lastMembership, setlastMembership] = useState<
+    Membership | null | undefined
   >(undefined);
 
   useEffect(
     withAsync(async () => {
-      const last = await props.storageAPI.fetchLastCryptoMembership();
-      setlastCryptoMembership(last);
-    })
+      const last = await props.storageAPI.fetchLastMembership();
+      setlastMembership(last);
+    }),
+    []
   );
 
-  return lastCryptoMembership === undefined ? (
+  return lastMembership === undefined ? (
     <div />
   ) : (
     <Routes>
@@ -40,9 +41,9 @@ export default function Menu(
         path="/"
         element={
           <div className="App">
-            {lastCryptoMembership && (
+            {lastMembership && (
               <LastAssembly
-                lastCryptoMembership={lastCryptoMembership}
+                lastMembership={lastMembership}
                 prepare={props.prepare}
                 assembly={props.assembly}
               />
@@ -58,7 +59,7 @@ export default function Menu(
           <Wizzard
             prepare={props.prepare}
             assembly={props.assembly}
-            lastCryptoMembership={lastCryptoMembership}
+            lastMembership={lastMembership}
           />
         }
       />
@@ -86,15 +87,15 @@ function Nickname(props: {
 }
 
 function LastAssembly(
-  props: Nav & { lastCryptoMembership: CryptoMembership }
+  props: Nav & { lastMembership: Membership }
 ): JSX.Element {
   return (
     <div className="kuzh-rejoin-last-assembly">
       <h2 className="kuzh-style-action">Revenir à la dernière Assemblée</h2>
-      <CryptoMembershipPanel cryptoMembership={props.lastCryptoMembership} />
+      <MembershipPanel membership={props.lastMembership} />
       <button
         type="button"
-        onClick={() => props.assembly(props.lastCryptoMembership)}
+        onClick={() => props.assembly(props.lastMembership)}
       >
         Revenir à la dernière Assemblée
       </button>
@@ -186,7 +187,7 @@ function Create(props: Nav): JSX.Element {
 }
 
 function Wizzard(
-  props: Nav & { lastCryptoMembership: CryptoMembership | null }
+  props: Nav & { lastMembership: Membership | null }
 ): JSX.Element {
   const { assemblyIdP } = useParams();
   const [fuse] = useState<Fuse>(new Fuse());
@@ -212,13 +213,10 @@ function Wizzard(
     return <div />;
   }
 
-  if (
-    props.lastCryptoMembership &&
-    props.lastCryptoMembership.assembly.id === assemblyId
-  ) {
-    const cryptoMembership = props.lastCryptoMembership;
+  if (props.lastMembership && props.lastMembership.assembly.id === assemblyId) {
+    const Membership = props.lastMembership;
     postAction = () => {
-      props.assembly(cryptoMembership);
+      props.assembly(Membership);
     };
     return <div />;
   }

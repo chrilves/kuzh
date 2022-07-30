@@ -66,8 +66,14 @@ object Signed:
     def eqv(x: Signed[A], y: Signed[A]): Boolean =
       x.value === y.value && x.signature === y.signature
 
-trait Signable[-A]:
+trait Signable[-A] { self =>
   def apply(a: A): Array[Byte]
+
+  final def contraMap[B](f: B => A): Signable[B] =
+    new Signable[B]:
+      def apply(b: B): Array[Byte] =
+        self(f(b))
+}
 
 object Signable:
   inline def apply[A](using ev: Signable[A]): ev.type = ev

@@ -32,7 +32,7 @@ object Connection:
       queue      <- Queue.unbounded[F, Option[WebSocketFrame]]
     yield
       inline def sendHandshake(handshake: Handshake): F[Unit] =
-        queue.offer(Some(WebSocketFrame.Text(handshake.asJson.noSpaces)))
+        queue.offer(Some(WebSocketFrame.Text(handshake.asJson.noSpacesSortKeys)))
 
       def onClose(message: String): F[Unit] =
         import Status.*
@@ -102,7 +102,7 @@ object Connection:
                     cr.check(member, storedIdentityProof, challenge) match
                       case Some(id) =>
                         def handler(message: AssemblyEvent): F[Unit] =
-                          queue.offer(Some(WebSocketFrame.Text(message.asJson.noSpaces)))
+                          queue.offer(Some(WebSocketFrame.Text(message.asJson.noSpacesSortKeys)))
 
                         for
                           _ <- status.set(Status.Established[F](assembly, member))

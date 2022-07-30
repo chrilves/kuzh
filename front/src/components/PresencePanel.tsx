@@ -1,48 +1,61 @@
 import { compareNumber, compareString } from "../lib/Compare";
-import { MemberPresence } from "../model/AssemblyState";
+import { MemberPresence } from "../model/Member";
 import { Fingerprint, Name } from "../model/Crypto";
 import MemberList from "./MemberList";
+import { useState } from "react";
+
+export declare function structuredClone(value: any): any;
 
 type Props = {
   presence: MemberPresence[];
-  names: (member: Fingerprint) => Name;
+  name: (member: Fingerprint) => Promise<Name>;
 };
 
 export default function PresencePanel(props: Props): JSX.Element {
-  let present: [Name, Fingerprint][] = [];
-  let absent: [Name, Fingerprint, number][] = [];
+  const [names, setNames] = useState<Map<Fingerprint, Name>>(new Map());
+
+  function withName(member: Fingerprint): Name {
+    const name = names.get(member);
+    if (name) return name;
+
+    (async () => {
+      const name = await props.name(member);
+      names.set(member, name);
+      setNames(structuredClone(names));
+    })();
+    return "???";
+  }
+
+  let present: Fingerprint[] = [];
+  let absent: [Fingerprint, number][] = [];
 
   for (let mp of props.presence) {
-    let name: Name = props.names(mp.member);
-
     switch (mp.presence.tag) {
       case "present":
-        present.push([name, mp.member]);
+        present.push(mp.member);
         break;
       case "absent":
-        absent.push([name, mp.member, mp.presence.since]);
+        absent.push([mp.member, mp.presence.since]);
         break;
     }
   }
 
   absent.sort((x, y) => {
-    let n = compareNumber(x[2], y[2]);
+    let n = compareNumber(x[1], y[1]);
     if (n !== 0) return n;
-    let m = compareString(x[1], y[1]);
-    if (m !== 0) return m;
     return compareString(x[0], y[0]);
   });
 
   let absentLines: JSX.Element[] = absent.map(
     (
-      value: [Name, Fingerprint, number],
+      value: [Fingerprint, number],
       index: number,
-      array: [Name, Fingerprint, number][]
+      array: [Fingerprint, number][]
     ) => (
       <tr key={value[1]}>
+        <td>{withName(value[0])}</td>
         <td>{value[0]}</td>
-        <td>{value[1]}</td>
-        <td>{new Date(value[2]).toLocaleString()}</td>
+        <td>{new Date(value[1]).toLocaleString()}</td>
       </tr>
     )
   );
@@ -50,7 +63,10 @@ export default function PresencePanel(props: Props): JSX.Element {
   return (
     <div>
       <h3>Membres de l'Assemblée</h3>
-      <MemberList title="Présent.e.s" members={present} />
+      <MemberList
+        title="Présent.e.s"
+        members={present.map((x) => [withName(x), x])}
+      />
       <h4>Absent.e.s: {absentLines.length}</h4>
       {absentLines.length > 0 && (
         <table>

@@ -9,24 +9,28 @@ export namespace ChoiceStatus {
 
   export type Question = {
     tag: "question";
+    id: string;
     question: string | null;
   };
 
-  export function question(q: string | null): Question {
+  export function question(id: string, q: string | null): Question {
     return {
       tag: "question",
+      id: id,
       question: q,
     };
   }
 
   export type Answser = {
     tag: "answer";
+    id: string;
     answer: boolean;
   };
 
-  export function answer(answer: boolean): Answser {
+  export function answer(id: string, answer: boolean): Answser {
     return {
       tag: "answer",
+      id: id,
       answer: answer,
     };
   }

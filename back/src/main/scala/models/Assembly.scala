@@ -12,6 +12,7 @@ import scala.collection.*
 
 import chrilves.kuzh.back.models.assembly.*
 import chrilves.kuzh.back.services.IdentityProofStore
+import java.util.UUID
 
 /* ASSUMPTIONS:
 
@@ -44,6 +45,7 @@ object Assembly:
 
       private val presence                = mutable.Map.empty[Member.Fingerprint, Member.Presence]
       private var questions: List[String] = Nil
+      private var id: UUID                = UUID.randomUUID();
       private var status: State.Status    = State.Status.Waiting(None, immutable.Map.empty)
 
       private val channels =
@@ -56,6 +58,7 @@ object Assembly:
           State(
             questions = questions,
             presences = presence.toMap,
+            id = id,
             status = status
           )
         )

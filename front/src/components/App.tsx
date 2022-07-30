@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppState } from "../model/AppState";
 import Assembly from "../model/Assembly";
-import { CryptoMembership } from "../model/Crypto";
+import { Membership } from "../model/Crypto";
 import { Operation } from "../model/Operation";
 import { AssemblyAPI } from "../services/AssemblyAPI";
 import { Services } from "../services/Services";
@@ -18,29 +18,24 @@ export default function App(props: { services: Services }): JSX.Element {
     navigate("/");
   }
 
-  function assembly(cryptoMembership: CryptoMembership) {
-    console.log(
-      `Navigation vers l'assemblée ${cryptoMembership.assembly.id}/${
-        cryptoMembership.me.fingerprint
-      } [id=${Math.random()}]`
-    );
+  function assembly(membership: Membership) {
     const asm = new Assembly(
       props.services.identityProofStoreFactory,
       props.services.assemblyAPI,
-      cryptoMembership
+      membership
     );
     asm.start();
     setAppState(AppState.assembly(asm));
-    navigate(`/assembly/${cryptoMembership.assembly.id}`);
+    navigate(`/assembly/${membership.assembly.id}`);
   }
 
   async function prepare(operation: Operation) {
     setAppState(AppState.prepare(operation));
     try {
-      let cryptoMembership: CryptoMembership = await AssemblyAPI.fold(
+      let membership: Membership = await AssemblyAPI.fold(
         props.services.assemblyAPI
       )(operation);
-      assembly(cryptoMembership);
+      assembly(membership);
     } catch (e) {
       setAppState(AppState.failure(`${e}`));
     }
