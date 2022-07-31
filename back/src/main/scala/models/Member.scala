@@ -82,15 +82,20 @@ object Member:
 
     given Eq[Presence] = Eq.fromUniversalEquals
 
-  enum Readiness:
-    case Busy, Ready
+  sealed abstract class Readiness
+  sealed abstract class Blockingness extends Readiness
 
   object Readiness:
+    case object Answering extends Readiness
+    case object Blocking  extends Blockingness
+    case object Ready     extends Blockingness
+
     given readinessEncoder: Encoder[Readiness] with
       final def apply(r: Readiness): Json =
         Json.fromString(r match
-          case Busy  => "busy"
-          case Ready => "ready"
+          case Answering => "answering"
+          case Blocking  => "blocking"
+          case Ready     => "ready"
         )
 
     given Eq[Readiness] = Eq.fromUniversalEquals
@@ -100,8 +105,9 @@ object Member:
         import Decoder.resultInstance.*
         c.as[String].flatMap { (s: String) =>
           s.trim.toLowerCase() match
-            case "busy"  => pure(Readiness.Busy)
-            case "ready" => pure(Readiness.Ready)
+            case "answering" => pure(Readiness.Answering)
+            case "blocking"  => pure(Readiness.Blocking)
+            case "ready"     => pure(Readiness.Ready)
             case s =>
               raiseError(
                 DecodingFailure(s" '$s' is not a readiness, should be 'busy' or 'ready'.", Nil)

@@ -27,26 +27,35 @@ export default function ReadinessPanel(props: Props): JSX.Element {
   }
 
   let ready: Fingerprint[] = [];
-  let busy: Fingerprint[] = [];
+  let blocking: Fingerprint[] = [];
+  let answering: Fingerprint[] = [];
 
   for (let mr of props.readiness) {
     switch (mr.readiness) {
       case "ready":
         ready.push(mr.member);
         break;
-      case "busy":
-        busy.push(mr.member);
+      case "blocking":
+        blocking.push(mr.member);
+        break;
+      case "answering":
+        answering.push(mr.member);
         break;
     }
   }
 
   ready.sort(compareString);
-  busy.sort(compareString);
+  blocking.sort(compareString);
+  answering.sort(compareString);
 
   return (
     <div>
       <h3>Qui est prêt.e?</h3>
-      <MemberList title="Pas encore prêt.e.s" members={busy.map(withName)} />
+      <MemberList
+        title="En train de répondre"
+        members={answering.map(withName)}
+      />
+      <MemberList title="Bloquant.e.s" members={blocking.map(withName)} />
       <MemberList title="Prêt.e.s" members={ready.map(withName)} />
     </div>
   );

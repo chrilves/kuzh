@@ -31,7 +31,11 @@ export default function WaitingPanel(props: Props): JSX.Element {
   );
 }
 
-type Phase<A> = Phase.Reply | Phase.Confirm<A> | Phase.Confirmed;
+type Phase<A> =
+  | Phase.Reply
+  | Phase.Confirm<A>
+  | Phase.Blocking
+  | Phase.Confirmed;
 
 namespace Phase {
   export type Reply = {
@@ -51,6 +55,14 @@ namespace Phase {
       answer: answer,
     };
   }
+
+  export type Blocking = {
+    tag: "blocking";
+  };
+
+  export const blocking: Blocking = {
+    tag: "blocking",
+  };
 
   export type Confirmed = {
     tag: "confirmed";
@@ -98,6 +110,9 @@ function AnswerPanel(props: AnswerProps): JSX.Element {
           answer={phase.answer}
         />
       );
+      break;
+    case "blocking":
+      phasePanel = <AnswerPanelNS.Blocking changeState={changePhase} />;
       break;
     case "confirmed":
       phasePanel = <AnswerPanelNS.Confirmed />;
@@ -164,8 +179,24 @@ namespace AnswerPanelNS {
     );
   }
 
+  export function Blocking(props: {
+    changeState: (phase: Phase<boolean>) => void;
+  }): JSX.Element {
+    return (
+      <div>
+        <p>Vous bloquez le vote.</p>
+        <button
+          type="button"
+          onClick={() => props.changeState(Phase.confirmed)}
+        >
+          Debloquer le vote
+        </button>
+      </div>
+    );
+  }
+
   export function Confirmed(): JSX.Element {
-    return <p>Votre réponse est enregistrée!</p>;
+    return <p>Vous être prêt.e à soumettre vôtre choix.</p>;
   }
 }
 
@@ -203,6 +234,9 @@ function QuestionPanel(props: {
           question={phase.answer}
         />
       );
+      break;
+    case "blocking":
+      phasePanel = <QuestionPanelNS.Blocking changePhase={changePhase} />;
       break;
     case "confirmed":
       phasePanel = <QuestionPanelNS.Confirmed />;
@@ -281,6 +315,22 @@ namespace QuestionPanelNS {
         </button>
         <button type="button" onClick={() => props.changePhase(Phase.reply)}>
           Revenir en arrière!
+        </button>
+      </div>
+    );
+  }
+
+  export function Blocking(props: {
+    changePhase: (phase: Phase<string | null>) => void;
+  }): JSX.Element {
+    return (
+      <div>
+        <p>Vous bloquez le vote.</p>
+        <button
+          type="button"
+          onClick={() => props.changePhase(Phase.confirmed)}
+        >
+          Debloquer le vote
         </button>
       </div>
     );

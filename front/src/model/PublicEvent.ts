@@ -6,7 +6,7 @@ export type PublicEvent =
   | PublicEvent.QuestionDone
   | PublicEvent.NewQuestions
   | PublicEvent.MemberPresence
-  | PublicEvent.MemberReady
+  | PublicEvent.MemberBlocking
   | PublicEvent.StatusUpdate;
 
 export namespace PublicEvent {
@@ -25,9 +25,10 @@ export namespace PublicEvent {
     presence: Member.Presence;
   };
 
-  export type MemberReady = {
-    readonly tag: "member_ready";
+  export type MemberBlocking = {
+    readonly tag: "member_blocking";
     member: Fingerprint;
+    blocking: Member.Blockingness;
   };
 
   export type StatusUpdate = {

@@ -147,13 +147,17 @@ export default class Assembly {
   // Question Management
 
   readonly myQuestion = (question: string | null) => {
-    this._choiceStatus = ChoiceStatus.question(this._state.id, question);
-    this.send(MemberEvent.ready);
+    this._choiceStatus = ChoiceStatus.question(
+      this._state.id,
+      question,
+      "ready"
+    );
+    this.send(MemberEvent.blocking("ready"));
   };
 
   readonly myAnswer = (answer: boolean) => {
-    this._choiceStatus = ChoiceStatus.answer(this._state.id, answer);
-    this.send(MemberEvent.ready);
+    this._choiceStatus = ChoiceStatus.answer(this._state.id, answer, "ready");
+    this.send(MemberEvent.blocking("ready"));
   };
 
   readonly send = (event: MemberEvent) => {
@@ -172,7 +176,7 @@ export default class Assembly {
       if (mp.presence === Member.Presence.present)
         ready.push({
           member: mp.member,
-          readiness: "busy",
+          readiness: "answering",
         });
     this._state.status = AssemblyState.Status.waiting(
       qs.length > 0 ? qs[0] : null,
@@ -223,7 +227,7 @@ export default class Assembly {
                     if (present === false)
                       status.ready.push({
                         member: event.member,
-                        readiness: "busy",
+                        readiness: "answering",
                       });
                     break;
                   case "harvesting":
@@ -244,12 +248,12 @@ export default class Assembly {
                 break;
             }
             break;
-          case "member_ready":
+          case "member_blocking":
             switch (status.tag) {
               case "waiting":
                 for (let i in status.ready)
                   if (status.ready[i].member === event.member)
-                    status.ready[i].readiness = "ready";
+                    status.ready[i].readiness = event.blocking;
                 break;
               case "harvesting":
                 break;

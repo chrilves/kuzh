@@ -2,9 +2,10 @@ package chrilves.kuzh.back.models.assembly
 
 import io.circe.*
 import io.circe.syntax.*
+import chrilves.kuzh.back.models.Harvest
 
 enum AssemblyEvent:
-  case PublicSynchro(public: State)
+  case PublicSynchro(public: State[Harvest])
   case PublicEvent(public: State.Event)
   case Error(reason: String, fatal: Boolean)
 

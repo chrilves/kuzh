@@ -13,7 +13,17 @@ import io.circe.syntax.*
 
 import scala.collection.*
 
-final case class Harvest[+A, +B](context: A, path: List[Member.Fingerprint])
+final case class Harvest()
+
+object Harvest:
+  given harvestEncoder: Encoder[Harvest] with
+    final def apply(h: Harvest): Json =
+      Json.Null
+
+  given harvestDecoder: Decoder[Harvest] with
+    def apply(c: HCursor): Decoder.Result[Harvest] =
+      import Decoder.resultInstance.*
+      pure(Harvest())
 
 /*
 object Harvest:

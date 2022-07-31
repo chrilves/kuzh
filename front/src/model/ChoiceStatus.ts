@@ -1,3 +1,5 @@
+import { Member } from "./Member";
+
 export namespace ChoiceStatus {
   export type NoChoice = {
     tag: "no_choice";
@@ -11,13 +13,19 @@ export namespace ChoiceStatus {
     tag: "question";
     id: string;
     question: string | null;
+    blocking: Member.Blockingness;
   };
 
-  export function question(id: string, q: string | null): Question {
+  export function question(
+    id: string,
+    q: string | null,
+    b: Member.Blockingness
+  ): Question {
     return {
       tag: "question",
       id: id,
       question: q,
+      blocking: b,
     };
   }
 
@@ -25,13 +33,19 @@ export namespace ChoiceStatus {
     tag: "answer";
     id: string;
     answer: boolean;
+    blocking: Member.Blockingness;
   };
 
-  export function answer(id: string, answer: boolean): Answser {
+  export function answer(
+    id: string,
+    answer: boolean,
+    b: Member.Blockingness
+  ): Answser {
     return {
       tag: "answer",
       id: id,
       answer: answer,
+      blocking: b,
     };
   }
 }

@@ -50,7 +50,7 @@ object AssemblyManagement:
           info = assembly.Info(id, name, secret)
           _ <- Sync[F].delay(
             assemblies.addOne(
-              id -> Assembly.inMemory[F](info, Sync[F].delay(assemblies.remove(id)))
+              id -> new Assembly(IdentityProofStore.inMemory, AssemblyStateStore.inMemory, info)
             )
           )
         yield info

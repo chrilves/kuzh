@@ -11,7 +11,8 @@ export type MemberPresence = {
 };
 
 export namespace Member {
-  export type Readiness = "busy" | "ready";
+  export type Blockingness = "blocking" | "ready";
+  export type Readiness = "answering" | Blockingness;
 
   export type Presence = Presence.Absent | Presence.Present;
 
