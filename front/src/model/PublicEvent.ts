@@ -1,22 +1,16 @@
 import { Member } from "./Member";
 import { Fingerprint } from "./Crypto";
-import { AssemblyState } from "./AssemblyState";
-
-export type PublicEvent =
-  | PublicEvent.QuestionDone
-  | PublicEvent.NewQuestions
-  | PublicEvent.MemberPresence
-  | PublicEvent.MemberBlocking
-  | PublicEvent.StatusUpdate;
 
 export namespace PublicEvent {
   export type QuestionDone = {
     readonly tag: "question_done";
+    readonly id: string;
   };
 
   export type NewQuestions = {
     readonly tag: "new_questions";
-    questions: [string];
+    readonly id: string;
+    readonly questions: [string];
   };
 
   export type MemberPresence = {
@@ -31,8 +25,15 @@ export namespace PublicEvent {
     blocking: Member.Blockingness;
   };
 
-  export type StatusUpdate = {
-    readonly tag: "status_update";
-    status: AssemblyState.Status;
+  export type HarvestAccepted = {
+    readonly tag: "harvest_accepted";
+    member: Fingerprint;
   };
 }
+
+export type PublicEvent =
+  | PublicEvent.QuestionDone
+  | PublicEvent.NewQuestions
+  | PublicEvent.MemberPresence
+  | PublicEvent.MemberBlocking
+  | PublicEvent.HarvestAccepted;

@@ -63,10 +63,7 @@ export default function PresencePanel(props: Props): JSX.Element {
   return (
     <div>
       <h3>Membres de l'Assemblée</h3>
-      <MemberList
-        title="Présent.e.s"
-        members={present.map((x) => [withName(x), x])}
-      />
+      <MemberList title="Présent.e.s" members={present} name={props.name} />
       <h4>Absent.e.s: {absentLines.length}</h4>
       {absentLines.length > 0 && (
         <table>

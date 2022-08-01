@@ -85,7 +85,7 @@ object Handshake:
 
         case "challenge_response" =>
           for
-            sig <- c.downField("signature").as[String].map(Signature.fromString[Array[Byte]](_))
+            sig <- c.downField("signature").as[Signature[Array[Byte]]]
             id  <- c.downField("identity_proof").as[Option[IdentityProof]]
           yield ChallengeResponse(sig, id)
 

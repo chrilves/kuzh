@@ -24,6 +24,7 @@ import cats.syntax.eq.*
 
 import chrilves.kuzh.back.models.*
 import chrilves.kuzh.back.models.Member
+import cats.effect.std.Semaphore
 
 trait AssemblyManagement[F[_]]:
   def create(name: assembly.Info.Name): F[assembly.Info]
@@ -39,7 +40,7 @@ trait AssemblyManagement[F[_]]:
 object AssemblyManagement:
   inline def apply[F[_]](using ev: AssemblyManagement[F]): ev.type = ev
 
-  def inMemory[F[_]: Sync]: AssemblyManagement[F] =
+  def inMemory[F[_]: Async]: AssemblyManagement[F] =
     new AssemblyManagement[F]:
       val assemblies = mutable.Map.empty[assembly.Info.Id, Assembly[F]]
 
@@ -48,9 +49,15 @@ object AssemblyManagement:
           id     <- assembly.Info.Id.random
           secret <- assembly.Info.Secret.random
           info = assembly.Info(id, name, secret)
+          mutex <- Semaphore[F](1)
           _ <- Sync[F].delay(
             assemblies.addOne(
-              id -> new Assembly(IdentityProofStore.inMemory, AssemblyStateStore.inMemory, info)
+              id -> new Assembly(
+                IdentityProofStore.inMemory,
+                AssemblyStateStore.inMemory(3),
+                mutex,
+                info
+              )
             )
           )
         yield info

@@ -2,25 +2,41 @@ import { useState } from "react";
 import { Fingerprint, Name } from "../model/Crypto";
 import { AssemblyState } from "../model/AssemblyState";
 import ReadinessPanel from "./ReadinessPanel";
+import { Member } from "../model/Member";
 
 type Props = {
+  myFingerprint: Fingerprint;
   waiting: AssemblyState.Status.Waiting;
   sendAnswer(answer: boolean): void;
   sendQuestion(question: string | null): void;
+  changeReadiness(r: Member.Blockingness): void;
   name(member: Fingerprint): Promise<Name>;
 };
 
 export default function WaitingPanel(props: Props): JSX.Element {
   let waitingPanel: JSX.Element;
+
+  const myMemberReadiness = props.waiting.ready.find(
+    (x) => x.member === props.myFingerprint
+  );
+
   if (props.waiting.question) {
     waitingPanel = (
       <AnswerPanel
         question={props.waiting.question}
         sendAnswer={props.sendAnswer}
+        myReadiness={myMemberReadiness?.readiness}
+        changeReadiness={props.changeReadiness}
       />
     );
   } else {
-    waitingPanel = <QuestionPanel sendQuestion={props.sendQuestion} />;
+    waitingPanel = (
+      <QuestionPanel
+        sendQuestion={props.sendQuestion}
+        myReadiness={myMemberReadiness?.readiness}
+        changeReadiness={props.changeReadiness}
+      />
+    );
   }
 
   return (
@@ -31,11 +47,7 @@ export default function WaitingPanel(props: Props): JSX.Element {
   );
 }
 
-type Phase<A> =
-  | Phase.Reply
-  | Phase.Confirm<A>
-  | Phase.Blocking
-  | Phase.Confirmed;
+type Phase<A> = Phase.Reply | Phase.Confirm<A> | Phase.Confirmed;
 
 namespace Phase {
   export type Reply = {
@@ -56,14 +68,6 @@ namespace Phase {
     };
   }
 
-  export type Blocking = {
-    tag: "blocking";
-  };
-
-  export const blocking: Blocking = {
-    tag: "blocking",
-  };
-
   export type Confirmed = {
     tag: "confirmed";
   };
@@ -71,6 +75,79 @@ namespace Phase {
   export const confirmed: Confirmed = {
     tag: "confirmed",
   };
+
+  export function change<A>(
+    oldPhase: Phase<A>,
+    newPhase: Phase<A>,
+    f: (a: A) => void
+  ): boolean {
+    if (
+      (oldPhase.tag === "reply" && newPhase.tag === "confirm") ||
+      (oldPhase.tag === "confirm" && newPhase.tag === "reply")
+    )
+      return true;
+    else {
+      if (oldPhase.tag === "confirm" && newPhase.tag === "confirmed") {
+        f(oldPhase.answer);
+        return true;
+      } else return false;
+    }
+  }
+
+  export function initial<A>(ready: Member.Readiness | undefined): Phase<A> {
+    switch (ready) {
+      case "blocking":
+        return Phase.confirmed;
+      case "ready":
+        return Phase.confirmed;
+      default:
+        return Phase.reply;
+    }
+  }
+}
+
+function Confirmed(props: {
+  changeReadiness(r: Member.Blockingness): void;
+  myBlockingness: Member.Blockingness;
+}): JSX.Element {
+  const [desired, setDesired] = useState<Member.Blockingness>(
+    props.myBlockingness
+  );
+
+  function renderOk(
+    msg: string,
+    buttonMsg: string,
+    other: Member.Blockingness
+  ) {
+    function flip() {
+      setDesired(other);
+      props.changeReadiness(other);
+    }
+
+    return (
+      <div>
+        <p>{msg}</p>
+        {desired === props.myBlockingness && (
+          <div>
+            <button type="button" onClick={flip}>
+              {buttonMsg}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  switch (props.myBlockingness) {
+    case "blocking":
+      return renderOk("Vous bloquez le vote.", "Debloquer le vote", "ready");
+    case "ready":
+      return renderOk(
+        "Votre choix est enregistré!",
+        "Bloquer le vote",
+        "blocking"
+      );
+  }
 }
 
 //////////////////////////////////////////
@@ -79,29 +156,28 @@ namespace Phase {
 type AnswerProps = {
   question: string;
   sendAnswer(answer: boolean): void;
+  myReadiness: Member.Readiness | undefined;
+  changeReadiness(r: Member.Blockingness): void;
 };
 
 function AnswerPanel(props: AnswerProps): JSX.Element {
-  const [phase, setPhase] = useState<Phase<boolean>>(Phase.reply);
+  const [phase, setPhase] = useState<Phase<boolean>>(
+    Phase.initial(props.myReadiness)
+  );
+
+  function changePhase(newPhase: Phase<boolean>) {
+    if (Phase.change(phase, newPhase, props.sendAnswer)) setPhase(newPhase);
+    else
+      throw Error(
+        `Wrong phase answer transition ${phase.tag} to ${newPhase.tag}!`
+      );
+  }
 
   let phasePanel: JSX.Element;
 
-  function changePhase(newPhase: Phase<boolean>) {
-    if (phase.tag === "reply" && newPhase.tag === "confirm") setPhase(newPhase);
-    else {
-      if (phase.tag === "confirm" && newPhase.tag === "confirmed") {
-        props.sendAnswer(phase.answer);
-        setPhase(newPhase);
-      } else
-        throw Error(
-          `Wrong phase answer transition ${phase.tag} to ${newPhase.tag}!`
-        );
-    }
-  }
-
   switch (phase.tag) {
     case "reply":
-      phasePanel = <AnswerPanelNS.Reply changeState={changePhase} />;
+      phasePanel = <AnswerPanelNS.Reply changePhase={changePhase} />;
       break;
     case "confirm":
       phasePanel = (
@@ -111,11 +187,15 @@ function AnswerPanel(props: AnswerProps): JSX.Element {
         />
       );
       break;
-    case "blocking":
-      phasePanel = <AnswerPanelNS.Blocking changeState={changePhase} />;
-      break;
     case "confirmed":
-      phasePanel = <AnswerPanelNS.Confirmed />;
+      if (props.myReadiness === "blocking" || props.myReadiness === "ready")
+        phasePanel = (
+          <Confirmed
+            changeReadiness={props.changeReadiness}
+            myBlockingness={props.myReadiness}
+          />
+        );
+      else phasePanel = <div />;
       break;
   }
 
@@ -132,7 +212,7 @@ function AnswerPanel(props: AnswerProps): JSX.Element {
 
 namespace AnswerPanelNS {
   type ReplyProps = {
-    changeState: (phase: Phase<boolean>) => void;
+    changePhase: (phase: Phase<boolean>) => void;
   };
 
   export function Reply(props: ReplyProps): JSX.Element {
@@ -140,13 +220,13 @@ namespace AnswerPanelNS {
       <div>
         <button
           type="button"
-          onClick={() => props.changeState(Phase.confirm(true))}
+          onClick={() => props.changePhase(Phase.confirm(true))}
         >
           Je réponds OUI!
         </button>
         <button
           type="button"
-          onClick={() => props.changeState(Phase.confirm(false))}
+          onClick={() => props.changePhase(Phase.confirm(false))}
         >
           Je réponds NON!
         </button>
@@ -178,26 +258,6 @@ namespace AnswerPanelNS {
       </div>
     );
   }
-
-  export function Blocking(props: {
-    changeState: (phase: Phase<boolean>) => void;
-  }): JSX.Element {
-    return (
-      <div>
-        <p>Vous bloquez le vote.</p>
-        <button
-          type="button"
-          onClick={() => props.changeState(Phase.confirmed)}
-        >
-          Debloquer le vote
-        </button>
-      </div>
-    );
-  }
-
-  export function Confirmed(): JSX.Element {
-    return <p>Vous être prêt.e à soumettre vôtre choix.</p>;
-  }
 }
 
 //////////////////////////////////////////
@@ -205,27 +265,26 @@ namespace AnswerPanelNS {
 
 function QuestionPanel(props: {
   sendQuestion(question: string | null): void;
+  myReadiness: Member.Readiness | undefined;
+  changeReadiness(r: Member.Blockingness): void;
 }): JSX.Element {
-  const [phase, setPhase] = useState<Phase<string | null>>(Phase.reply);
+  const [phase, setPhase] = useState<Phase<string | null>>(
+    Phase.initial(props.myReadiness)
+  );
 
   function changePhase(newPhase: Phase<string | null>) {
-    if (phase.tag === "reply" && newPhase.tag === "confirm") setPhase(newPhase);
-    else {
-      if (phase.tag === "confirm" && newPhase.tag === "confirmed") {
-        props.sendQuestion(phase.answer);
-        setPhase(newPhase);
-      } else
-        throw Error(
-          `Wrong phase answer transition ${phase.tag} to ${newPhase.tag}!`
-        );
-    }
+    if (Phase.change(phase, newPhase, props.sendQuestion)) setPhase(newPhase);
+    else
+      throw Error(
+        `Wrong phase answer transition ${phase.tag} to ${newPhase.tag}!`
+      );
   }
 
   let phasePanel: JSX.Element;
 
   switch (phase.tag) {
     case "reply":
-      phasePanel = <QuestionPanelNS.Reply changeState={changePhase} />;
+      phasePanel = <QuestionPanelNS.Reply changePhase={changePhase} />;
       break;
     case "confirm":
       phasePanel = (
@@ -235,11 +294,15 @@ function QuestionPanel(props: {
         />
       );
       break;
-    case "blocking":
-      phasePanel = <QuestionPanelNS.Blocking changePhase={changePhase} />;
-      break;
     case "confirmed":
-      phasePanel = <QuestionPanelNS.Confirmed />;
+      if (props.myReadiness === "blocking" || props.myReadiness === "ready")
+        phasePanel = (
+          <Confirmed
+            changeReadiness={props.changeReadiness}
+            myBlockingness={props.myReadiness}
+          />
+        );
+      else phasePanel = <div />;
       break;
   }
 
@@ -253,18 +316,18 @@ function QuestionPanel(props: {
 
 namespace QuestionPanelNS {
   type ReplyProps = {
-    changeState: (phase: Phase<string | null>) => void;
+    changePhase: (phase: Phase<string | null>) => void;
   };
 
   export function Reply(props: ReplyProps): JSX.Element {
     const [input, setInput] = useState<string>("");
 
     function ask() {
-      props.changeState(Phase.confirm(input ? input : null));
+      props.changePhase(Phase.confirm(input ? input : null));
     }
 
     function dontAsk() {
-      props.changeState(Phase.confirm(null));
+      props.changePhase(Phase.confirm(null));
     }
 
     return (
@@ -318,25 +381,5 @@ namespace QuestionPanelNS {
         </button>
       </div>
     );
-  }
-
-  export function Blocking(props: {
-    changePhase: (phase: Phase<string | null>) => void;
-  }): JSX.Element {
-    return (
-      <div>
-        <p>Vous bloquez le vote.</p>
-        <button
-          type="button"
-          onClick={() => props.changePhase(Phase.confirmed)}
-        >
-          Debloquer le vote
-        </button>
-      </div>
-    );
-  }
-
-  export function Confirmed(): JSX.Element {
-    return <p>Votre choix est enregistrée!</p>;
   }
 }

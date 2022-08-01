@@ -15,9 +15,8 @@ type Props = {
 export default function AssemblyPage(props: Props): JSX.Element {
   const [assemblyState, setAssemblyState] = useState<AssemblyState>({
     questions: [],
-    id: "",
     presences: [],
-    status: AssemblyState.Status.waiting(null, []),
+    status: AssemblyState.Status.waiting("", null, []),
   });
   const [connectionStatus, setConnectionStatus] =
     useState<string>("not connected");
@@ -37,12 +36,22 @@ export default function AssemblyPage(props: Props): JSX.Element {
 
   return (
     <div>
-      <input type="button" value="Menu" onClick={props.menu} />
+      <input
+        type="button"
+        value="Menu"
+        onClick={() => {
+          props.assembly.stop();
+          props.menu();
+        }}
+      />
       <ConnectionStatus status={connectionStatus} />
       <StatusPanel
+        myFingerprint={props.assembly.membership.me.fingerprint}
         status={assemblyState.status}
         sendAnswer={props.assembly.myAnswer}
         sendQuestion={props.assembly.myQuestion}
+        acceptHarvest={props.assembly.acceptHarvest}
+        changeReadiness={props.assembly.changeReadiness}
         name={props.assembly.name}
       />
       <h2>Assemblée</h2>

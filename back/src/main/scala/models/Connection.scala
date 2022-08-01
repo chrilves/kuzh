@@ -17,6 +17,7 @@ import chrilves.kuzh.back.models.assembly.*
 import chrilves.kuzh.back.lib.crypto.*
 import chrilves.kuzh.back.services.*
 import scodec.bits.ByteVector
+import scala.collection.mutable
 
 final case class Connection[F[_]](
     onClose: F[Unit],
@@ -28,6 +29,7 @@ object Connection:
   def connect[F[_]: Async](assemblies: AssemblyManagement[F]): F[Connection[F[_]]] =
     for
       pingNumber <- Ref.of[F, Long](Long.MinValue)
+      strBuffer  <- Ref.of[F, mutable.StringBuilder](new mutable.StringBuilder)
       status     <- Ref.of[F, Status[F]](Status.Initial[F]())
       queue      <- Queue.unbounded[F, Option[WebSocketFrame]]
     yield
@@ -71,65 +73,126 @@ object Connection:
                     f(a).handleErrorWith(e => onClose(s"[${from}] Treatement errror of ${a}: ${e}"))
             )
 
-        input.foreach {
-          case t: Text if t.last =>
-            import Status.*
-            status.get.flatMap {
-              case Initial() =>
-                read[Handshake]("initial")(t.str) {
-                  case cp @ Handshake.Crententials(id, secret, member) =>
-                    assemblies.withAssembly(id, secret) {
-                      case Some(asm) =>
-                        for
-                          challenge           <- lib.Random.bytes(32)
-                          storedIdentityProof <- asm.identityProof(member)
-                          _ <- status.set(Challenged(asm, member, challenge, storedIdentityProof))
-                          _ <- sendHandshake(
-                            Handshake.Challenge(challenge, storedIdentityProof.isEmpty)
-                          )
-                        yield ()
-                      case None =>
-                        onClose(s"No Assembly or wrong secret for ${cp}")
-                    }
-                  case h =>
-                    val msg = s"Protocol Error: wrong message ${h}"
-                    sendHandshake(Handshake.Error(msg, true)) *> onClose(msg)
-                }
-
-              case Challenged(assembly, member, challenge, storedIdentityProof) =>
-                read[Handshake]("challenged")(t.str) {
-                  case cr: Handshake.ChallengeResponse =>
-                    cr.check(member, storedIdentityProof, challenge) match
-                      case Some(id) =>
-                        def handler(message: AssemblyEvent): F[Unit] =
-                          queue.offer(Some(WebSocketFrame.Text(message.asJson.noSpacesSortKeys)))
-
-                        for
-                          _ <- status.set(Status.Established[F](assembly, member))
-                          _ <-
-                            (if storedIdentityProof.isEmpty
-                             then
-                               assembly
-                                 .registerMember(id)
-                                 .handleErrorWith(e => onClose(s"Member registration error ${e}"))
-                             else Async[F].pure(()))
-                          _ <- sendHandshake(Handshake.Established)
-                          _ <- assembly
-                            .memberChannel(member, handler)
-                            .handleErrorWith(e => onClose(s"Member channel error ${e}"))
-                        yield ()
-                      case None =>
-                        onClose("Identity Proof did not pass check!")
-
-                  case h =>
-                    onClose(s"Protocol Error: wrong message ${h}")
-                }
-
-              case Established(assembly, member) =>
-                read[MemberEvent]("established")(t.str) { mfm =>
-                  assembly.memberMessage(member, mfm)
-                }
+        def withStrBuffer(str: String, last: Boolean)(f: String => F[Unit]): F[Unit] =
+          if last
+          then
+            strBuffer.get.flatMap { buff =>
+              if buff.isEmpty
+              then f(str)
+              else
+                for
+                  _ <- strBuffer.set(new mutable.StringBuilder)
+                  s <- Async[F].delay {
+                    buff.++=(str)
+                    buff.result()
+                  }
+                  r <- f(s)
+                yield r
             }
+          else
+            strBuffer.get.map { buff =>
+              buff.++=(str)
+            }
+
+        def log(s: String): F[Unit] =
+          Sync[F].delay(
+            println(s"${Console.GREEN}[${java.time.Instant.now()}] ${s}${Console.RESET}")
+          )
+
+        def chrono[A](name: String)(f: => F[A])(using Sync[F]): F[A] =
+          for
+            start <- Sync[F].realTimeInstant
+            a     <- f
+            end   <- Sync[F].realTimeInstant
+            _ <- Sync[F].delay(
+              println(
+                s"${Console.RED}[${start}] ${name}: ${start
+                    .until(end, java.time.temporal.ChronoUnit.MILLIS)} millis${Console.RESET}"
+              )
+            )
+          yield a
+
+        input.foreach {
+          case t: Text =>
+            import Status.*
+            log(s"Received frame ${t.str}") *>
+              Sync[F].realTimeInstant.flatMap { start =>
+                withStrBuffer(t.str, t.last) { str =>
+                  status.get.flatMap {
+                    case Initial() =>
+                      read[Handshake]("initial")(str) {
+                        case cp @ Handshake.Crententials(id, secret, member) =>
+                          assemblies.withAssembly(id, secret) {
+                            case Some(asm) =>
+                              for
+                                challenge           <- lib.Random.bytes(32)
+                                storedIdentityProof <- asm.identityProof(member)
+                                _ <- status.set(
+                                  Challenged(asm, member, challenge, storedIdentityProof)
+                                )
+                                _ <- sendHandshake(
+                                  Handshake.Challenge(challenge, storedIdentityProof.isEmpty)
+                                )
+                              yield ()
+                            case None =>
+                              onClose(s"No Assembly or wrong secret for ${cp}")
+                          }
+                        case h =>
+                          val msg = s"Protocol Error: wrong message ${h}"
+                          sendHandshake(Handshake.Error(msg, true)) *> onClose(msg)
+                      }
+
+                    case Challenged(assembly, member, challenge, storedIdentityProof) =>
+                      log(s"Received response from ${member}: ${t.str}") *>
+                        read[Handshake]("challenged")(str) {
+                          case cr: Handshake.ChallengeResponse =>
+                            cr.check(member, storedIdentityProof, challenge) match
+                              case Some(id) =>
+                                def handler(message: AssemblyEvent): F[Unit] =
+                                  queue.offer(
+                                    Some(WebSocketFrame.Text(message.asJson.noSpacesSortKeys))
+                                  )
+
+                                for
+                                  _ <- status.set(Status.Established[F](assembly, member))
+                                  _ <-
+                                    (if storedIdentityProof.isEmpty
+                                     then
+                                       assembly
+                                         .registerMember(id)
+                                         .handleErrorWith(e =>
+                                           onClose(s"Member registration error ${e}")
+                                         )
+                                     else Async[F].pure(()))
+                                  _ <- sendHandshake(Handshake.Established)
+                                  _ <- assembly
+                                    .memberChannel(member, handler)
+                                    .handleErrorWith(e => onClose(s"Member channel error ${e}"))
+                                yield ()
+                              case None =>
+                                onClose("Identity Proof did not pass check!")
+
+                          case h =>
+                            onClose(s"Protocol Error: wrong message ${h}")
+                        }
+
+                    case Established(assembly, member) =>
+                      log(s"Received evet from ${member}: ${t.str}") *>
+                        read[MemberEvent]("established")(str) { mfm =>
+                          for
+                            end <- Sync[F].realTimeInstant
+                            _ <- Sync[F].delay(
+                              println(s"${Console.GREEN}[${start}]Traitement du message en ${start
+                                  .until(end, java.time.temporal.ChronoUnit.MILLIS)} millis")
+                            )
+                            a <- chrono(s"Event from member ${member} (${t.str})")(
+                              assembly.memberMessage(member, mfm)
+                            )
+                          yield a
+                        }
+                  }
+                }
+              }
           case Ping(s) =>
             Async[F].delay(println(s"Recevied PING ${s}"))
           case Pong(s) =>

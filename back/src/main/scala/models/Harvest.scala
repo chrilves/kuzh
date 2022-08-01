@@ -8,22 +8,36 @@ import chrilves.kuzh.back.*
 import chrilves.kuzh.back.lib.crypto.Signed
 import chrilves.kuzh.back.lib.crypto.VerifyFun
 import io.circe.*
-import io.circe.generic.auto.*
 import io.circe.syntax.*
 
 import scala.collection.*
+import chrilves.kuzh.back.models.Member.Fingerprint
+import java.util.UUID
 
-final case class Harvest()
+final case class Harvest(
+    id: UUID,
+    question: Option[String],
+    participants: immutable.Set[Fingerprint]
+)
 
 object Harvest:
+
   given harvestEncoder: Encoder[Harvest] with
     final def apply(h: Harvest): Json =
-      Json.Null
+      Json.obj(
+        "id"           -> h.id.toString.asJson,
+        "question"     -> h.question.asJson,
+        "participants" -> h.participants.toList.sorted.asJson
+      )
 
   given harvestDecoder: Decoder[Harvest] with
     def apply(c: HCursor): Decoder.Result[Harvest] =
       import Decoder.resultInstance.*
-      pure(Harvest())
+      for
+        id           <- c.downField("id").as[String].map(UUID.fromString)
+        question     <- c.downField("question").as[Option[String]]
+        participants <- c.downField("participants").as[List[Fingerprint]].map(_.toSet)
+      yield Harvest(id, question, participants)
 
 /*
 object Harvest:

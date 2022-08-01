@@ -5,30 +5,30 @@ import io.circe.syntax.*
 
 import scala.collection.*
 
-import chrilves.kuzh.back.models.Member
 import cats.effect.kernel.Sync
 import java.util.UUID
 
-final case class State[+A](
+import chrilves.kuzh.back.models.*
+import chrilves.kuzh.back.lib.crypto.*
+
+final case class State(
     questions: List[String],
     presences: immutable.Map[Member.Fingerprint, Member.Presence],
-    id: java.util.UUID,
-    status: State.Status[A]
+    status: State.Status
 ):
   def question: Option[String] = questions.headOption
 
 object State:
-  def init[F[_]: Sync, A]: F[State[A]] = Sync[F].delay(
+  def init[F[_]: Sync]: F[State] = Sync[F].delay(
     State(
       questions = Nil,
       presences = immutable.Map.empty,
-      id = java.util.UUID.randomUUID(),
-      status = Status.Waiting(None, immutable.Map.empty)
+      status = Status.Waiting(java.util.UUID.randomUUID(), None, immutable.Map.empty)
     )
   )
 
-  given stateEncoder[A: Encoder]: Encoder[State[A]] with
-    final def apply(ps: State[A]): Json =
+  given stateEncoder: Encoder[State] with
+    final def apply(ps: State): Json =
       Json.obj(
         "questions" -> Json.fromValues(ps.questions.map(Json.fromString)),
         "presences" -> Json.fromValues(ps.presences.map { case (fp, presence) =>
@@ -37,24 +37,30 @@ object State:
             "presence" -> presence.asJson
           )
         }),
-        "id"     -> Json.fromString(ps.id.toString()),
         "status" -> ps.status.asJson
       )
 
-  enum Status[+A]:
+  enum Status:
     case Waiting(
+        id: UUID,
         question: Option[String],
         ready: immutable.Map[Member.Fingerprint, Member.Readiness]
     )
-    case Harvesting[A](participant: Set[Member.Fingerprint], phase: A) extends Status[A]
+    case Proposed(
+        harvest: Harvest,
+        remaining: immutable.Set[Member.Fingerprint]
+    )
+    case Harvesting(harvest: Harvest, phase: Phase)
+    case Hidden
 
   object Status:
-    given statusEncoder[A: Encoder]: Encoder[Status[A]] with
-      final def apply(s: Status[A]): Json =
+    given statusEncoder: Encoder[Status] with
+      final def apply(s: Status): Json =
         s match
-          case Waiting(questionOpt, ready) =>
+          case Waiting(id, questionOpt, ready) =>
             Json.obj(
-              "tag"      -> Json.fromString("waiting"),
+              "tag"      -> "waiting".asJson,
+              "id"       -> id.toString().asJson,
               "question" -> questionOpt.asJson,
               "ready" -> Json.fromValues(ready.map { case (fp, r) =>
                 Json.obj(
@@ -63,11 +69,21 @@ object State:
                 )
               })
             )
-          case Harvesting(participants, phase) =>
+          case Proposed(harvest, remaining) =>
             Json.obj(
-              "tag"          -> Json.fromString("harvesting"),
-              "participants" -> Json.fromValues(participants.toList.map(_.asJson)),
-              "phase"        -> (phase: A).asJson
+              "tag"       -> "proposed".asJson,
+              "harvest"   -> harvest.asJson,
+              "remaining" -> remaining.toList.asJson
+            )
+          case Harvesting(harvest, phase) =>
+            Json.obj(
+              "tag"     -> "harvesting".asJson,
+              "harvest" -> harvest.asJson,
+              "phase"   -> phase.asJson
+            )
+          case Hidden =>
+            Json.obj(
+              "tag" -> "hidden".asJson
             )
 
   enum Event:
@@ -75,6 +91,7 @@ object State:
     case MemberBlocking(member: Member.Fingerprint, blocking: Member.Blockingness)
     case QuestionDone(id: UUID)
     case NewQuestions(id: UUID, questions: List[String])
+    case HarvestAccepted(member: Member.Fingerprint)
 
   object Event:
     given AssemblyEventEncoder: Encoder[Event] with
@@ -102,4 +119,9 @@ object State:
               "tag"       -> Json.fromString("new_questions"),
               "id"        -> Json.fromString(id.toString()),
               "questions" -> Json.fromValues(ql.map(Json.fromString))
+            )
+          case HarvestAccepted(member) =>
+            Json.obj(
+              "tag"    -> "harvest_accepted".asJson,
+              "member" -> member.asJson
             )

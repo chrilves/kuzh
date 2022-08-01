@@ -7,10 +7,22 @@ export namespace AssemblyEvent {
     state: AssemblyState;
   };
 
-  export function publicSynchro(state: AssemblyState): StateW {
+  export function stateW(state: AssemblyState): StateW {
     return {
       tag: "state",
       state: state,
+    };
+  }
+
+  export type StatusW = {
+    readonly tag: "status";
+    status: AssemblyState.Status;
+  };
+
+  export function statusW(status: AssemblyState.Status): StatusW {
+    return {
+      tag: "status",
+      status: status,
     };
   }
 
@@ -43,5 +55,6 @@ export namespace AssemblyEvent {
 
 export type AssemblyEvent =
   | AssemblyEvent.StateW
+  | AssemblyEvent.StatusW
   | AssemblyEvent.PublicEventW
   | AssemblyEvent.Error;

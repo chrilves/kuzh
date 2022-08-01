@@ -25,22 +25,33 @@ object Base64UrlEncoded:
   inline def encode(arr: Array[Byte]): Base64UrlEncoded =
     new String(Base64.getUrlEncoder.encode(arr), StandardCharsets.UTF_8)
 
+  extension (b: Base64UrlEncoded)
+    inline def decode: Array[Byte] =
+      Base64.getUrlDecoder().decode(b)
+
+  def hash(msg: String): Array[Byte] =
+    val md = MessageDigest.getInstance("SHA-256")
+    md.update(msg.getBytes(StandardCharsets.UTF_8))
+    md.digest()
+
+  inline def hashB64(msg: String): Base64UrlEncoded =
+    Base64UrlEncoded.encode(hash(msg))
+
+  inline def hashJSON[A: Encoder](a: A): Base64UrlEncoded =
+    hashB64(a.asJson.noSpacesSortKeys)
+
   given Signable[Base64UrlEncoded] with
     def apply(a: String): Array[Byte] =
       Base64.getUrlDecoder.decode(a)
 
-  def hash(msg: String): Base64UrlEncoded =
-    val md = MessageDigest.getInstance("SHA-256")
-    md.update(msg.getBytes(StandardCharsets.UTF_8))
-    Base64UrlEncoded.encode(md.digest())
-
 opaque type Signature[+A] = String
 object Signature:
-  inline def fromString[A](str: String): Signature[A] = str
+  inline def fromString[A](str: Base64UrlEncoded): Signature[A] = str
 
-  inline given [A]: Encoder[Signature[A]] = StringInstances.encoder
-  inline given [A]: Decoder[Signature[A]] = StringInstances.decoder
-  inline given [A]: Eq[Signature[A]]      = StringInstances.eq
+  inline given [A]: Encoder[Signature[A]]  = StringInstances.encoder
+  inline given [A]: Decoder[Signature[A]]  = StringInstances.decoder
+  inline given [A]: Eq[Signature[A]]       = StringInstances.eq
+  inline given [A]: Ordering[Signature[A]] = StringInstances.ordering
 
 final case class Signed[+A](
     value: A,
@@ -84,6 +95,15 @@ object Signable:
 
   given arrayByteSignable: Signable[Array[Byte]] with
     inline def apply(s: Array[Byte]): Array[Byte] = s
+
+  given jsonSignable: Signable[Json] with
+    inline def apply(j: Json): Array[Byte] =
+      stringSignable(j.noSpacesSortKeys)
+
+  def fromEncoder[A: Encoder]: Signable[A] =
+    new Signable[A]:
+      def apply(a: A): Array[Byte] =
+        jsonSignable(a.asJson)
 
 type VerifyFun = [A] => (Signable[A]) ?=> (Signed[A]) => Boolean
 

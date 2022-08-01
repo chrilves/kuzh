@@ -3,8 +3,11 @@ package chrilves.kuzh.back.models
 import io.circe.*
 import io.circe.syntax.*
 
+import chrilves.kuzh.back.lib.crypto.*
+
 enum MemberEvent:
   case Blocking(blockingness: Member.Blockingness)
+  case AcceptHarvest
 
 object MemberEvent:
   given memberEventEncoder: Encoder[MemberEvent] with
@@ -12,11 +15,15 @@ object MemberEvent:
       m match
         case Blocking(b) =>
           Json.obj(
-            "tag" -> Json.fromString("blocking"),
-            "blocking" -> Json.fromString(b match
+            "tag" -> "blocking".asJson,
+            "blocking" -> (b match
               case Member.Readiness.Blocking => "blocking"
               case Member.Readiness.Ready    => "ready"
-            )
+            ).asJson
+          )
+        case AcceptHarvest =>
+          Json.obj(
+            "tag" -> "accept_harvest".asJson
           )
 
   given messageFromMemberDecoder: Decoder[MemberEvent] with
@@ -32,6 +39,8 @@ object MemberEvent:
                 DecodingFailure(s"Invalid message from member tag blocking, value '$s'.", Nil)
               )
           }
+        case "accept_harvest" =>
+          pure(MemberEvent.AcceptHarvest)
         case s =>
           raiseError(DecodingFailure(s"Invalid message from member tag '$s'.", Nil))
       }

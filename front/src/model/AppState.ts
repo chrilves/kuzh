@@ -1,4 +1,3 @@
-import { Membership } from "./Crypto";
 import { Operation } from "./Operation";
 import * as AssemblyModel from "./Assembly";
 

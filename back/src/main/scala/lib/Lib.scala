@@ -14,15 +14,50 @@ import io.circe.*
 import io.circe.syntax._
 import cats.kernel.Eq
 import cats.effect.kernel.Sync
+import cats.syntax.eq.*
 import com.nimbusds.jose.jwk.JWK
 import chrilves.kuzh.back.lib.crypto.*
 import chrilves.kuzh.back.models.Member.Fingerprint
+import scala.annotation.tailrec
 
 object StringInstances:
   inline def encoder: Encoder[String]   = summon[Encoder[String]]
   inline def decoder: Decoder[String]   = summon[Decoder[String]]
   inline def eq: Eq[String]             = summon[Eq[String]]
   inline def ordering: Ordering[String] = summon[Ordering[String]]
+
+object ArrayByteInstances:
+  inline def encoder: Encoder[Array[Byte]] =
+    new Encoder[Array[Byte]]:
+      def apply(a: Array[Byte]): Json =
+        Json.fromString(Base64UrlEncoded.encode(a).asString)
+
+  inline def decoder: Decoder[Array[Byte]] =
+    new Decoder[Array[Byte]]:
+      def apply(c: HCursor): Decoder.Result[Array[Byte]] =
+        c.as[String].map { s =>
+          Base64.getUrlDecoder().decode(s)
+        }
+
+  inline def eq: Eq[Array[Byte]] =
+    Eq.fromUniversalEquals
+
+  inline def ordering: Ordering[Array[Byte]] =
+    new Ordering[Array[Byte]]:
+      @tailrec
+      def compare(x: Array[Byte], y: Array[Byte]): Int =
+        for i <- 0 to (math.min(x.size, y.size) - 1)
+        do
+          val n = Ordering[Byte].compare(x(i), y(i))
+          if (n =!= 0)
+            return n
+        Ordering[Int].compare(x.size, y.size)
+
+  object implicits:
+    inline given encoder: Encoder[Array[Byte]]   = ArrayByteInstances.encoder
+    inline given decoder: Decoder[Array[Byte]]   = ArrayByteInstances.decoder
+    inline given ordering: Ordering[Array[Byte]] = ArrayByteInstances.ordering
+    inline given eq: Eq[Array[Byte]]             = Eq.fromUniversalEquals
 
 object JWKInstances:
   inline given decoderJWK: Decoder[JWK] with
@@ -50,7 +85,9 @@ object JWKInstances:
 
   extension (publicKey: JWK)
     inline def fingerprint: Fingerprint =
-      Fingerprint.fromString(Base64UrlEncoded.hash(encoderJWK(publicKey).noSpacesSortKeys).asString)
+      Fingerprint.fromString(
+        Base64UrlEncoded.hashB64(encoderJWK(publicKey).noSpacesSortKeys).asString
+      )
 
     inline def toRSAPublicKey: RSAPublicKey =
       publicKey.toRSAKey.toRSAPublicKey

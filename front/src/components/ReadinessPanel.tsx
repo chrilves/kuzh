@@ -2,9 +2,6 @@ import { compareString } from "../lib/Compare";
 import { MemberReadiness } from "../model/Member";
 import { Fingerprint, Name } from "../model/Crypto";
 import MemberList from "./MemberList";
-import { useState } from "react";
-
-export declare function structuredClone(value: any): any;
 
 type Props = {
   readiness: MemberReadiness[];
@@ -12,20 +9,6 @@ type Props = {
 };
 
 export default function ReadinessPanel(props: Props): JSX.Element {
-  const [names, setNames] = useState<Map<Fingerprint, Name>>(new Map());
-
-  function withName(member: Fingerprint): [Name, Fingerprint] {
-    const name = names.get(member);
-    if (name) return [name, member];
-
-    (async () => {
-      const name = await props.name(member);
-      names.set(member, name);
-      setNames(structuredClone(names));
-    })();
-    return ["???", member];
-  }
-
   let ready: Fingerprint[] = [];
   let blocking: Fingerprint[] = [];
   let answering: Fingerprint[] = [];
@@ -44,19 +27,16 @@ export default function ReadinessPanel(props: Props): JSX.Element {
     }
   }
 
-  ready.sort(compareString);
-  blocking.sort(compareString);
-  answering.sort(compareString);
-
   return (
     <div>
       <h3>Qui est prêt.e?</h3>
       <MemberList
         title="En train de répondre"
-        members={answering.map(withName)}
+        members={answering}
+        name={props.name}
       />
-      <MemberList title="Bloquant.e.s" members={blocking.map(withName)} />
-      <MemberList title="Prêt.e.s" members={ready.map(withName)} />
+      <MemberList title="Bloquant.e.s" members={blocking} name={props.name} />
+      <MemberList title="Prêt.e.s" members={ready} name={props.name} />
     </div>
   );
 }

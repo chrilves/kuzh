@@ -12,6 +12,14 @@ export namespace MemberEvent {
       blocking: b,
     };
   }
+
+  export type AcceptHarvest = {
+    tag: "accept_harvest";
+  };
+
+  export const acceptHarvest: AcceptHarvest = {
+    tag: "accept_harvest",
+  };
 }
 
-export type MemberEvent = MemberEvent.Blocking;
+export type MemberEvent = MemberEvent.Blocking | MemberEvent.AcceptHarvest;

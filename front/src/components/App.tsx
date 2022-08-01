@@ -27,6 +27,7 @@ export default function App(props: { services: Services }): JSX.Element {
     asm.start();
     setAppState(AppState.assembly(asm));
     navigate(`/assembly/${membership.assembly.id}`);
+    props.services.storageAPI.storeNickname(membership.me.nickname);
   }
 
   async function prepare(operation: Operation) {

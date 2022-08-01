@@ -33,6 +33,8 @@ export default function Menu(
     []
   );
 
+  const nick = ((x) => (x ? x : ""))(props.storageAPI.fetchNickname());
+
   return lastMembership === undefined ? (
     <div />
   ) : (
@@ -48,8 +50,16 @@ export default function Menu(
                 assembly={props.assembly}
               />
             )}
-            <Join prepare={props.prepare} assembly={props.assembly} />
-            <Create prepare={props.prepare} assembly={props.assembly} />
+            <Join
+              prepare={props.prepare}
+              assembly={props.assembly}
+              nick={nick}
+            />
+            <Create
+              prepare={props.prepare}
+              assembly={props.assembly}
+              nick={nick}
+            />
           </div>
         }
       />
@@ -60,6 +70,7 @@ export default function Menu(
             prepare={props.prepare}
             assembly={props.assembly}
             lastMembership={lastMembership}
+            nick={nick}
           />
         }
       />
@@ -103,15 +114,17 @@ function LastAssembly(
   );
 }
 
-function Join(props: Nav): JSX.Element {
+function Join(props: Nav & { nick: string }): JSX.Element {
   const [assemblyKey, setAssemblyKey] = useState<string>("");
-  const [nickname, setNickname] = useState<string>("");
+  const [nickname, setNickname] = useState<string>(props.nick);
 
   async function join() {
     const re = /.*[/]([^/]+)\?secret=(.*)/;
     const match = assemblyKey.match(re);
 
-    if (match) props.prepare(Operation.join(match[1], match[2], nickname));
+    if (match) {
+      props.prepare(Operation.join(match[1], match[2], nickname));
+    }
   }
 
   function validInput(): boolean {
@@ -147,9 +160,9 @@ function Join(props: Nav): JSX.Element {
   );
 }
 
-function Create(props: Nav): JSX.Element {
+function Create(props: Nav & { nick: string }): JSX.Element {
   const [assemblyName, setAssemblyName] = useState<string>("asm");
-  const [nickname, setNickname] = useState<string>("toto");
+  const [nickname, setNickname] = useState<string>(props.nick);
 
   function create() {
     props.prepare(Operation.create(assemblyName, nickname));
@@ -187,7 +200,7 @@ function Create(props: Nav): JSX.Element {
 }
 
 function Wizzard(
-  props: Nav & { lastMembership: Membership | null }
+  props: Nav & { lastMembership: Membership | null } & { nick: string }
 ): JSX.Element {
   const { assemblyIdP } = useParams();
   const [fuse] = useState<Fuse>(new Fuse());
@@ -196,7 +209,8 @@ function Wizzard(
   const secretQS = URLSearchParams.get("secret");
 
   const [secret, setSecret] = useState<string>(secretQS ? secretQS : "");
-  const [nickname, setNickname] = useState<string>("toto");
+  const [nickname, setNickname] = useState<string>(props.nick);
+  const navigate = useNavigate();
 
   let postAction: (() => void) | undefined = undefined;
 
@@ -222,7 +236,13 @@ function Wizzard(
   }
 
   function join() {
-    props.prepare(Operation.join(assemblyId, secret, nickname));
+    let refinedSecret: string;
+    const m = secret.match(/https?:[/][/].*[?]secret=(.*)/);
+    if (m !== null && m.groups !== null) {
+      refinedSecret = m[1];
+    } else refinedSecret = secret;
+
+    props.prepare(Operation.join(assemblyId, refinedSecret, nickname));
   }
 
   function validInput(): boolean {
@@ -231,6 +251,9 @@ function Wizzard(
 
   return (
     <div>
+      <button type="button" onClick={() => navigate("/")}>
+        Menu
+      </button>
       {!secretQS && (
         <div>
           <label>secret : </label>

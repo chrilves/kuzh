@@ -5,7 +5,8 @@ import io.circe.syntax.*
 import chrilves.kuzh.back.models.Harvest
 
 enum AssemblyEvent:
-  case PublicSynchro(public: State[Harvest])
+  case PublicSynchro(public: State)
+  case StatusSynchro(status: State.Status)
   case PublicEvent(public: State.Event)
   case Error(reason: String, fatal: Boolean)
 
@@ -17,6 +18,11 @@ object AssemblyEvent:
           Json.obj(
             "tag"   -> Json.fromString("state"),
             "state" -> p.asJson
+          )
+        case StatusSynchro(status) =>
+          Json.obj(
+            "tag"    -> Json.fromString("status"),
+            "status" -> status.asJson
           )
         case PublicEvent(p) =>
           Json.obj(

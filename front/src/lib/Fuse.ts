@@ -2,14 +2,14 @@ import { Mutex } from "async-mutex";
 
 export default class Fuse {
   ok = true;
-  mutex = new Mutex();
-  break = () =>
+  readonly mutex = new Mutex();
+  readonly break = () =>
     this.mutex.runExclusive(() => {
       const old = this.ok;
       this.ok = false;
       return old;
     });
-  isOk = () =>
+  readonly isOk = () =>
     this.mutex.runExclusive(() => {
       return this.ok;
     });
