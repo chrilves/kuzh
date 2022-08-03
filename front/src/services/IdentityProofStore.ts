@@ -1,6 +1,6 @@
 import { BackAPI } from "./BackAPI";
 import { Fingerprint, IdentityProof } from "../model/Crypto";
-import { AssemblyInfo } from "../model/AssembyInfo";
+import { AssemblyInfo } from "../model/assembly/AssembyInfo";
 import { StorageAPI } from "./StorageAPI";
 import { Mutex } from "async-mutex";
 

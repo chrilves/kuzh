@@ -49,16 +49,9 @@ object AssemblyManagement:
           id     <- assembly.Info.Id.random
           secret <- assembly.Info.Secret.random
           info = assembly.Info(id, name, secret)
-          mutex <- Semaphore[F](1)
+          asm <- Assembly.make(IdentityProofStore.inMemory, info)
           _ <- Sync[F].delay(
-            assemblies.addOne(
-              id -> new Assembly(
-                IdentityProofStore.inMemory,
-                AssemblyStateStore.inMemory(3),
-                mutex,
-                info
-              )
-            )
+            assemblies.addOne(id -> asm)
           )
         yield info
 

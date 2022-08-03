@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Fingerprint, Name } from "../model/Crypto";
-import { AssemblyState } from "../model/AssemblyState";
+import { State } from "../model/assembly/State";
 import MemberList from "./MemberList";
 import { Member } from "../model/Member";
+import { Harvest } from "../model/assembly/Harvest";
 
 type Props = {
-  proposed: AssemblyState.Status.Proposed;
+  harvest: Harvest;
+  remaining: Fingerprint[];
   acceptHarvest(): void;
   changeReadiness(r: Member.Blockingness): void;
   name(member: Fingerprint): Promise<Name>;
@@ -27,17 +29,10 @@ export default function ProposedPanel(props: Props): JSX.Element {
     case "proposed":
       page = (
         <div>
-          <MemberList
-            title="Participant.e.s à la récolte"
-            members={props.proposed.harvest.participants}
-            name={props.name}
-          />
           <div>
             <button type="button" onClick={goToAccepted}>
               Accepter la récolte.
             </button>
-          </div>
-          <div>
             <button
               type="button"
               onClick={() => props.changeReadiness("blocking")}
@@ -56,10 +51,15 @@ export default function ProposedPanel(props: Props): JSX.Element {
   return (
     <div>
       <h2>Tout le monde est prêt.e pour la récolte.</h2>
+      <MemberList
+        title="Participant.e.s à la récolte"
+        members={props.harvest.participants}
+        name={props.name}
+      />
       {page}
       <MemberList
         title="N'ont pas encore accepté la récolte"
-        members={props.proposed.remaining}
+        members={props.remaining}
         name={props.name}
       />
     </div>

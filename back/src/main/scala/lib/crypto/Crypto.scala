@@ -18,8 +18,6 @@ import cats.syntax.eq.*
 
 opaque type Base64UrlEncoded = String
 object Base64UrlEncoded:
-  extension (s: Base64UrlEncoded) inline def asString: String = s
-
   def unsafeFromString(s: String): Base64UrlEncoded = s
 
   inline def encode(arr: Array[Byte]): Base64UrlEncoded =
@@ -28,6 +26,8 @@ object Base64UrlEncoded:
   extension (b: Base64UrlEncoded)
     inline def decode: Array[Byte] =
       Base64.getUrlDecoder().decode(b)
+    inline def asString: String =
+      b
 
   def hash(msg: String): Array[Byte] =
     val md = MessageDigest.getInstance("SHA-256")
@@ -52,6 +52,12 @@ object Signature:
   inline given [A]: Decoder[Signature[A]]  = StringInstances.decoder
   inline given [A]: Eq[Signature[A]]       = StringInstances.eq
   inline given [A]: Ordering[Signature[A]] = StringInstances.ordering
+
+  extension [A](b: Signature[A])
+    inline def decode: Array[Byte] =
+      Base64.getUrlDecoder().decode(b)
+    inline def asString: String =
+      b
 
 final case class Signed[+A](
     value: A,

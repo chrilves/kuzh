@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppState } from "../model/AppState";
-import Assembly from "../model/Assembly";
+import Assembly from "../model/assembly/Assembly";
 import { Membership } from "../model/Crypto";
 import { Operation } from "../model/Operation";
 import { AssemblyAPI } from "../services/AssemblyAPI";

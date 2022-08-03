@@ -5,9 +5,9 @@ export type MemberReadiness = {
   readiness: Member.Readiness;
 };
 
-export type MemberPresence = {
-  member: Fingerprint;
-  presence: Member.Presence;
+export type MemberAbsent = {
+  readonly member: Fingerprint;
+  readonly since: number;
 };
 
 export namespace Member {
@@ -19,7 +19,7 @@ export namespace Member {
   export namespace Presence {
     export type Absent = {
       readonly tag: "absent";
-      since: number;
+      readonly since: number;
     };
 
     export function absent(since: number): Absent {

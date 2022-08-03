@@ -1,5 +1,5 @@
 import { compareNumber, compareString } from "../lib/Compare";
-import { MemberPresence } from "../model/Member";
+import { MemberAbsent } from "../model/Member";
 import { Fingerprint, Name } from "../model/Crypto";
 import MemberList from "./MemberList";
 import { useState } from "react";
@@ -7,7 +7,8 @@ import { useState } from "react";
 export declare function structuredClone(value: any): any;
 
 type Props = {
-  presence: MemberPresence[];
+  present: Fingerprint[];
+  absent: MemberAbsent[];
   name: (member: Fingerprint) => Promise<Name>;
 };
 
@@ -26,44 +27,28 @@ export default function PresencePanel(props: Props): JSX.Element {
     return "???";
   }
 
-  let present: Fingerprint[] = [];
-  let absent: [Fingerprint, number][] = [];
-
-  for (let mp of props.presence) {
-    switch (mp.presence.tag) {
-      case "present":
-        present.push(mp.member);
-        break;
-      case "absent":
-        absent.push([mp.member, mp.presence.since]);
-        break;
-    }
-  }
-
-  absent.sort((x, y) => {
-    let n = compareNumber(x[1], y[1]);
+  props.absent.sort((x, y) => {
+    let n = compareNumber(x.since, y.since);
     if (n !== 0) return n;
-    return compareString(x[0], y[0]);
+    return compareString(x.member, y.member);
   });
 
-  let absentLines: JSX.Element[] = absent.map(
-    (
-      value: [Fingerprint, number],
-      index: number,
-      array: [Fingerprint, number][]
-    ) => (
-      <tr key={value[1]}>
-        <td>{withName(value[0])}</td>
-        <td>{value[0]}</td>
-        <td>{new Date(value[1]).toLocaleString()}</td>
-      </tr>
-    )
-  );
+  let absentLines: JSX.Element[] = props.absent.map((value: MemberAbsent) => (
+    <tr key={value.member}>
+      <td>{withName(value.member)}</td>
+      <td>{value.member}</td>
+      <td>{new Date(value.since).toLocaleString()}</td>
+    </tr>
+  ));
 
   return (
     <div>
       <h3>Membres de l'Assemblée</h3>
-      <MemberList title="Présent.e.s" members={present} name={props.name} />
+      <MemberList
+        title="Présent.e.s"
+        members={props.present}
+        name={props.name}
+      />
       <h4>Absent.e.s: {absentLines.length}</h4>
       {absentLines.length > 0 && (
         <table>

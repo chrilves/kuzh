@@ -1,6 +1,6 @@
 export namespace ConnectionEvent {
   export type Opened = {
-    tag: "opened";
+    readonly tag: "opened";
   };
 
   export const opened: Opened = {
@@ -8,7 +8,7 @@ export namespace ConnectionEvent {
   };
 
   export type Closed = {
-    tag: "closed";
+    readonly tag: "closed";
   };
 
   export const closed: Closed = {
@@ -16,9 +16,9 @@ export namespace ConnectionEvent {
   };
 
   export type Error = {
-    tag: "error";
-    reason: string;
-    fatal: boolean;
+    readonly tag: "error";
+    readonly reason: string;
+    readonly fatal: boolean;
   };
 
   export function error(reason: string, fatal: boolean): Error {
@@ -30,7 +30,7 @@ export namespace ConnectionEvent {
   }
 
   export type Established = {
-    tag: "established";
+    readonly tag: "established";
   };
 
   export const established: Established = {

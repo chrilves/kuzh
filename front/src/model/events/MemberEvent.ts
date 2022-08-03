@@ -1,9 +1,9 @@
-import { Member } from "./Member";
+import { Member } from "../Member";
 
 export namespace MemberEvent {
   export type Blocking = {
-    tag: "blocking";
-    blocking: Member.Blockingness;
+    readonly tag: "blocking";
+    readonly blocking: Member.Blockingness;
   };
 
   export function blocking(b: Member.Blockingness): Blocking {
@@ -14,7 +14,7 @@ export namespace MemberEvent {
   }
 
   export type AcceptHarvest = {
-    tag: "accept_harvest";
+    readonly tag: "accept_harvest";
   };
 
   export const acceptHarvest: AcceptHarvest = {

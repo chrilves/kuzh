@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Fingerprint, Name } from "../model/Crypto";
-import { AssemblyState } from "../model/AssemblyState";
 import ReadinessPanel from "./ReadinessPanel";
 import { Member } from "../model/Member";
+import { Status } from "../model/assembly/Status";
 
 type Props = {
   myFingerprint: Fingerprint;
-  waiting: AssemblyState.Status.Waiting;
+  waiting: Status.Waiting;
   sendAnswer(answer: boolean): void;
   sendQuestion(question: string | null): void;
   changeReadiness(r: Member.Blockingness): void;

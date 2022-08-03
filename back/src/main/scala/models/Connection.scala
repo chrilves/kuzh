@@ -59,19 +59,15 @@ object Connection:
         import WebSocketFrame.*
 
         def read[A: Decoder](from: String)(s: String)(f: A => F[Unit]): F[Unit] =
-          Async[F].delay {
-            println(s"[${from}] Received websocket message: ${s}")
-          } *>
-            (parse(s) match
-              case Left(e) =>
-                onClose(s"[${from}] Parsing error of ${s}: ${e}")
-              case Right(json) =>
-                json.as[A] match
-                  case Left(e) =>
-                    onClose(s"[${from}] Decoding error of ${json}: ${e}")
-                  case Right(a) =>
-                    f(a).handleErrorWith(e => onClose(s"[${from}] Treatement errror of ${a}: ${e}"))
-            )
+          parse(s) match
+            case Left(e) =>
+              onClose(s"[${from}] Parsing error of ${s}: ${e}")
+            case Right(json) =>
+              json.as[A] match
+                case Left(e) =>
+                  onClose(s"[${from}] Decoding error of ${json}: ${e}")
+                case Right(a) =>
+                  f(a).handleErrorWith(e => onClose(s"[${from}] Treatement errror of ${a}: ${e}"))
 
         def withStrBuffer(str: String, last: Boolean)(f: String => F[Unit]): F[Unit] =
           if last
@@ -177,7 +173,7 @@ object Connection:
                         }
 
                     case Established(assembly, member) =>
-                      log(s"Received evet from ${member}: ${t.str}") *>
+                      log(s"Received event from ${member}: ${t.str}") *>
                         read[MemberEvent]("established")(str) { mfm =>
                           for
                             end <- Sync[F].realTimeInstant

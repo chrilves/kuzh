@@ -1,4 +1,4 @@
-import { Fingerprint } from "./Crypto";
+import { Fingerprint } from "../Crypto";
 
 export type Harvest = {
   readonly id: string;

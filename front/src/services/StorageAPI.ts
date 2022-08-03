@@ -1,5 +1,5 @@
 import { JSONNormalizedStringifyD } from "../lib/JSONNormalizedStringify";
-import { AssemblyInfo } from "../model/AssembyInfo";
+import { AssemblyInfo } from "../model/assembly/AssembyInfo";
 import { IdentityProof, Membership } from "../model/Crypto";
 
 export interface StorageAPI {

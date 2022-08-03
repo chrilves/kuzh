@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import Assembly, { Listerner } from "../model/Assembly";
-import { AssemblyState } from "../model/AssemblyState";
+import Assembly, { Listerner } from "../model/assembly/Assembly";
+import { State } from "../model/assembly/State";
+import { Status } from "../model/assembly/Status";
 import { Membership } from "../model/Crypto";
 import MembershipPanel from "./MembershipPanel";
 import PresencePanel from "./PresencePanel";
@@ -13,10 +14,11 @@ type Props = {
 };
 
 export default function AssemblyPage(props: Props): JSX.Element {
-  const [assemblyState, setAssemblyState] = useState<AssemblyState>({
+  const [assemblyState, setAssemblyState] = useState<State>({
     questions: [],
-    presences: [],
-    status: AssemblyState.Status.waiting("", null, []),
+    present: [],
+    absent: [],
+    status: Status.waiting("", null, []),
   });
   const [connectionStatus, setConnectionStatus] =
     useState<string>("not connected");
@@ -56,7 +58,8 @@ export default function AssemblyPage(props: Props): JSX.Element {
       />
       <h2>Assemblée</h2>
       <PresencePanel
-        presence={assemblyState.presences}
+        present={assemblyState.present}
+        absent={assemblyState.absent}
         name={props.assembly.name}
       />
       <MembershipPanel membership={props.assembly.membership} />

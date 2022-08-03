@@ -2,9 +2,9 @@ import { Membership } from "./Crypto";
 
 export namespace Operation {
   export type Create = {
-    tag: "create";
-    assemblyName: string;
-    nickname: string;
+    readonly tag: "create";
+    readonly assemblyName: string;
+    readonly nickname: string;
   };
 
   export function create(assemblyName: string, nickname: string): Create {
@@ -16,10 +16,10 @@ export namespace Operation {
   }
 
   export type Join = {
-    tag: "join";
-    id: string;
-    secret: string;
-    nickname: string;
+    readonly tag: "join";
+    readonly id: string;
+    readonly secret: string;
+    readonly nickname: string;
   };
 
   export function join(id: string, secret: string, nickname: string): Join {

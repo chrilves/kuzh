@@ -1,5 +1,5 @@
 import { Operation } from "./Operation";
-import * as AssemblyModel from "./Assembly";
+import * as AssemblyModel from "./assembly/Assembly";
 
 export namespace AppState {
   export type Menu = {

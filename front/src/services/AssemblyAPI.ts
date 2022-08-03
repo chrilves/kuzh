@@ -3,9 +3,9 @@ import { BackAPI } from "./BackAPI";
 import { Me, Membership } from "../model/Crypto";
 import { StorageAPI } from "./StorageAPI";
 import { Operation } from "../model/Operation";
-import { AssemblyEvent } from "../model/AssemblyEvent";
+import { AssemblyEvent } from "../model/events/AssemblyEvent";
 import ConnectionController from "../model/ConnectionController";
-import { ConnectionEvent } from "../model/ConnectionEvent";
+import { ConnectionEvent } from "../model/events/ConnectionEvent";
 
 export interface AssemblyAPI {
   create(assemblyName: string, nickname: string): Promise<Membership>;

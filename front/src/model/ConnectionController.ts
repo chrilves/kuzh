@@ -1,4 +1,4 @@
-import { MemberEvent } from "./MemberEvent";
+import { MemberEvent } from "./events/MemberEvent";
 
 export default interface ConnectionController {
   close(): void;

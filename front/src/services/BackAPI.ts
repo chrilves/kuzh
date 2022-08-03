@@ -1,16 +1,16 @@
 import { Me, Membership, Fingerprint, IdentityProof } from "../model/Crypto";
-import { AssemblyEvent } from "../model/AssemblyEvent";
+import { AssemblyEvent } from "../model/events/AssemblyEvent";
 import ConnectionController, {
   ConnectionStatus,
 } from "../model/ConnectionController";
-import { ConnectionEvent } from "../model/ConnectionEvent";
+import { ConnectionEvent } from "../model/events/ConnectionEvent";
 import { Handshake } from "../model/Handshake";
-import { MemberEvent } from "../model/MemberEvent";
+import { MemberEvent } from "../model/events/MemberEvent";
 import {
   JSONNormalizedStringify,
   JSONNormalizedStringifyD,
 } from "../lib/JSONNormalizedStringify";
-import { AssemblyInfo } from "../model/AssembyInfo";
+import { AssemblyInfo } from "../model/assembly/AssembyInfo";
 
 export interface BackAPI {
   createAssembly(name: string): Promise<AssemblyInfo>;

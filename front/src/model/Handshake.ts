@@ -3,10 +3,10 @@ import { Me, Membership, Fingerprint, Serial } from "./Crypto";
 
 export namespace Handshake {
   export type Crententials = {
-    tag: "credentials";
-    id: string;
-    secret: string;
-    member: Fingerprint;
+    readonly tag: "credentials";
+    readonly id: string;
+    readonly secret: string;
+    readonly member: Fingerprint;
   };
 
   export function credentials(
@@ -23,9 +23,9 @@ export namespace Handshake {
   }
 
   export type Challenge = {
-    tag: "challenge";
-    challenge: string;
-    identity_proof_needed: boolean;
+    readonly tag: "challenge";
+    readonly challenge: string;
+    readonly identity_proof_needed: boolean;
   };
 
   export function challenge(
@@ -40,9 +40,9 @@ export namespace Handshake {
   }
 
   export type ChallengeResponse = {
-    tag: "challenge_response";
-    signature: string;
-    identity_proof: Serial.IdentityProof | null;
+    readonly tag: "challenge_response";
+    readonly signature: string;
+    readonly identity_proof: Serial.IdentityProof | null;
   };
 
   export function challengeResponse(
@@ -57,9 +57,9 @@ export namespace Handshake {
   }
 
   export type Error = {
-    tag: "error";
-    reason: string;
-    fatal: boolean;
+    readonly tag: "error";
+    readonly reason: string;
+    readonly fatal: boolean;
   };
 
   export function error(reason: string, fatal: boolean): Error {
@@ -71,7 +71,7 @@ export namespace Handshake {
   }
 
   export type Established = {
-    tag: "established";
+    readonly tag: "established";
   };
 
   export const established: Established = {

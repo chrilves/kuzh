@@ -1,13 +1,13 @@
 import { Fingerprint, Name } from "../model/Crypto";
-import { AssemblyState } from "../model/AssemblyState";
-import HarvestingPanel from "./HarvestingPanel";
 import WaitingPanel from "./WaitingPanel";
 import ProposedPanel from "./ProposedPanel";
 import { Member } from "../model/Member";
+import { Status } from "../model/assembly/Status";
+import { Harvest } from "../model/assembly/Harvest";
 
 type Props = {
   myFingerprint: Fingerprint;
-  status: AssemblyState.Status;
+  status: Status;
   sendAnswer(answer: boolean): void;
   sendQuestion(question: string | null): void;
   acceptHarvest(): void;
@@ -28,21 +28,45 @@ export default function StatusPanel(props: Props): JSX.Element {
           name={props.name}
         />
       );
-    case "proposed":
-      return (
-        <ProposedPanel
-          proposed={props.status}
-          name={props.name}
-          acceptHarvest={props.acceptHarvest}
-          changeReadiness={props.changeReadiness}
-        />
-      );
     case "harvesting":
-      return <HarvestingPanel harvesting={props.status} name={props.name} />;
+      switch (props.status.phase.tag) {
+        case "proposed":
+          return (
+            <ProposedPanel
+              harvest={props.status.harvest}
+              remaining={props.status.phase.remaining}
+              name={props.name}
+              acceptHarvest={props.acceptHarvest}
+              changeReadiness={props.changeReadiness}
+            />
+          );
+        case "started":
+          return (
+            <HarvestingStartedPanel
+              harvest={props.status.harvest}
+              name={props.name}
+            />
+          );
+      }
 
     case "hidden":
       return <Hidden />;
   }
+}
+
+function HarvestingStartedPanel(props: {
+  harvest: Harvest;
+  name: (member: Fingerprint) => Promise<Name>;
+}): JSX.Element {
+  return (
+    <div>
+      <h2>Récolte en cours</h2>
+      <p>
+        Le protocole de récolte anonyme est lancé. Vous ausez le résultat dans
+        quelques instants.
+      </p>
+    </div>
+  );
 }
 
 function Hidden(): JSX.Element {

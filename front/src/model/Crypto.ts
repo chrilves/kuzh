@@ -1,7 +1,7 @@
 import { Base64URL } from "../lib/Base64URL";
 import { JSONNormalizedStringifyD } from "../lib/JSONNormalizedStringify";
 import { Pair, PairNS } from "../lib/Pair";
-import { AssemblyInfo } from "./AssembyInfo";
+import { AssemblyInfo } from "./assembly/AssembyInfo";
 
 namespace CryptoConfig {
   export const hash = "SHA-256";

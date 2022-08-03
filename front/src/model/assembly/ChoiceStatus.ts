@@ -1,8 +1,8 @@
-import { Member } from "./Member";
+import { Member } from "../Member";
 
 export namespace ChoiceStatus {
   export type NoChoice = {
-    tag: "no_choice";
+    readonly tag: "no_choice";
   };
 
   export const noChoice: NoChoice = {
@@ -10,10 +10,10 @@ export namespace ChoiceStatus {
   };
 
   export type Question = {
-    tag: "question";
-    id: string;
-    question: string | null;
-    blocking: Member.Blockingness;
+    readonly tag: "question";
+    readonly id: string;
+    readonly question: string | null;
+    readonly blocking: Member.Blockingness;
   };
 
   export function question(
@@ -30,10 +30,10 @@ export namespace ChoiceStatus {
   }
 
   export type Answser = {
-    tag: "answer";
-    id: string;
-    answer: boolean;
-    blocking: Member.Blockingness;
+    readonly tag: "answer";
+    readonly id: string;
+    readonly answer: boolean;
+    readonly blocking: Member.Blockingness;
   };
 
   export function answer(
