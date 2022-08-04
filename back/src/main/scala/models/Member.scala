@@ -12,6 +12,7 @@ import scala.collection.*
 import cats.instances.StringInstances
 import com.nimbusds.jose.jwk.JWK
 import java.security.interfaces.RSAPublicKey
+import io.circe.Decoder.Result
 
 object Member:
   opaque type Name        = String
@@ -112,4 +113,51 @@ object Member:
               raiseError(
                 DecodingFailure(s" '$s' is not a readiness, should be 'busy' or 'ready'.", Nil)
               )
+        }
+
+  enum Event:
+    case Blocking(blockingness: Blockingness)
+    case AcceptHarvest
+    case HashNext(message: Base64UrlEncoded)
+    case Hashes(hashes: List[Base64UrlEncoded])
+    case Invalid
+    case Vallid(signature: Signature[HarvestProtocol.Proof])
+    case RealNext(message: Base64UrlEncoded)
+    case Reals(reals: List[Ballot])
+
+  object Event:
+    given memberEventDecoder: Decoder[Event] with
+      def apply(c: HCursor): Result[Event] =
+        import Decoder.resultInstance.*
+        c.downField("tag").as[String].flatMap {
+          case "blocking" =>
+            c.downField("blocking").as[String].flatMap {
+              case "blocking" => pure(Blocking(Member.Readiness.Blocking))
+              case "ready"    => pure(Blocking(Member.Readiness.Ready))
+              case s =>
+                raiseError(
+                  DecodingFailure(s"Invalid message from member tag blocking, value '$s'.", Nil)
+                )
+            }
+          case "accept_harvest" =>
+            pure(AcceptHarvest)
+          case "hash_next" =>
+            for hashNext <- c.downField("message").as[String]
+            yield HashNext(Base64UrlEncoded.unsafeFromString(hashNext))
+          case "hashes" =>
+            for l <- c.downField("hashes").as[List[String]]
+            yield Hashes(l.sorted.map(Base64UrlEncoded.unsafeFromString(_)))
+          case "invalid" =>
+            pure(Invalid)
+          case "valid" =>
+            for v <- c.downField("signature").as[Signature[HarvestProtocol.Proof]]
+            yield Vallid(v)
+          case "real_next" =>
+            for r <- c.downField("message").as[String]
+            yield RealNext(Base64UrlEncoded.unsafeFromString(r))
+          case "reals" =>
+            for r <- c.downField("reals").as[List[Ballot]]
+            yield Reals(r)
+          case s =>
+            raiseError(DecodingFailure(s"Invalid message from member tag '$s'.", Nil))
         }

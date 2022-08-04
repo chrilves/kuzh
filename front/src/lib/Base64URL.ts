@@ -1,14 +1,29 @@
 export class Base64URL {
   readonly b64ToUint6: Uint16Array;
-  readonly uint6ToB64: Array<String>;
+  readonly uint6ToB64: string[];
   static instance: Base64URL | null;
 
   constructor() {
-    this.uint6ToB64 = new Array<String>(64);
-    this.b64ToUint6 = new Uint16Array(123);
-
+    const arrays = Base64URL.codingArrays();
+    this.b64ToUint6 = arrays.b64ToUint6;
+    this.uint6ToB64 = arrays.uint6ToB64;
     this.encode = this.encode.bind(this);
     this.decode = this.decode.bind(this);
+  }
+
+  static getInstance() {
+    if (!this.instance) {
+      this.instance = new Base64URL();
+    }
+    return this.instance;
+  }
+
+  static codingArrays(): {
+    uint6ToB64: string[],
+    b64ToUint6: Uint16Array
+  } {
+    const uint6ToB64 = new Array<string>(64);
+    const b64ToUint6 = new Uint16Array(123);
 
     const A = "A".charCodeAt(0);
     const a = "a".charCodeAt(0);
@@ -23,22 +38,20 @@ export class Base64URL {
       } else {
         charCode = _0 + (i - 52);
       }
-      this.uint6ToB64[i] = String.fromCharCode(charCode);
-      this.b64ToUint6[charCode] = i;
+      uint6ToB64[i] = String.fromCharCode(charCode);
+      b64ToUint6[charCode] = i;
     }
 
-    this.uint6ToB64[62] = "-";
-    this.b64ToUint6["-".charCodeAt(0)] = 62;
+    uint6ToB64[62] = "-";
+    b64ToUint6["-".charCodeAt(0)] = 62;
 
-    this.uint6ToB64[63] = "_";
-    this.b64ToUint6["_".charCodeAt(0)] = 63;
-  }
+    uint6ToB64[63] = "_";
+    b64ToUint6["_".charCodeAt(0)] = 63;
 
-  static getInstance() {
-    if (!this.instance) {
-      this.instance = new Base64URL();
+    return {
+      uint6ToB64: uint6ToB64,
+      b64ToUint6: b64ToUint6
     }
-    return this.instance;
   }
 
   encode(arr: Uint8Array): string {

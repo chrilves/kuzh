@@ -16,11 +16,12 @@ import cats.evidence.As
 import cats.effect.std.Semaphore
 import scala.annotation.tailrec
 
+import chrilves.kuzh.back.*
 import chrilves.kuzh.back.models.Assembly.Destination
 import chrilves.kuzh.back.models.assembly.*
-import chrilves.kuzh.back.models.assembly.State.*
-import chrilves.kuzh.back.models.assembly.Status.*
-import chrilves.kuzh.back.models.assembly.Phase.*
+import chrilves.kuzh.back.models.State.*
+import chrilves.kuzh.back.models.Status.*
+import chrilves.kuzh.back.models.Phase.*
 import chrilves.kuzh.back.models.Member.*
 import chrilves.kuzh.back.lib.crypto.*
 import chrilves.kuzh.back.services.IdentityProofStore
@@ -29,12 +30,11 @@ final class Assembly[F[_]] private (
     val info: assembly.Info,
     private val identityProofStore: IdentityProofStore[F],
     private val mutex: Semaphore[F],
-    private val refChannels: Ref[F, immutable.Map[Member.Fingerprint, AssemblyEvent => F[Unit]]],
+    private val refChannels: Ref[F, immutable.Map[Member.Fingerprint, Assembly.Event => F[Unit]]],
     private val refAbsent: Ref[F, immutable.Map[Fingerprint, Instant]],
     private val refQuestions: Ref[F, List[String]],
     private val refStatus: Ref[F, Status[Nothing]]
 ):
-
   private final val minParticipants = 3;
 
   def identityProof(fp: Member.Fingerprint): F[Option[IdentityProof]] =
@@ -69,10 +69,28 @@ final class Assembly[F[_]] private (
   private inline def setAbsent(member: Fingerprint)(using Sync[F]): F[Instant] =
     Sync[F].realTimeInstant.flatMap { i => refAbsent.modify(x => (x + (member -> i), i)) }
 
+  private inline def logState(name: String)(using Sync[F]): F[Unit] =
+
+    def log(s: String): F[Unit] =
+      Sync[F].delay(println(s"${Console.YELLOW}${s}${Console.RESET}"))
+
+    for
+      ps <- refChannels.get
+      _  <- log(s"=== [${name}] Presents ===")
+      _  <- ps.keys.toList.traverse(p => log(s"  - ${p}"))
+      qs <- refQuestions.get
+      _  <- log(s"=== [${name}] Questions ===")
+      _  <- qs.traverse(q => log(s"  - ${q}"))
+      _  <- log(s"=== [${name}] Status ===")
+      st <- refStatus.get
+      _  <- log(st.asJson.spaces4)
+      _  <- log(s"=== [${name}] END ===")
+    yield ()
+
   /////////////////////////////////////////////////
   //  Messages
 
-  private def sendMessage(to: Destination, event: AssemblyEvent)(using Sync[F]): F[Unit] =
+  private def sendMessage(to: Destination, event: Assembly.Event)(using Sync[F]): F[Unit] =
     refChannels.get.flatMap { channels =>
       to match
         case Destination.All =>
@@ -92,74 +110,78 @@ final class Assembly[F[_]] private (
   /////////////////////////////////////////////////
   //  Status Manipulation
 
-  private def forcedWaiting(before: Status[Nothing], blocking: Option[Fingerprint])(using
+  private def forcedWaiting(blocking: Option[Fingerprint])(using
       Sync[F]
   ): F[Status.Waiting] =
-    def fromHarvest(h: Harvest): F[Waiting] =
-      present.map { members =>
-        Waiting(
-          h.id,
-          h.question,
-          members.toList.map { m =>
-            m -> (
-              if blocking.contains(m)
-              then Member.Readiness.Blocking
-              else if h.participants.contains(m)
-              then Member.Readiness.Ready
-              else Member.Readiness.Answering
-            )
-          }.toMap
-        )
-      }
-
-    before match
+    refStatus.get.flatMap {
       case w @ Waiting(i, q, r) =>
         blocking match
           case Some(m) =>
-            Sync[F].pure(Waiting(i, q, r + (m -> Member.Readiness.Blocking)))
+            val w2: Status.Waiting = Waiting(i, q, r + (m -> Member.Readiness.Blocking))
+            refStatus.set(w2) *> Sync[F].pure(w2)
           case None =>
             Sync[F].pure(w)
       case Harvesting(h, _) =>
-        fromHarvest(h)
+        present.flatMap { members =>
+          val w2: Status.Waiting =
+            Waiting(
+              h.id,
+              h.question,
+              members.toList.map { m =>
+                m -> (
+                  if blocking.contains(m)
+                  then Member.Readiness.Blocking
+                  else if h.participants.contains(m)
+                  then Member.Readiness.Ready
+                  else Member.Readiness.Answering
+                )
+              }.toMap
+            )
+          refStatus.set(w2) *> Sync[F].pure(w2)
+        }
+    }
 
-  private def reduceStatus(status: Status[Nothing])(using Sync[F]): F[Status[Nothing]] =
-    status match
+  private def reduceStatus(using Sync[F]): F[Unit] =
+    refStatus.get.flatMap {
       case Waiting(i, q, r) =>
-        Sync[F].pure {
-          if r.size >= minParticipants && r.forall(_._2 === Member.Readiness.Ready)
-          then
+        Sync[F].whenA(r.size >= minParticipants && r.forall(_._2 === Member.Readiness.Ready)) {
+          refStatus.set {
             val participants = r.keys.toSet
             val harvest      = Harvest(i, q, participants)
             Harvesting(harvest, Proposed(participants))
-          else status
+          }
         }
       case Harvesting(h, Proposed(r)) =>
         if h.participants.size < minParticipants
-        then forcedWaiting(status, None).map(x => x)
+        then forcedWaiting(None).void
         else if r.isEmpty
         then
           val remaining = h.participants.toList
-          for _ <- sendMessage(
+          for
+            _ <- refStatus.set(Harvesting(h, Started(HarvestProtocol.Hashes(remaining))))
+            _ <- sendMessage(
               Destination.Selected(Set(remaining.head)),
-              AssemblyEvent.Protocol(HarvestProtocol.Event.Hash(None, remaining.tail))
+              Assembly.Event.Protocol(HarvestProtocol.Event.Hash(None, remaining.tail))
             )
-          yield Harvesting(h, Started(HarvestProtocol.Hashes(remaining)))
-        else Sync[F].pure(status)
+          yield ()
+        else Sync[F].pure(())
       case Harvesting(h, Started(_)) =>
-        Sync[F].pure(status)
+        Sync[F].pure(())
+    }
 
-  private def reduceAndSync(participants: Set[Member.Fingerprint], status: Status[Nothing])(using
+  private def reduceAndSync(participants: Set[Member.Fingerprint])(using
       Sync[F]
   ): F[Unit] =
     for
-      after <- reduceStatus(status)
-      _     <- refStatus.set(after)
+      before <- refStatus.get
+      _      <- reduceStatus
+      after  <- refStatus.get
       _ <-
         if participants.nonEmpty && after.isWaiting
         then
           sendMessage(
             Destination.Filtered((x) => !participants.contains(x)),
-            AssemblyEvent.Status(after)
+            Assembly.Event.Status(after)
           )
         else Sync[F].pure(())
     yield ()
@@ -178,7 +200,7 @@ final class Assembly[F[_]] private (
               )
           case None =>
             identityProofStore.store(id) *> setAbsent(id.fingerprint).void
-        }
+        } *> logState("registerMember")
       }
     else Sync[F].raiseError(new Exception("Trying to register an invalid identity proof"))
 
@@ -187,29 +209,29 @@ final class Assembly[F[_]] private (
       case Some(handler) =>
         for
           i <- setAbsent(member)
-          _ <- handler(AssemblyEvent.Error("Removed member!", true)).attempt
           _ <- sendMessage(
             Destination.All,
-            AssemblyEvent.Public(assembly.Event.MemberPresence(member, Member.Presence.Absent(i)))
+            Assembly.Event.Public(State.Event.MemberPresence(member, Member.Presence.Absent(i)))
           )
+          _ <- handler(Assembly.Event.Error("Removed member!", true)).attempt
           _ <- refStatus.get.flatMap {
             case Waiting(i, q, r) =>
-              reduceStatus(Waiting(i, q, r - member)).flatMap(refStatus.set)
+              refStatus.set(Waiting(i, q, r - member)) *> reduceStatus
             case Harvesting(h, phase) if h.participants.contains(member) =>
               val newParticipants = h.participants - member
               val newHarvest      = h.copy(participants = newParticipants)
 
               phase match
                 case Proposed(r) =>
-                  reduceAndSync(
-                    newParticipants,
-                    Harvesting(newHarvest, Proposed(r - member))
+                  refStatus.set(Harvesting(newHarvest, Proposed(r - member))) *> reduceAndSync(
+                    newParticipants
                   )
                 case Started(_) =>
-                  forcedWaiting(
-                    Harvesting(newHarvest, Started(HarvestProtocol.Hashes(Nil))),
-                    None
-                  ).flatMap(x => reduceAndSync(newParticipants, x))
+                  for
+                    _ <- refStatus.set(Harvesting(newHarvest, Started(HarvestProtocol.Hashes(Nil))))
+                    _ <- forcedWaiting(None)
+                    _ <- reduceAndSync(newParticipants)
+                  yield ()
             case _ =>
               Sync[F].pure(())
           }
@@ -220,66 +242,67 @@ final class Assembly[F[_]] private (
 
   def removeMember(member: Member.Fingerprint)(using Sync[F]): F[Unit] =
     mutex.permit.surround {
-      unsafeRemoveMember(member: Member.Fingerprint)
+      unsafeRemoveMember(member: Member.Fingerprint) *> logState("removeMember")
     }
 
-  def memberMessage(member: Member.Fingerprint, message: MemberEvent)(using Sync[F]): F[Unit] =
+  def memberMessage(member: Member.Fingerprint, message: Member.Event)(using Sync[F]): F[Unit] =
+    import Member.Event.*
     mutex.permit.surround {
       message match
-        case MemberEvent.Blocking(b) =>
+        case Member.Event.Blocking(b) =>
           memberBlocking(member, b)
-        case MemberEvent.AcceptHarvest =>
+        case AcceptHarvest =>
           refStatus.get.flatMap {
             case Harvesting(h, Proposed(r))
                 if h.participants.contains(member) && r.contains(member) =>
               for
-                after <- reduceStatus(Harvesting(h, Proposed(r - member)))
-                _     <- refStatus.set(after)
                 _ <- sendMessage(
                   Destination.Selected(h.participants),
-                  AssemblyEvent.Harvesting(HarvestingEvent.Accepted(member))
+                  Assembly.Event.Harvesting(Harvest.Event.Accepted(member))
                 )
+                _ <- refStatus.set(Harvesting(h, Proposed(r - member)))
+                _ <- reduceStatus
               yield ()
             case _ =>
               Sync[F].pure(())
           }
-        case MemberEvent.HashNext(msg) =>
+        case HashNext(msg) =>
           refStatus.get.flatMap {
             case Harvesting(h, Started(HarvestProtocol.Hashes(hd :: tl)))
                 if member === hd && tl.nonEmpty =>
               for
-                _ <- refStatus.set(Harvesting(h, Started(HarvestProtocol.Hashes(tl))))
                 _ <- sendMessage(
                   Destination.Selected(Set(tl.head)),
-                  AssemblyEvent.Protocol(
+                  Assembly.Event.Protocol(
                     HarvestProtocol.Event.Hash(
                       Some(msg),
                       tl.tail
                     )
                   )
                 )
+                _ <- refStatus.set(Harvesting(h, Started(HarvestProtocol.Hashes(tl))))
               yield ()
             case _ =>
               Sync[F].pure(())
           }
-        case MemberEvent.Hashes(hs) =>
+        case Hashes(hs) =>
           refStatus.get.flatMap {
             case Harvesting(h, Started(HarvestProtocol.Hashes(hd :: Nil))) if hd === member =>
               for
-                _ <- refStatus.set(
-                  Harvesting(h, Started(HarvestProtocol.Verification(hs, immutable.Map.empty)))
-                )
                 _ <- sendMessage(
                   Destination.Selected(h.participants),
-                  AssemblyEvent.Protocol(HarvestProtocol.Event.Validate(hs))
+                  Assembly.Event.Protocol(HarvestProtocol.Event.Validate(hs))
+                )
+                _ <- refStatus.set(
+                  Harvesting(h, Started(HarvestProtocol.Verification(hs, immutable.Map.empty)))
                 )
               yield ()
             case _ =>
               Sync[F].pure(())
           }
-        case MemberEvent.Invalid =>
+        case Member.Event.Invalid =>
           Sync[F].pure(())
-        case MemberEvent.Vallid(sig) =>
+        case Member.Event.Vallid(sig) =>
           def verifOk(
               ipOpt: Option[IdentityProof],
               h: Harvest,
@@ -310,16 +333,16 @@ final class Assembly[F[_]] private (
                 then
                   val remaining = h.participants.toList
                   for
-                    _ <- refStatus.set(
-                      Harvesting(h, Started(HarvestProtocol.Reals(hs, sigs, remaining)))
-                    )
                     _ <- sendMessage(
                       Destination.Selected(h.participants),
-                      AssemblyEvent.Protocol(HarvestProtocol.Event.Validity(newSigs))
+                      Assembly.Event.Protocol(HarvestProtocol.Event.Validity(newSigs))
                     )
                     _ <- sendMessage(
                       Destination.Selected(Set(remaining.head)),
-                      AssemblyEvent.Protocol(HarvestProtocol.Event.Real(None, remaining.tail))
+                      Assembly.Event.Protocol(HarvestProtocol.Event.Real(None, remaining.tail))
+                    )
+                    _ <- refStatus.set(
+                      Harvesting(h, Started(HarvestProtocol.Reals(hs, sigs, remaining)))
                     )
                   yield ()
                 else
@@ -328,27 +351,27 @@ final class Assembly[F[_]] private (
                 Sync[F].pure(())
             }
           }
-        case MemberEvent.RealNext(msg) =>
+        case RealNext(msg) =>
           refStatus.get.flatMap {
             case Harvesting(h, Started(HarvestProtocol.Reals(hs, s, hd :: tl))) =>
               for
-                _ <- refStatus.set(Harvesting(h, Started(HarvestProtocol.Reals(hs, s, tl))))
                 _ <- sendMessage(
                   Destination.Selected(Set(hd)),
-                  AssemblyEvent.Protocol(
+                  Assembly.Event.Protocol(
                     HarvestProtocol.Event.Real(
                       Some(msg),
                       tl
                     )
                   )
                 )
+                _ <- refStatus.set(Harvesting(h, Started(HarvestProtocol.Reals(hs, s, tl))))
               yield ()
             case _ =>
               Sync[F].pure(())
           }
-        case MemberEvent.Reals(r) =>
+        case Member.Event.Reals(r) =>
           Sync[F].pure(())
-    }
+    } *> logState("memberMessage")
 
   private def memberBlocking(member: Member.Fingerprint, blocking: Member.Blockingness)(using
       Sync[F]
@@ -356,24 +379,24 @@ final class Assembly[F[_]] private (
     refStatus.get.flatMap {
       case Waiting(i, q, r) if r.get(member) =!= Some(blocking) =>
         for
-          after <- reduceStatus(Waiting(i, q, r + (member -> blocking)))
-          _     <- refStatus.set(after)
           _ <- sendMessage(
             Destination.All,
-            AssemblyEvent.Public(assembly.Event.MemberBlocking(member, blocking))
+            Assembly.Event.Public(State.Event.MemberBlocking(member, blocking))
           )
+          _ <- refStatus.set(Waiting(i, q, r + (member -> blocking)))
+          _ <- reduceStatus
         yield ()
       case p @ Harvesting(h, Proposed(r))
           if (blocking: Member.Readiness) === Member.Readiness.Blocking && h.participants.contains(
             member
           ) && r.contains(member) =>
         for
-          status <- forcedWaiting(p, Some(member))
-          _      <- reduceAndSync(h.participants, status)
           _ <- sendMessage(
             Destination.Selected(h.participants),
-            AssemblyEvent.Public(assembly.Event.MemberBlocking(member, blocking))
+            Assembly.Event.Public(State.Event.MemberBlocking(member, blocking))
           )
+          _ <- forcedWaiting(Some(member))
+          _ <- reduceAndSync(h.participants)
         yield ()
       case _ =>
         Sync[F].pure(())
@@ -381,11 +404,15 @@ final class Assembly[F[_]] private (
 
   def memberChannel(
       member: Member.Fingerprint,
-      handler: AssemblyEvent => F[Unit]
+      handler: Assembly.Event => F[Unit]
   )(using Sync[F]): F[Unit] =
     mutex.permit.surround {
       for
         _ <- unsafeRemoveMember(member)
+        _ <- sendMessage(
+          Destination.Filtered(_ =!= member),
+          Assembly.Event.Public(State.Event.MemberPresence(member, Member.Presence.Present))
+        )
         _ <- refChannels.modify(m => (m + (member -> handler), ()))
         _ <- refAbsent.modify(m => (m - member, ()))
         _ <- refStatus.modify {
@@ -395,11 +422,8 @@ final class Assembly[F[_]] private (
             (st, ())
         }
         st <- state(member)
-        _  <- sendMessage(Destination.Selected(Set(member)), AssemblyEvent.State(st))
-        _ <- sendMessage(
-          Destination.Filtered(_ =!= member),
-          AssemblyEvent.Public(assembly.Event.MemberPresence(member, Member.Presence.Present))
-        )
+        _  <- sendMessage(Destination.Selected(Set(member)), Assembly.Event.State(st))
+        _  <- logState("memberMessage")
       yield ()
     }
 
@@ -410,7 +434,7 @@ object Assembly:
   ): F[Assembly[F]] =
     for
       mutex       <- Semaphore[F](1)
-      refChannels <- Ref.of(immutable.Map.empty[Fingerprint, AssemblyEvent => F[Unit]])
+      refChannels <- Ref.of(immutable.Map.empty[Fingerprint, Assembly.Event => F[Unit]])
       refAbsent   <- Ref.of(immutable.Map.empty[Fingerprint, Instant])
       refQuestons <- Ref.of(List.empty[String])
       status      <- Status.init
@@ -429,3 +453,47 @@ object Assembly:
     case All
     case Selected(members: Set[Member.Fingerprint])
     case Filtered(f: Fingerprint => Boolean)
+
+  enum Event:
+    case State(public: models.State[Any])
+    case Status(status: models.Status[Any])
+    case Public(public: models.State.Event)
+    case Harvesting(harvesting: Harvest.Event)
+    case Protocol(protocol: HarvestProtocol.Event)
+    case Error(error: String, fatal: Boolean)
+
+  object Event:
+    given assemblyEventEncoder: Encoder[Event] with
+      final def apply(i: Event): Json =
+        i match
+          case State(p) =>
+            Json.obj(
+              "tag"   -> Json.fromString("state"),
+              "state" -> p.asJson
+            )
+          case Status(status) =>
+            Json.obj(
+              "tag"    -> Json.fromString("status"),
+              "status" -> status.asJson
+            )
+          case Public(e) =>
+            Json.obj(
+              "tag"    -> Json.fromString("public"),
+              "public" -> e.asJson
+            )
+          case Harvesting(e) =>
+            Json.obj(
+              "tag"        -> Json.fromString("harvesting"),
+              "harvesting" -> e.asJson
+            )
+          case Protocol(e) =>
+            Json.obj(
+              "tag"      -> Json.fromString("protocol"),
+              "protocol" -> e.asJson
+            )
+          case Error(error, fatal) =>
+            Json.obj(
+              "tag"   -> Json.fromString("error"),
+              "error" -> Json.fromString(error),
+              "fatal" -> Json.fromBoolean(fatal)
+            )

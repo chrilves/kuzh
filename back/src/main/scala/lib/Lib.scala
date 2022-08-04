@@ -19,6 +19,8 @@ import com.nimbusds.jose.jwk.JWK
 import chrilves.kuzh.back.lib.crypto.*
 import chrilves.kuzh.back.models.Member.Fingerprint
 import scala.annotation.tailrec
+import cats.syntax.all.*
+import java.time.Instant
 
 object StringInstances:
   inline def encoder: Encoder[String]   = summon[Encoder[String]]
@@ -100,3 +102,31 @@ object Random:
       rnd.nextBytes(arr)
       arr
     }
+
+def log[F[_]: Sync](s: String): F[Unit] =
+  Sync[F].delay(
+    println(s"${Console.GREEN}[${java.time.Instant.now()}] ${s}${Console.RESET}")
+  )
+
+def chrono[F[_]: Sync, A](name: String)(f: => F[A]): F[A] =
+  for
+    start <- Sync[F].realTimeInstant
+    a     <- f
+    end   <- Sync[F].realTimeInstant
+    _ <- Sync[F].delay(
+      println(
+        s"${Console.RED}[${start}] ${name}: ${start
+            .until(end, java.time.temporal.ChronoUnit.MILLIS)} millis${Console.RESET}"
+      )
+    )
+  yield a
+
+def chronoEnd[F[_]: Sync, A](name: String)(start: Instant): F[Unit] =
+  for
+    end <- Sync[F].realTimeInstant
+    _ <- Sync[F].delay(
+      println(
+        s"${Console.GREEN}[${start} -> ${end}] ${name}: ${start.until(end, java.time.temporal.ChronoUnit.MILLIS)} millis"
+      )
+    )
+  yield ()

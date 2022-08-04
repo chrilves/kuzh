@@ -3,10 +3,9 @@ import {
   IdentityProofStoreFactory,
 } from "../../services/IdentityProofStore";
 import { PublicEvent } from "../events/PublicEvent";
-import { Membership, Fingerprint, Name } from "../Crypto";
+import { Membership, Fingerprint, Name, Me } from "../Crypto";
 import { State } from "./State";
 import { Member, MemberAbsent, MemberReadiness } from "../Member";
-import { ChoiceStatus } from "./ChoiceStatus";
 import { AssemblyAPI } from "../../services/AssemblyAPI";
 import { ConnectionEvent } from "../events/ConnectionEvent";
 import ConnectionController from "../ConnectionController";
@@ -19,6 +18,8 @@ import { Status } from "./Status";
 import { HarvestingEvent } from "../events/HarvestingEvent";
 import { Phase } from "./Phase";
 import { ProtocolEvent } from "../events/ProtocolEvent";
+import { HarvestState } from "../HarvestState";
+import { Ballot } from "../Ballot";
 
 export declare function structuredClone(value: any): any;
 
@@ -47,7 +48,7 @@ export default class Assembly {
 
   // Assembly Management
   private readonly mutex = new Mutex();
-  private _choiceStatus: ChoiceStatus = ChoiceStatus.noChoice;
+  private _harvestState: HarvestState;
   private _questions: string[] = [];
   private _present: Set<Fingerprint> = new Set();
   private _absent: Map<Fingerprint, Date> = new Map();
@@ -63,6 +64,12 @@ export default class Assembly {
     );
     this._assemblyAPI = assemblyAPI;
     this.membership = membership;
+    this._harvestState = new HarvestState(
+      this.membership.me,
+      this._identityProofStore,
+      "",
+      null
+    );
   }
 
   private state = (): State => {
@@ -172,11 +179,11 @@ export default class Assembly {
   readonly myQuestion = (question: string | null) => {
     switch (this._status.tag) {
       case "waiting":
-        this._choiceStatus = ChoiceStatus.question(
-          this._status.id,
-          question,
-          "ready"
-        );
+        try {
+          this._harvestState.setBallot(Ballot.question(question));
+        } catch (e) {
+          this.propagateFailure(`${e}`);
+        }
         this.send(MemberEvent.blocking("ready"));
         break;
       default:
@@ -187,11 +194,11 @@ export default class Assembly {
   readonly myAnswer = (answer: boolean) => {
     switch (this._status.tag) {
       case "waiting":
-        this._choiceStatus = ChoiceStatus.answer(
-          this._status.id,
-          answer,
-          "ready"
-        );
+        try {
+          this._harvestState.setBallot(Ballot.answer(answer));
+        } catch (e) {
+          this.propagateFailure(`${e}`);
+        }
         this.send(MemberEvent.blocking("ready"));
         break;
       default:
@@ -256,10 +263,16 @@ export default class Assembly {
   // Status Management
 
   private readonly resetStatus = (id: string, qs: string[]) => {
-    this._choiceStatus = ChoiceStatus.noChoice;
+    const question = qs.length > 0 ? qs[0] : null;
+    this._harvestState = new HarvestState(
+      this.membership.me,
+      this._identityProofStore,
+      id,
+      question
+    );
     this._status = Status.waiting(
       id,
-      qs.length > 0 ? qs[0] : null,
+      question,
       Array.from(this._present.values()).map(
         (x): MemberReadiness => ({
           member: x,
@@ -453,11 +466,23 @@ export default class Assembly {
           this._absent.set(x.member, new Date(x.since));
         });
         this._status = ev.state.status;
-        this._choiceStatus = ChoiceStatus.noChoice;
+        switch (ev.state.status.tag) {
+          case "waiting":
+            this._harvestState = new HarvestState(this.membership.me, this._identityProofStore, ev.state.status.id, ev.state.status.question);
+            break;
+          default:
+            break;
+        }
         break;
       case "status":
         this._status = ev.status;
-        this._choiceStatus = ChoiceStatus.noChoice;
+        switch (ev.status.tag) {
+          case "waiting":
+            this._harvestState = new HarvestState(this.membership.me, this._identityProofStore, ev.status.id, ev.status.question);
+            break;
+          default:
+            break;
+        }
         break;
       case "public":
         const publicEvent: PublicEvent = ev.public;

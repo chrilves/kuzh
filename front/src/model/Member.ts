@@ -1,13 +1,18 @@
-import { Fingerprint } from "./Crypto";
+import { Fingerprint, Signature } from "./Crypto";
 
 export type MemberReadiness = {
-  member: Fingerprint;
+  readonly member: Fingerprint;
   readiness: Member.Readiness;
 };
 
 export type MemberAbsent = {
   readonly member: Fingerprint;
   readonly since: number;
+};
+
+export type MemberSignature = {
+  readonly member: Fingerprint;
+  readonly signature: Signature;
 };
 
 export namespace Member {

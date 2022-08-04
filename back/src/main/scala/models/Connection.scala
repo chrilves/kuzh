@@ -15,6 +15,7 @@ import org.bouncycastle.util.encoders.Base64Encoder
 import chrilves.kuzh.back.*
 import chrilves.kuzh.back.models.assembly.*
 import chrilves.kuzh.back.lib.crypto.*
+import chrilves.kuzh.back.lib.*
 import chrilves.kuzh.back.services.*
 import scodec.bits.ByteVector
 import scala.collection.mutable
@@ -90,24 +91,6 @@ object Connection:
               buff.++=(str)
             }
 
-        def log(s: String): F[Unit] =
-          Sync[F].delay(
-            println(s"${Console.GREEN}[${java.time.Instant.now()}] ${s}${Console.RESET}")
-          )
-
-        def chrono[A](name: String)(f: => F[A])(using Sync[F]): F[A] =
-          for
-            start <- Sync[F].realTimeInstant
-            a     <- f
-            end   <- Sync[F].realTimeInstant
-            _ <- Sync[F].delay(
-              println(
-                s"${Console.RED}[${start}] ${name}: ${start
-                    .until(end, java.time.temporal.ChronoUnit.MILLIS)} millis${Console.RESET}"
-              )
-            )
-          yield a
-
         input.foreach {
           case t: Text =>
             import Status.*
@@ -144,10 +127,14 @@ object Connection:
                           case cr: Handshake.ChallengeResponse =>
                             cr.check(member, storedIdentityProof, challenge) match
                               case Some(id) =>
-                                def handler(message: AssemblyEvent): F[Unit] =
-                                  queue.offer(
-                                    Some(WebSocketFrame.Text(message.asJson.noSpacesSortKeys))
-                                  )
+                                def handler(message: Assembly.Event): F[Unit] =
+                                  val json = message.asJson
+                                  log(
+                                    s"[${assembly.info.id}] Sending message to ${member}: ${json.spaces4}"
+                                  ) *>
+                                    queue.offer(
+                                      Some(WebSocketFrame.Text(message.asJson.noSpacesSortKeys))
+                                    )
 
                                 for
                                   _ <- status.set(Status.Established[F](assembly, member))
@@ -174,13 +161,9 @@ object Connection:
 
                     case Established(assembly, member) =>
                       log(s"Received event from ${member}: ${t.str}") *>
-                        read[MemberEvent]("established")(str) { mfm =>
+                        read[Member.Event]("established")(str) { mfm =>
                           for
-                            end <- Sync[F].realTimeInstant
-                            _ <- Sync[F].delay(
-                              println(s"${Console.GREEN}[${start}]Traitement du message en ${start
-                                  .until(end, java.time.temporal.ChronoUnit.MILLIS)} millis")
-                            )
+                            _ <- chronoEnd("Traitement du message")(start)
                             a <- chrono(s"Event from member ${member} (${t.str})")(
                               assembly.memberMessage(member, mfm)
                             )

@@ -39,86 +39,20 @@ object Harvest:
         participants <- c.downField("participants").as[List[Fingerprint]].map(_.toSet)
       yield Harvest(id, question, participants)
 
-/*
-object Harvest:
-  type Signed = String
+  enum Event:
+    case Accepted(member: Member.Fingerprint)
+    case Invalid
 
-  enum Result[A,B]:
-    case Failed(
-      harvest: Harvest[A,B],
-      reason: FailureReason[A,B]
-    )
-    case Success(
-      harvest: Harvest[A,B],
-      hashes: Set[Secret.Hash],
-      validations: Map[Member.Fingerprint, Protocol.Validation.Response[A,B]],
-      secrets: Set[Secret[B]]
-    )
-
-  enum FailureReason[A,B]:
-    case Refused(members: Map[Member.Fingerprint, Protocol.Accept.Response[A,B]])
-    case Invalid(members: Map[Member.Fingerprint, Protocol.Validation.Response[A,B]])
-    case MembersMissing(member: Set[Member.Fingerprint])
-    case ProtocolError(member: Member.Fingerprint)
-
-  enum Protocol[A,B]:
-    case Accept(
-      harvest: Harvest[A,B],
-      consents: Map[Member.Fingerprint, Accept.Response[A,B]]
-    )
-    case Hash(
-      harvest: Harvest[A,B],
-      consents: Map[Member.Fingerprint, Accept.Response[A,B]],
-      nexts: List[Member.Fingerprint]
-    )
-    case Validation(
-      harvest: Harvest[A,B],
-      consents: Map[Member.Fingerprint, Accept.Response[A,B]],
-      hashes: Set[Secret.Hash],
-      validations: Map[Member.Fingerprint, Validation.Response[A,B]]
-    )
-    case Parcel(
-      harvest: Harvest[A,B],
-      hashes: Set[Secret.Hash],
-      validations: Map[Member.Fingerprint, Validation.Response[A,B]],
-      nexts: List[Member.Fingerprint]
-    )
-    case Finished(
-      result: Harvest.Result[A,B],
-      acknowledged: Map[Member.Fingerprint, Finished.Response[A,B]]
-    )
-
-  object Protocol:
-    object Accept:
-      final case class Proof[+A,+B](
-        harvest: Harvest[A,B],
-        accept: Boolean
-      )
-
-      final case class Response[+A,+B](
-        accept: Boolean,
-        signature: lib.crypto.Signature[Proof[A,B]]
-      )
-
-    object Validation:
-      final case class Proof[A,B](
-        harvest: Harvest[A,B],
-        hashes: Set[Secret.Hash],
-        accept: Boolean
-      )
-
-      final case class Response[A,B](
-        accept: Boolean,
-        signature: lib.crypto.Signature[Proof[A,B]]
-      )
-
-    object Finished:
-      final case class Proof[A,B](
-        result: Harvest.Result[A,B]
-      )
-
-      final case class Response[A,B](
-        signature: lib.crypto.Signature[Proof[A,B]]
-      )
-
- */
+  object Event:
+    given harvestingEventEncoder: Encoder[Event] with
+      final def apply(e: Event): Json =
+        e match
+          case Accepted(member) =>
+            Json.obj(
+              "tag"    -> "accepted".asJson,
+              "member" -> member.asJson
+            )
+          case Invalid =>
+            Json.obj(
+              "tag" -> "invalid".asJson
+            )

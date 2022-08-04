@@ -1,4 +1,4 @@
-package chrilves.kuzh.back.models.assembly
+package chrilves.kuzh.back.models
 
 import scala.collection.*
 import chrilves.kuzh.back.models.*

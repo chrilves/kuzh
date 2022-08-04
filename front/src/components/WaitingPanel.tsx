@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { ChangeEvent, useState } from "react";
 import { Fingerprint, Name } from "../model/Crypto";
 import ReadinessPanel from "./ReadinessPanel";
 import { Member } from "../model/Member";
 import { Status } from "../model/assembly/Status";
+import { JSONNormalizedStringifyD } from "../lib/JSONNormalizedStringify";
+import { Parameters } from "../model/Parameters";
 
 type Props = {
   myFingerprint: Fingerprint;
@@ -330,15 +332,22 @@ namespace QuestionPanelNS {
       props.changePhase(Phase.confirm(null));
     }
 
+    function change(event: ChangeEvent<HTMLTextAreaElement>): void {
+      const s = event.target.value
+      if (JSONNormalizedStringifyD(s).length <= Parameters.maxQuestionSize)
+        setInput(s);
+    }
+
     return (
       <div>
         <ul>
           <li>
             <label>Votre question : </label>
-            <input
-              type="text"
+            <textarea
+              rows={5}
+              cols={60}
               value={input}
-              onChange={(ev) => setInput(ev.target.value)}
+              onChange={(ev) =>ev }
             />
             <button type="button" onClick={ask}>
               Valider ma question.

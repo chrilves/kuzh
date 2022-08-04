@@ -25,6 +25,30 @@ namespace CryptoConfig {
 
 export type SerializedKey = string;
 export type Name = string;
+export type Signature = string;
+
+export namespace CryptoUtils {
+  export async function hash(obj: any): Promise<string> {
+    const serial = JSONNormalizedStringifyD(obj);
+    const te = new TextEncoder();
+    const hashArray = await window.crypto.subtle.digest(
+      CryptoConfig.hash,
+      te.encode(serial)
+    );
+    return Base64URL.getInstance().encode(new Uint8Array(hashArray));
+  }
+
+  export function randomString(length: number): string {
+    const arr = new Uint8Array(length);
+    window.crypto.getRandomValues(arr);
+
+    const uint6ToB64 = Base64URL.getInstance().uint6ToB64;
+
+    let s = "";
+    arr.forEach((b) => s += uint6ToB64[b & 0x3F]);
+    return s;
+  }
+}
 
 export namespace Serial {
   export async function exportCryptoKey(key: CryptoKey): Promise<JsonWebKey> {
@@ -266,7 +290,6 @@ export class IdentityProof {
       this.verify
     );
     const te = new TextEncoder();
-    const base64 = Base64URL.getInstance();
 
     const fingerprintAB = await window.crypto.subtle.digest(
       CryptoConfig.hash,
@@ -286,11 +309,9 @@ export class IdentityProof {
       this.encrypt.value
     );
 
-    const encryptOK = await window.crypto.subtle.verify(
-      CryptoConfig.rsaPssParams,
-      this.verify,
-      base64.decode(this.encrypt.signature),
-      te.encode(serializedEncryptKey)
+    const encryptOK = this.verifySignature(
+      this.encrypt.signature,
+      serializedEncryptKey
     );
 
     if (!encryptOK) {
@@ -299,11 +320,9 @@ export class IdentityProof {
       );
     }
 
-    const nicknameOK = await window.crypto.subtle.verify(
-      CryptoConfig.rsaPssParams,
-      this.verify,
-      base64.decode(this.nickname.signature),
-      te.encode(this.nickname.value)
+    const nicknameOK = this.verifySignature(
+      this.nickname.signature,
+      this.nickname.value
     );
 
     if (!nicknameOK) {
@@ -313,6 +332,18 @@ export class IdentityProof {
     }
 
     return true;
+  };
+
+  readonly verifySignature = async (
+    sig: Signature,
+    message: string
+  ): Promise<boolean> => {
+    return await window.crypto.subtle.verify(
+      CryptoConfig.rsaPssParams,
+      this.verify,
+      Base64URL.getInstance().decode(sig),
+      new TextEncoder().encode(message)
+    );
   };
 
   readonly toJson = async (): Promise<Serial.IdentityProof> => {
@@ -369,3 +400,5 @@ export class Membership {
     return new Membership(p.assembly, await Me.fromJson(p.me));
   }
 }
+
+

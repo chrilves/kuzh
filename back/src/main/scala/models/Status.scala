@@ -1,5 +1,4 @@
-package chrilves.kuzh.back.models.assembly
-
+package chrilves.kuzh.back.models
 import cats.effect.kernel.Sync
 import java.util.UUID
 import scala.collection.*
