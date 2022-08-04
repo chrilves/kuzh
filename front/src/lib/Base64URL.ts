@@ -19,8 +19,8 @@ export class Base64URL {
   }
 
   static codingArrays(): {
-    uint6ToB64: string[],
-    b64ToUint6: Uint16Array
+    uint6ToB64: string[];
+    b64ToUint6: Uint16Array;
   } {
     const uint6ToB64 = new Array<string>(64);
     const b64ToUint6 = new Uint16Array(123);
@@ -50,8 +50,8 @@ export class Base64URL {
 
     return {
       uint6ToB64: uint6ToB64,
-      b64ToUint6: b64ToUint6
-    }
+      b64ToUint6: b64ToUint6,
+    };
   }
 
   encode(arr: Uint8Array): string {

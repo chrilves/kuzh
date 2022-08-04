@@ -17,7 +17,7 @@ export default function MembershipPanel(props: Props): JSX.Element {
 
   return (
     <div>
-      <h3>Information de l'assemblée</h3>
+      <h4>Information de l'assemblée</h4>
       <table>
         <thead>
           <tr>

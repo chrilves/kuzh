@@ -60,7 +60,7 @@ function HarvestingStartedPanel(props: {
 }): JSX.Element {
   return (
     <div>
-      <h2>Récolte en cours</h2>
+      <h3>Récolte en cours</h3>
       <p>
         Le protocole de récolte anonyme est lancé. Vous ausez le résultat dans
         quelques instants.
@@ -72,7 +72,7 @@ function HarvestingStartedPanel(props: {
 function Hidden(): JSX.Element {
   return (
     <div>
-      <h2>Veuillez attendre</h2>
+      <h3>Veuillez attendre</h3>
       <p>Une récolte est en cours. Vous pourrez participer bientôt.</p>
     </div>
   );

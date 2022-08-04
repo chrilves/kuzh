@@ -43,13 +43,13 @@ export default function PresencePanel(props: Props): JSX.Element {
 
   return (
     <div>
-      <h3>Membres de l'Assemblée</h3>
+      <h4>Membres de l'Assemblée</h4>
       <MemberList
         title="Présent.e.s"
         members={props.present}
         name={props.name}
       />
-      <h4>Absent.e.s: {absentLines.length}</h4>
+      <h5>Absent.e.s: {absentLines.length}</h5>
       {absentLines.length > 0 && (
         <table>
           <thead>

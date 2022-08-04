@@ -1,7 +1,4 @@
-import {
-  IdentityProofStore,
-  IdentityProofStoreFactory,
-} from "../../services/IdentityProofStore";
+import { IdentityProofStore } from "../../services/IdentityProofStore";
 import { PublicEvent } from "../events/PublicEvent";
 import { Membership, Fingerprint, Name, Me } from "../Crypto";
 import { State } from "./State";
@@ -25,7 +22,7 @@ export declare function structuredClone(value: any): any;
 
 export type Listerner = {
   readonly state: (state: State) => void;
-  readonly failure: (reason: string) => void;
+  readonly failure: (error: string) => void;
   readonly connection: (status: string) => void;
 };
 
@@ -35,7 +32,7 @@ export default class Assembly {
   private readonly minParticipants = 3;
 
   // Services
-  private readonly _identityProofStore: IdentityProofStore;
+  readonly identityProofStore: IdentityProofStore;
   private readonly _assemblyAPI: AssemblyAPI;
 
   // Connection Details
@@ -55,18 +52,16 @@ export default class Assembly {
   private _status: Status = Status.waiting("", null, []);
 
   constructor(
-    identityProofStoreFactory: IdentityProofStoreFactory,
+    identityProofStore: IdentityProofStore,
     assemblyAPI: AssemblyAPI,
     membership: Membership
   ) {
-    this._identityProofStore = identityProofStoreFactory.identityProofStore(
-      membership.assembly
-    );
+    this.identityProofStore = identityProofStore;
     this._assemblyAPI = assemblyAPI;
     this.membership = membership;
     this._harvestState = new HarvestState(
       this.membership.me,
-      this._identityProofStore,
+      this.identityProofStore,
       "",
       null
     );
@@ -118,12 +113,12 @@ export default class Assembly {
     }
   };
 
-  private readonly propagateFailure = (reason: string) => {
+  private readonly propagateFailure = (error: string) => {
     for (const l of this._listeners)
       try {
-        l.failure(reason);
+        l.failure(error);
       } catch (e) {
-        console.log(`Propagate error error ${e} on reason ${reason}`);
+        console.log(`Propagate error error ${e} on error ${error}`);
       }
   };
 
@@ -143,10 +138,13 @@ export default class Assembly {
 
   readonly runningStatus = (): RunningStatus => this._runningStatus;
 
-  readonly start = () => {
-    this.mutex.runExclusive(async () => {
+  readonly start = async () => {
+    return await this.mutex.runExclusive(async () => {
       if (this._runningStatus === "stopped") {
         this._runningStatus = "starting";
+        console.log(
+          `Starting assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
+        );
         this._connectionController = await this._assemblyAPI.connect(
           this.membership,
           this.updateState,
@@ -157,10 +155,13 @@ export default class Assembly {
     });
   };
 
-  readonly stop = () => {
-    this.mutex.runExclusive(async () => {
+  readonly stop = async () => {
+    return await this.mutex.runExclusive(async () => {
       if (this._runningStatus === "started") {
         this._runningStatus = "stopping";
+        console.log(
+          `Stopping assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
+        );
         if (this._connectionController) this._connectionController.close();
         this._runningStatus = "stopped";
       }
@@ -171,7 +172,7 @@ export default class Assembly {
   // Getters
 
   readonly name = async (member: Fingerprint): Promise<Name> =>
-    (await this._identityProofStore.fetch(member)).nickname.value;
+    (await this.identityProofStore.fetch(member)).nickname.value;
 
   ///////////////////////////////////////
   // Question Management
@@ -266,7 +267,7 @@ export default class Assembly {
     const question = qs.length > 0 ? qs[0] : null;
     this._harvestState = new HarvestState(
       this.membership.me,
-      this._identityProofStore,
+      this.identityProofStore,
       id,
       question
     );
@@ -348,7 +349,7 @@ export default class Assembly {
     presence: Member.Presence
   ) => {
     // Ensure we have the identity proof
-    this._identityProofStore.fetch(member);
+    this.identityProofStore.fetch(member);
 
     // Updatting Status
     switch (presence.tag) {
@@ -468,7 +469,12 @@ export default class Assembly {
         this._status = ev.state.status;
         switch (ev.state.status.tag) {
           case "waiting":
-            this._harvestState = new HarvestState(this.membership.me, this._identityProofStore, ev.state.status.id, ev.state.status.question);
+            this._harvestState = new HarvestState(
+              this.membership.me,
+              this.identityProofStore,
+              ev.state.status.id,
+              ev.state.status.question
+            );
             break;
           default:
             break;
@@ -478,7 +484,12 @@ export default class Assembly {
         this._status = ev.status;
         switch (ev.status.tag) {
           case "waiting":
-            this._harvestState = new HarvestState(this.membership.me, this._identityProofStore, ev.status.id, ev.status.question);
+            this._harvestState = new HarvestState(
+              this.membership.me,
+              this.identityProofStore,
+              ev.status.id,
+              ev.status.question
+            );
             break;
           default:
             break;
@@ -537,7 +548,7 @@ export default class Assembly {
       case "error":
         if (ev.fatal)
           if (this._connectionController) this._connectionController.close();
-        this.propagateFailure(ev.reason);
+        this.propagateFailure(ev.error);
         break;
     }
     this.propagateState();
@@ -555,7 +566,7 @@ export default class Assembly {
         this.propagateConnectionStatus("fermée");
         break;
       case "error":
-        this.propagateFailure(event.reason);
+        this.propagateFailure(event.error);
     }
   };
 }

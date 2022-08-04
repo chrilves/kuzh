@@ -17,6 +17,10 @@ export interface AssemblyAPI {
   ): Promise<ConnectionController>;
 }
 
+export interface AssemblyAPIFactory {
+  withStorageAPI(storageAPI: StorageAPI): AssemblyAPI;
+}
+
 export namespace AssemblyAPI {
   export function fold(
     assemblyAPI: AssemblyAPI
@@ -135,4 +139,16 @@ export class RealAssemblyAPI implements AssemblyAPI {
       updateConnection
     );
   }
+}
+
+export class RealAssemblyAPIFactory implements AssemblyAPIFactory {
+  readonly backAPI: BackAPI;
+
+  constructor(backAPI: BackAPI) {
+    this.backAPI = backAPI;
+  }
+
+  readonly withStorageAPI = (storageAPI: StorageAPI): AssemblyAPI => {
+    return new RealAssemblyAPI(storageAPI, this.backAPI);
+  };
 }

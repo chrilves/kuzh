@@ -5,17 +5,21 @@ export namespace Parameters {
   const minQuestionBallot: Ballot.Question = {
     tag: "question",
     question: "",
-    random: ""
+    random: "",
   };
 
   const minAnswerBallot: Ballot.Answer = {
     tag: "answer",
     answer: false,
-    random: ""
+    random: "",
   };
 
   export const maxQuestionSize: number = 300;
   export const minRandomStringSize: number = 12;
-  export const ballotQuestionSize: number = maxQuestionSize + minRandomStringSize +  JSONNormalizedStringifyD(minQuestionBallot).length;
-  export const ballotAnswerSize: number = minRandomStringSize +  JSONNormalizedStringifyD(minAnswerBallot).length;
+  export const ballotQuestionSize: number =
+    maxQuestionSize +
+    minRandomStringSize +
+    JSONNormalizedStringifyD(minQuestionBallot).length;
+  export const ballotAnswerSize: number =
+    minRandomStringSize + JSONNormalizedStringifyD(minAnswerBallot).length;
 }

@@ -57,8 +57,7 @@ export class HarvestState {
   };
 
   readonly setBallot = (ballot: Ballot) => {
-    if (this._ballot !== null) 
-      throw new Error("Ballot already set!");
+    if (this._ballot !== null) throw new Error("Ballot already set!");
 
     this._ballot = ballot;
   };
@@ -67,10 +66,11 @@ export class HarvestState {
     if (this._ballot === null)
       throw new Error("Trying to set harvest with no ballot!");
 
-    if ((harvest.question !== null && this._ballot.tag === "question") ||
-        (harvest.question === null && this._ballot.tag === "answer")
-       )
-      throw new Error(`Bad harvest`)
+    if (
+      (harvest.question !== null && this._ballot.tag === "question") ||
+      (harvest.question === null && this._ballot.tag === "answer")
+    )
+      throw new Error(`Bad harvest`);
 
     if (
       this._harvest === null &&
@@ -141,8 +141,7 @@ export class HarvestState {
       } else throw new Error(`Validations with not participant ${ms.member}`);
     }
 
-    if (participants.size === 0)
-      this._validations = validations;
+    if (participants.size === 0) this._validations = validations;
     else
       throw new Error(
         `No signature found for participants ${JSON.stringify(

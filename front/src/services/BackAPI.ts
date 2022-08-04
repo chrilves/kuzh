@@ -1,4 +1,4 @@
-import { Me, Membership, Fingerprint, IdentityProof } from "../model/Crypto";
+import { Membership, Fingerprint, IdentityProof } from "../model/Crypto";
 import { AssemblyEvent } from "../model/events/AssemblyEvent";
 import ConnectionController, {
   ConnectionStatus,
@@ -178,7 +178,7 @@ export class RealBackAPI implements BackAPI {
 
             case "error":
               updateConnection(
-                ConnectionEvent.error(message.reason, message.fatal)
+                ConnectionEvent.error(message.error, message.fatal)
               );
               break;
 

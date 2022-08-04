@@ -46,9 +46,9 @@ export default function MemberList(props: Props): JSX.Element {
 
   return (
     <div>
-      <h4>
+      <h5>
         {props.title}: {props.members.length}
-      </h4>
+      </h5>
       {props.members.length > 0 && (
         <table>
           <thead>

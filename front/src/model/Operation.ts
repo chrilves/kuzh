@@ -1,5 +1,3 @@
-import { Membership } from "./Crypto";
-
 export namespace Operation {
   export type Create = {
     readonly tag: "create";

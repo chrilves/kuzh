@@ -2,15 +2,13 @@ import { useEffect, useState } from "react";
 import Assembly, { Listerner } from "../model/assembly/Assembly";
 import { State } from "../model/assembly/State";
 import { Status } from "../model/assembly/Status";
-import { Membership } from "../model/Crypto";
 import MembershipPanel from "./MembershipPanel";
 import PresencePanel from "./PresencePanel";
 import StatusPanel from "./StatusPanel";
 
 type Props = {
   assembly: Assembly;
-  menu(): void;
-  fail(reason: string): void;
+  fail(error: string): void;
 };
 
 export default function AssemblyPage(props: Props): JSX.Element {
@@ -38,14 +36,6 @@ export default function AssemblyPage(props: Props): JSX.Element {
 
   return (
     <div>
-      <input
-        type="button"
-        value="Menu"
-        onClick={() => {
-          props.assembly.stop();
-          props.menu();
-        }}
-      />
       <ConnectionStatus status={connectionStatus} />
       <StatusPanel
         myFingerprint={props.assembly.membership.me.fingerprint}
@@ -56,7 +46,7 @@ export default function AssemblyPage(props: Props): JSX.Element {
         changeReadiness={props.assembly.changeReadiness}
         name={props.assembly.name}
       />
-      <h2>Assemblée</h2>
+      <h3>Assemblée</h3>
       <PresencePanel
         present={assemblyState.present}
         absent={assemblyState.absent}

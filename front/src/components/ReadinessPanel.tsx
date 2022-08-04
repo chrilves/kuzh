@@ -1,4 +1,3 @@
-import { compareString } from "../lib/Compare";
 import { MemberReadiness } from "../model/Member";
 import { Fingerprint, Name } from "../model/Crypto";
 import MemberList from "./MemberList";
@@ -29,7 +28,7 @@ export default function ReadinessPanel(props: Props): JSX.Element {
 
   return (
     <div>
-      <h3>Qui est prêt.e?</h3>
+      <h4>Qui est prêt.e?</h4>
       <MemberList
         title="En train de répondre"
         members={answering}

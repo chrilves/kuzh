@@ -45,7 +45,7 @@ export namespace CryptoUtils {
     const uint6ToB64 = Base64URL.getInstance().uint6ToB64;
 
     let s = "";
-    arr.forEach((b) => s += uint6ToB64[b & 0x3F]);
+    arr.forEach((b) => (s += uint6ToB64[b & 0x3f]));
     return s;
   }
 }
@@ -400,5 +400,3 @@ export class Membership {
     return new Membership(p.assembly, await Me.fromJson(p.me));
   }
 }
-
-

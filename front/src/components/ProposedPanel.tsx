@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Fingerprint, Name } from "../model/Crypto";
-import { State } from "../model/assembly/State";
 import MemberList from "./MemberList";
 import { Member } from "../model/Member";
 import { Harvest } from "../model/assembly/Harvest";
@@ -50,7 +49,7 @@ export default function ProposedPanel(props: Props): JSX.Element {
 
   return (
     <div>
-      <h2>Tout le monde est prêt.e pour la récolte.</h2>
+      <h4>Tout le monde est prêt.e pour la récolte.</h4>
       <MemberList
         title="Participant.e.s à la récolte"
         members={props.harvest.participants}

@@ -203,7 +203,7 @@ function AnswerPanel(props: AnswerProps): JSX.Element {
 
   return (
     <div>
-      <h2>Il est temps de répondre!</h2>
+      <h3>Il est temps de répondre!</h3>
       <p>
         La question est: <span className="question">{props.question}</span>
       </p>
@@ -310,7 +310,7 @@ function QuestionPanel(props: {
 
   return (
     <div>
-      <h2>Vous pouvez soumettre une question au groupe</h2>
+      <h3>Pose une question anonymement!</h3>
       {phasePanel}
     </div>
   );
@@ -333,32 +333,29 @@ namespace QuestionPanelNS {
     }
 
     function change(event: ChangeEvent<HTMLTextAreaElement>): void {
-      const s = event.target.value
+      const s = event.target.value;
       if (JSONNormalizedStringifyD(s).length <= Parameters.maxQuestionSize)
         setInput(s);
     }
 
     return (
       <div>
-        <ul>
-          <li>
-            <label>Votre question : </label>
-            <textarea
-              rows={5}
-              cols={60}
-              value={input}
-              onChange={(ev) =>ev }
-            />
-            <button type="button" onClick={ask}>
-              Valider ma question.
-            </button>
-          </li>
-          <li>
-            <button type="button" onClick={dontAsk}>
-              Je ne pose aucune question!
-            </button>
-          </li>
-        </ul>
+        <p>Votre question : </p>
+        <textarea
+          rows={5}
+          cols={60}
+          maxLength={Parameters.maxQuestionSize}
+          value={input}
+          onChange={change}
+        />
+        <div>
+          <button type="button" onClick={ask}>
+            Valider ma question.
+          </button>
+          <button type="button" onClick={dontAsk}>
+            Je ne pose aucune question!
+          </button>
+        </div>
       </div>
     );
   }

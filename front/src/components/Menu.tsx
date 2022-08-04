@@ -12,6 +12,7 @@ import {
 import { Operation } from "../model/Operation";
 import { StorageAPI } from "../services/StorageAPI";
 import Fuse from "../lib/Fuse";
+import { Nickname } from "./Nickname";
 
 interface Nav {
   prepare(operation: Operation): void;
@@ -76,24 +77,6 @@ export default function Menu(
       />
       <Route path="*" element={<Lost />} />
     </Routes>
-  );
-}
-
-function Nickname(props: {
-  nickname: string;
-  setNickname(nickname: string): void;
-}): JSX.Element {
-  return (
-    <div>
-      <label>pseudo : </label>
-      <input
-        type="text"
-        name="nickname"
-        placeholder="vote pseudo"
-        value={props.nickname}
-        onChange={(e) => props.setNickname(e.target.value)}
-      />
-    </div>
   );
 }
 

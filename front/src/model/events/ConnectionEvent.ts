@@ -17,14 +17,14 @@ export namespace ConnectionEvent {
 
   export type Error = {
     readonly tag: "error";
-    readonly reason: string;
+    readonly error: string;
     readonly fatal: boolean;
   };
 
-  export function error(reason: string, fatal: boolean): Error {
+  export function error(r: string, fatal: boolean): Error {
     return {
       tag: "error",
-      reason: reason,
+      error: r,
       fatal: fatal,
     };
   }

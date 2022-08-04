@@ -2,8 +2,20 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import "./index.css";
-import { realServices, testServices } from "./services/Services";
 import App from "./components/App";
+import {
+  AssemblyAPI,
+  AssemblyAPIFactory,
+  RealAssemblyAPI,
+  RealAssemblyAPIFactory,
+} from "./services/AssemblyAPI";
+import { BackAPI, RealBackAPI } from "./services/BackAPI";
+import {
+  BackCachingIdentityProofStoreFactory,
+  IdentityProofStoreFactory,
+} from "./services/IdentityProofStore";
+import { StorageAPI, LocalStorageAPI } from "./services/StorageAPI";
+import { Services } from "./services/Services";
 //import reportWebVitals from './reportWebVitals';
 
 /////////////////////////////
@@ -13,26 +25,27 @@ const root: ReactDOM.Root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement
 );
 
-const players: number = 5;
+const storageAPI: StorageAPI = new LocalStorageAPI();
+const backAPI: BackAPI = new RealBackAPI("http://localhost:8081");
+const assemblyAPI: AssemblyAPI = new RealAssemblyAPI(storageAPI, backAPI);
+const identityProofStoreFactory: IdentityProofStoreFactory =
+  new BackCachingIdentityProofStoreFactory(storageAPI, backAPI);
+const assemblyAPIFactory: AssemblyAPIFactory = new RealAssemblyAPIFactory(
+  backAPI
+);
 
-let screen: JSX.Element;
-
-if (players === 0) screen = <div />;
-else if (players === 1) screen = <App services={realServices()} />;
-else
-  screen = (
-    <div style={{ display: "flex", flexDirection: "row" }}>
-      {Array.from(Array(players).keys()).map((x) => (
-        <div key={`j${x + 1}`} style={{ display: "auto" }}>
-          <App services={testServices(`j${x + 1}`)} />
-        </div>
-      ))}
-    </div>
-  );
+const services: Services = {
+  storageAPI: storageAPI,
+  assemblyAPI: assemblyAPI,
+  identityProofStoreFactory: identityProofStoreFactory,
+  assemblyAPIFactory: assemblyAPIFactory,
+};
 
 root.render(
   <React.StrictMode>
-    <BrowserRouter>{screen}</BrowserRouter>
+    <BrowserRouter>
+      <App services={services} />
+    </BrowserRouter>
   </React.StrictMode>
 );
 

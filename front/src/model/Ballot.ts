@@ -16,17 +16,18 @@ export namespace Ballot {
       random: "",
     };
 
-    let randomLength = Parameters.ballotQuestionSize - JSONNormalizedStringifyD(ballot).length;
-    if (randomLength <= Parameters.minRandomStringSize) {
+    let randomLength =
+      Parameters.ballotQuestionSize - JSONNormalizedStringifyD(ballot).length;
+    if (randomLength >= Parameters.minRandomStringSize) {
       ballot.random = CryptoUtils.randomString(randomLength);
-      if (JSONNormalizedStringifyD(ballot).length === Parameters.ballotQuestionSize) {
+      if (
+        JSONNormalizedStringifyD(ballot).length ===
+        Parameters.ballotQuestionSize
+      ) {
         console.log(`ballot=${JSONNormalizedStringifyD(ballot)}`);
         return ballot;
-      }
-      else
-        throw new Error("Can not forge a valid ballot.")
-    } else
-        throw new Error("Question too large!")
+      } else throw new Error("Can not forge a valid ballot.");
+    } else throw new Error("Question too large!");
   }
 
   export type Answer = {
@@ -42,17 +43,17 @@ export namespace Ballot {
       random: "",
     };
 
-    let randomLength = Parameters.ballotAnswerSize - JSONNormalizedStringifyD(ballot).length;
+    let randomLength =
+      Parameters.ballotAnswerSize - JSONNormalizedStringifyD(ballot).length;
     if (randomLength <= Parameters.minRandomStringSize) {
       ballot.random = CryptoUtils.randomString(randomLength);
-      if (JSONNormalizedStringifyD(ballot).length === Parameters.ballotAnswerSize) {
+      if (
+        JSONNormalizedStringifyD(ballot).length === Parameters.ballotAnswerSize
+      ) {
         console.log(`ballot=${JSONNormalizedStringifyD(ballot)}`);
         return ballot;
-      }
-      else
-        throw new Error("Can not forge a valid ballot.")
-    } else
-        throw new Error("Question too large!")
+      } else throw new Error("Can not forge a valid ballot.");
+    } else throw new Error("Question too large!");
   }
 }
 

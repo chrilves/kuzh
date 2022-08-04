@@ -1,54 +1,44 @@
-import { Operation } from "./Operation";
-import * as AssemblyModel from "./assembly/Assembly";
+import { GuestSeat, Seat } from "./SteatState";
 
 export namespace AppState {
   export type Menu = {
-    tag: "menu";
+    readonly tag: "menu";
   };
 
   export const menu: Menu = {
     tag: "menu",
   };
 
-  export type Prepare = {
-    tag: "prepare";
-    operation: Operation;
+  export type Seats = {
+    readonly tag: "seats";
+    readonly host: Seat;
+    readonly guests: GuestSeat[];
   };
 
-  export function prepare(Operation: Operation): Prepare {
+  export function seats(host: Seat, guests: GuestSeat[]): Seats {
     return {
-      tag: "prepare",
-      operation: Operation,
+      tag: "seats",
+      host: host,
+      guests: guests,
     };
   }
 
-  export type Failure = {
-    tag: "failure";
-    reason: string;
+  export const guests: Stateful<GuestSeat[]> = (
+    appState: AppState,
+    setAppState: (st: AppState) => void
+  ) => {
+    switch (appState.tag) {
+      case "seats":
+        return appState.guests;
+      case "menu":
+        return [];
+    }
   };
-
-  export function failure(r: string): Failure {
-    return {
-      tag: "failure",
-      reason: r,
-    };
-  }
-
-  export type Assembly = {
-    tag: "assembly";
-    assembly: AssemblyModel.default;
-  };
-
-  export function assembly(assembly: AssemblyModel.default): Assembly {
-    return {
-      tag: "assembly",
-      assembly: assembly,
-    };
-  }
 }
 
-export type AppState =
-  | AppState.Menu
-  | AppState.Prepare
-  | AppState.Failure
-  | AppState.Assembly;
+export type AppState = AppState.Menu | AppState.Seats;
+
+export type Stateful<A> = (
+  appState: AppState,
+  setAppState: (appState: AppState) => void
+) => A;

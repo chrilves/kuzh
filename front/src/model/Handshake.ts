@@ -1,5 +1,5 @@
 import { Base64URL } from "../lib/Base64URL";
-import { Me, Membership, Fingerprint, Serial } from "./Crypto";
+import { Membership, Fingerprint, Serial } from "./Crypto";
 
 export namespace Handshake {
   export type Crententials = {
@@ -58,14 +58,14 @@ export namespace Handshake {
 
   export type Error = {
     readonly tag: "error";
-    readonly reason: string;
+    readonly error: string;
     readonly fatal: boolean;
   };
 
-  export function error(reason: string, fatal: boolean): Error {
+  export function error(r: string, fatal: boolean): Error {
     return {
       tag: "error",
-      reason: reason,
+      error: r,
       fatal: fatal,
     };
   }
