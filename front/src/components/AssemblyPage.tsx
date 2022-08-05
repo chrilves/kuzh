@@ -32,7 +32,7 @@ export default function AssemblyPage(props: Props): JSX.Element {
     return () => {
       props.assembly.removeListener(listerner);
     };
-  }, [props.assembly.membership.assembly.id]);
+  }, [props.assembly]);
 
   return (
     <div>

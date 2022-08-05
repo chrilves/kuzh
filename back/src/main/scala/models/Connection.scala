@@ -19,6 +19,7 @@ import chrilves.kuzh.back.lib.*
 import chrilves.kuzh.back.services.*
 import scodec.bits.ByteVector
 import scala.collection.mutable
+import cats.effect.std.Semaphore
 
 final case class Connection[F[_]](
     onClose: F[Unit],
@@ -34,48 +35,143 @@ object Connection:
 
   def connect[F[_]: Async](assemblies: AssemblyManagement[F]): F[Connection[F[_]]] =
     for
+      id         <- Async[F].delay(java.util.UUID.randomUUID())
       pingNumber <- Ref.of[F, Long](Long.MinValue)
       strBuffer  <- Ref.of[F, mutable.StringBuilder](new mutable.StringBuilder)
       status     <- Ref.of[F, Status[F]](Status.Initial[F]())
       queue      <- Queue.unbounded[F, Option[WebSocketFrame]]
     yield
-      inline def sendHandshake(handshake: Handshake): F[Unit] =
-        queue.offer(Some(WebSocketFrame.Text(handshake.asJson.noSpacesSortKeys)))
+      import Status.*
 
-      def onClose(message: String): F[Unit] =
-        import Status.*
-        val terminate =
-          status.set(Terminated()) *> queue.offer(None).attempt.void
+      def conlog(color: String)(s: String): F[Unit] =
+        log(color)(s"{${id}} ${s}")
 
-        Async[F].delay(println(s"=> Closing connection because of $message")) *>
-          status.get.flatMap {
-            case Initial() | _: Challenged[F] =>
-              sendHandshake(Handshake.Error(message, true)) *> terminate
-            case Established(assembly, member) =>
-              for
-                _ <- assembly.removeMember(member, Some(message)).attempt
-                _ <- terminate
-              yield ()
-            case Terminated() =>
-              Sync[F].pure(())
-          }
+      def sendMessage(json: Json): F[Unit] =
+        status.get.flatMap {
+          case Established(assembly, member) =>
+            for
+              _ <- conlog(Console.YELLOW)(
+                s"Sending a message in establshed connection in assembly ${assembly.info.name}:${assembly.info.id} for ${member}: ${json.spaces4}."
+              )
+              _ <- queue.offer(Some(WebSocketFrame.Text(json.noSpacesSortKeys)))
+            yield ()
+          case Challenged(assembly, member, challenge, storedIdentityProof) =>
+            for
+              _ <- conlog(Console.YELLOW)(
+                s"Sending a message in challenged connection in assembly ${assembly.info.name}:${assembly.info.id} for ${member}: ${json.spaces4}."
+              )
+              _ <- queue.offer(Some(WebSocketFrame.Text(json.noSpacesSortKeys)))
+            yield ()
+          case Terminated() =>
+            conlog(Console.YELLOW)(
+              s"Trying to Send a message in terminated connection: ${json.spaces4}"
+            )
+
+          case Initial() =>
+            for
+              _ <- conlog(Console.YELLOW)(
+                s"Sending a message in initial connection: ${json.spaces4}"
+              )
+              _ <- queue.offer(Some(WebSocketFrame.Text(json.noSpacesSortKeys)))
+            yield ()
+        }
+
+      inline def sendHandshake(handshake: Handshake.Out): F[Unit]  = sendMessage(handshake.asJson)
+      inline def sendAssemblyEvent(event: Assembly.Event): F[Unit] = sendMessage(event.asJson)
+
+      def closeConnection(performClose: Boolean): F[Unit] =
+        val start =
+          if performClose
+          then "Closing"
+          else "Closed"
+
+        status.getAndSet(Terminated()).flatMap {
+          case Established(assembly, member) =>
+            for
+              _ <- Async[F].whenA(performClose)(queue.offer(None))
+              _ <- conlog(Console.BLUE)(
+                s"${start} the establshed connection in assembly ${assembly.info.name}:${assembly.info.id} for ${member}"
+              )
+              _ <- assembly.removeMember(member, None)
+            yield ()
+          case Challenged(assembly, member, challenge, storedIdentityProof) =>
+            for
+              _ <- Async[F].whenA(performClose)(queue.offer(None))
+              _ <- conlog(Console.BLUE)(
+                s"${start} the handshake connection in assembly ${assembly.info.name}:${assembly.info.id} for ${member}"
+              )
+            yield ()
+          case Terminated() =>
+            conlog(Console.BLUE)(s"${start} to closing a terminated connection.")
+          case Initial() =>
+            for
+              _ <- queue.offer(None)
+              _ <- conlog(Console.BLUE)(s"Closing the initial connection.")
+            yield ()
+        }
+
+      def logError(e: Throwable): F[Unit] =
+        status.get.flatMap {
+          case Established(assembly, member) =>
+            conlog(Console.RED)(
+              s"Error in establshed connection in assembly ${assembly.info.name}:${assembly.info.id} for ${member}: ${e}"
+            )
+          case Challenged(assembly, member, challenge, storedIdentityProof) =>
+            conlog(Console.RED)(
+              s"Error in challenged connection in assembly ${assembly.info.name}:${assembly.info.id} for ${member}: ${e}"
+            )
+          case Terminated() =>
+            conlog(Console.RED)(s"Error in terminated connection: ${e}")
+          case Initial() =>
+            conlog(Console.RED)(s"Error in initial connection: ${e}")
+        }
+
+      inline def logAndClose(e: Throwable): F[Unit] =
+        logError(e) *> closeConnection(true)
+
+      def logInput(s: String, comment: String): F[Unit] =
+        status.get.flatMap {
+          case Established(assembly, member) =>
+            conlog(Console.GREEN)(
+              s"Received ${comment} message in establshed connection in assembly ${assembly.info.name}:${assembly.info.id} for ${member}: ${s}"
+            )
+          case Challenged(assembly, member, challenge, storedIdentityProof) =>
+            conlog(Console.GREEN)(
+              s"Received ${comment} message in challenged connection in assembly ${assembly.info.name}:${assembly.info.id} for ${member}: ${s}"
+            )
+          case Terminated() =>
+            conlog(Console.GREEN)(s"Received ${comment} message in terminated connection: ${s}")
+          case Initial() =>
+            conlog(Console.GREEN)(s"Received ${comment} message in initial connection: ${s}")
+        }
+
+      def exitOnError(error: String): F[Unit] =
+        status.get.flatMap {
+          case Established(assembly, member) =>
+            conlog(Console.MAGENTA)(
+              s"Exit in establshed connection in assembly ${assembly.info.name}:${assembly.info.id} for ${member}: ${error}"
+            ) *>
+              sendAssemblyEvent(Assembly.Event.Error(error, true)) *>
+              closeConnection(true)
+          case Challenged(assembly, member, challenge, storedIdentityProof) =>
+            conlog(Console.MAGENTA)(
+              s"Exit in challenged connection in assembly ${assembly.info.name}:${assembly.info.id} for ${member}: ${error}"
+            ) *>
+              sendHandshake(Handshake.Out.Error(error, true)) *>
+              closeConnection(true)
+          case Terminated() =>
+            conlog(Console.MAGENTA)(s"Exit in terminated connection : ${error}")
+          case Initial() =>
+            conlog(Console.MAGENTA)(s"Exit in initial connection: ${error}") *>
+              sendHandshake(Handshake.Out.Error(error, true)) *>
+              closeConnection(true)
+        }
 
       val send: fs2.Stream[F, WebSocketFrame] =
         fs2.Stream.fromQueueNoneTerminated(queue)
 
       def receive(input: fs2.Stream[F, WebSocketFrame]): fs2.Stream[F, Unit] =
         import WebSocketFrame.*
-
-        def read[A: Decoder](from: String)(s: String)(f: A => F[Unit]): F[Unit] =
-          parse(s) match
-            case Left(e) =>
-              onClose(s"[${from}] Parsing error of ${s}: ${e}")
-            case Right(json) =>
-              json.as[A] match
-                case Left(e) =>
-                  onClose(s"[${from}] Decoding error of ${json}: ${e}")
-                case Right(a) =>
-                  f(a).handleErrorWith(e => onClose(s"[${from}] Treatement errror of ${a}: ${e}"))
 
         def withStrBuffer(str: String, last: Boolean)(f: String => F[Unit]): F[Unit] =
           if last
@@ -98,16 +194,25 @@ object Connection:
               buff.++=(str)
             }
 
+        def read[A: Decoder](s: String)(f: A => F[Unit]): F[Unit] =
+          parse(s) match
+            case Left(e) => exitOnError(s"$e")
+            case Right(json) =>
+              json.as[A] match
+                case Left(e) => exitOnError(s"$e")
+                case Right(a) =>
+                  f(a).handleErrorWith(e => exitOnError(s"$e"))
+
         input.foreach {
           case t: Text =>
             import Status.*
-            log(s"Received frame ${t.str}") *>
-              Sync[F].realTimeInstant.flatMap { start =>
-                withStrBuffer(t.str, t.last) { str =>
+            logInput(t.str, if t.last then "last" else "ongoing") *>
+              withStrBuffer(t.str, t.last) { str =>
+                logInput(str, "whole") *>
                   status.get.flatMap {
                     case Initial() =>
-                      read[Handshake]("initial")(str) {
-                        case cp @ Handshake.Crententials(info, member) =>
+                      read[Handshake.In](str) {
+                        case cp @ Handshake.In.Crententials(info, member) =>
                           assemblies
                             .withAssemblyInfo(info) { asm =>
                               for
@@ -117,85 +222,58 @@ object Connection:
                                   Challenged(asm, member, challenge, storedIdentityProof)
                                 )
                                 _ <- sendHandshake(
-                                  Handshake.Challenge(challenge, storedIdentityProof.isEmpty)
+                                  Handshake.Out.Challenge(challenge, storedIdentityProof.isEmpty)
                                 )
                               yield ()
                             }
-                            .handleError(e => onClose(s"No Assembly or wrong secret for ${e}"))
+                            .handleError(e => exitOnError(s"$e"))
                         case h =>
-                          val msg = s"Protocol Error: wrong message ${h}"
-                          sendHandshake(Handshake.Error(msg, true)) *> onClose(msg)
+                          exitOnError(s"Protocol Error: wrong message ${h}")
                       }
 
                     case Challenged(assembly, member, challenge, storedIdentityProof) =>
-                      log(s"Received response from ${member}: ${t.str}") *>
-                        read[Handshake]("challenged")(str) {
-                          case cr: Handshake.ChallengeResponse =>
-                            cr.check(member, storedIdentityProof, challenge) match
-                              case Some(id) =>
-                                val handler = new Handler[F]:
-                                  def send(message: Assembly.Event): F[Unit] =
-                                    val json = message.asJson
-                                    log(
-                                      s"[${assembly.info.id}] Sending message to ${member}: ${json.spaces4}"
-                                    ) *>
-                                      queue.offer(
-                                        Some(WebSocketFrame.Text(message.asJson.noSpacesSortKeys))
-                                      )
-                                  def close(): F[Unit] =
-                                    status.set(Terminated()) *> queue.offer(None).attempt.void
+                      read[Handshake.In](str) {
+                        case cr: Handshake.In.ChallengeResponse =>
+                          cr.check(member, storedIdentityProof, challenge) match
+                            case Some(id) =>
+                              val handler = new Handler[F]:
+                                def send(message: Assembly.Event): F[Unit] =
+                                  sendMessage(message.asJson)
+                                def close(): F[Unit] =
+                                  closeConnection(true)
 
-                                for
-                                  _ <- status.set(Status.Established[F](assembly, member))
-                                  _ <-
-                                    (if storedIdentityProof.isEmpty
-                                     then
-                                       log(
-                                         s"[${challenge}]: storedIdentityProof=${storedIdentityProof}, registering!"
-                                       )
-                                       assembly
-                                         .registerMember(id)
-                                         .handleErrorWith(e =>
-                                           onClose(s"Member registration error ${e}")
-                                         )
-                                     else
-                                       log(
-                                         s"[${challenge}]: storedIdentityProof=${storedIdentityProof}, not registering!"
-                                       ) *> Async[F].pure(())
-                                    )
-                                  _ <- sendHandshake(Handshake.Established)
-                                  _ <- assembly
-                                    .memberChannel(member, handler)
-                                    .handleErrorWith(e => onClose(s"Member channel error ${e}"))
-                                yield ()
-                              case None =>
-                                onClose("Identity Proof did not pass check!")
+                              assembly
+                                .memberChannel(
+                                  member,
+                                  handler,
+                                  (st) =>
+                                    status.set(
+                                      Status.Established[F](assembly, member)
+                                    ) *> sendHandshake(Handshake.Out.Established(st)),
+                                  if storedIdentityProof.isEmpty then Some(id) else None
+                                )
+                                .handleErrorWith(logAndClose(_))
+                            case None =>
+                              exitOnError("Identity proof did not pass check")
 
-                          case h =>
-                            onClose(s"Protocol Error: wrong message ${h}")
-                        }
+                        case h =>
+                          exitOnError(s"Protocol Error: wrong message ${h}")
+                      }
 
                     case Established(assembly, member) =>
-                      log(s"Received event from ${member}: ${t.str}") *>
-                        read[Member.Event]("established")(str) { mfm =>
-                          for
-                            _ <- chronoEnd("Traitement du message")(start)
-                            a <- chrono(s"Event from member ${member} (${t.str})")(
-                              assembly.memberMessage(member, mfm)
-                            )
-                          yield a
-                        }
+                      read[Member.Event](str) { mfm =>
+                        assembly.memberMessage(member, mfm)
+                      }
                     case Terminated() =>
-                      Sync[F].pure(())
+                      conlog(Console.YELLOW)(s"Ignoring message: ${str}")
                   }
-                }
               }
           case Ping(s) =>
-            Async[F].delay(println(s"Recevied PING ${s}"))
+            conlog(Console.YELLOW)(s"Recevied PING ${s}")
           case Pong(s) =>
-            Async[F].delay(println(s"Recevied PONG ${s}"))
+            conlog(Console.YELLOW)(s"Recevied PONG ${s}")
           case d =>
-            onClose(s"Unsupported data ${d}")
+            exitOnError(s"Unsupported data ${d}")
         }
 
       val pings: fs2.Stream[F, WebSocketFrame] =
@@ -206,7 +284,7 @@ object Connection:
         }
 
       Connection[F](
-        onClose("Websocket closing!"),
+        closeConnection(false),
         send.mergeHaltL(pings),
         receive
       )

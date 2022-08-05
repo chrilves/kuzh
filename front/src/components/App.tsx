@@ -77,9 +77,10 @@ export default function App(props: {
       props.services.assemblyAPI,
       membership
     );
+
     props.refAppState.setAppState(
       AppState.seats(
-        { reset: () => assembly(membership), state: SeatState.assembly(asm) },
+        { reset: asm.restart, state: SeatState.assembly(asm) },
         props.refAppState.guests()
       )
     );
@@ -233,7 +234,7 @@ function AddGuest(props: AddGuestProps): JSX.Element {
     if (validInput()) {
       props.addGuest(nickname);
       setCounter(counter + 1);
-      setNickname(`Guest#${counter + 1}`);
+      setNickname(`${props.hostNickname}#${counter + 1}`);
     }
   }
 

@@ -103,9 +103,9 @@ object Random:
       arr
     }
 
-def log[F[_]: Sync](s: String): F[Unit] =
+def log[F[_]: Sync](color: String)(s: String): F[Unit] =
   Sync[F].delay(
-    println(s"${Console.GREEN}[${java.time.Instant.now()}] ${s}${Console.RESET}")
+    println(s"${color}[${java.time.Instant.now()}] ${s}${Console.RESET}\n")
   )
 
 def chrono[F[_]: Sync, A](name: String)(f: => F[A]): F[A] =

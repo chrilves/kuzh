@@ -1,6 +1,7 @@
 package chrilves.kuzh.back.models
 
 import cats.*
+import cats.data.{Kleisli, ReaderT}
 import cats.effect.*
 import cats.implicits.*
 import cats.syntax.eq.*
@@ -30,12 +31,12 @@ final class Assembly[F[_]] private (
     val info: assembly.Info,
     private val identityProofStore: IdentityProofStore[F],
     private val close: F[Unit],
-    private val mutex: Semaphore[F],
+    private val stateMutex: Semaphore[F],
     private val refChannels: Ref[F, immutable.Map[Member.Fingerprint, Connection.Handler[F]]],
     private val refAbsent: Ref[F, immutable.Map[Fingerprint, Instant]],
     private val refQuestions: Ref[F, List[String]],
     private val refStatus: Ref[F, Status[Nothing]]
-):
+)(using F: Async[F]):
   private final val minParticipants = 3;
   private final val absentSize      = 10;
 
@@ -43,261 +44,367 @@ final class Assembly[F[_]] private (
     identityProofStore.fetch(fp)
 
   /////////////////////////////////////////////////
-  //  State Info
+  //  Mutex Handling
 
-  private def state(member: Fingerprint)(using Sync[F]): F[State[Any]] =
-    for
-      present   <- refChannels.get.map(_.keySet)
-      absent    <- refAbsent.get
-      questions <- refQuestions.get
-      status    <- refStatus.get
-    yield State(
-      questions,
-      present = present,
-      absent = absent,
-      status match
-        case Harvesting(h, _) if !h.participants.contains(member) =>
-          Hidden
-        case _ =>
-          status
+  type Mutexed[A] = ReaderT[F, Boolean, A]
+
+  private inline def withMutex[A](f: => F[A]): Mutexed[A] =
+    Kleisli((alreadySecured) =>
+      if alreadySecured then f
+      else
+        for
+          _ <- Async[F].delay(println("############### ACQUIRE MUTEX ####################"))
+          a <- stateMutex.permit.surround(f)
+          _ <- Async[F].delay(println("~~~~~~~~~~~~~~~ RLEASE  MUTEX ~~~~~~~~~~~~~~~~~~~~"))
+        yield a
     )
 
-  private def participants(using Sync[F]): F[Set[Fingerprint]] =
-    refStatus.get.map(_.participants)
+  private inline def withMutexK[A](f: => Mutexed[A]): Mutexed[A] =
+    Kleisli((alreadySecured) =>
+      if alreadySecured
+      then f(true)
+      else
+        for
+          _ <- Async[F].delay(println("/////////////// ACQUIRE MUTEX ////////////////////"))
+          a <- stateMutex.permit.surround(f(true))
+          _ <- Async[F].delay(println("--------------- RLEASE  MUTEX --------------------"))
+        yield a
+    )
 
-  private def present(using Sync[F]): F[Set[Fingerprint]] =
-    refChannels.get.map(_.keySet)
+  private inline def liftM[A](f: => F[A]): Mutexed[A] =
+    Kleisli.liftF(f)
 
-  private inline def setAbsent(member: Fingerprint)(using Sync[F]): F[Instant] =
+  private inline def runWithMutex[A](f: Mutexed[A]): F[A] =
     for
-      i <- Sync[F].realTimeInstant
-      q <- refAbsent.modify { x =>
-        val absent = x.toList.sortBy(-_._2.toEpochMilli())
-        val keep   = absent.take(absentSize).toMap + (member -> i)
-        val remove = absent.drop(absentSize).map(_._1)
-        (keep, (i, remove))
+      _ <- Async[F].delay(println("=============== ACQUIRE RUN MUTEX ================"))
+      a <- f(false) // stateMutex.permit.surround(f(true))
+      _ <- Async[F].delay(println("_______________ RLEASE  RUN MUTEX ________________"))
+    yield a
+
+  private inline def getStatus: Mutexed[Status[Nothing]]          = liftM(refStatus.get)
+  private inline def setStatus(s: Status[Nothing]): Mutexed[Unit] = liftM(refStatus.set(s))
+
+  private inline def getConnections: Mutexed[immutable.Map[Fingerprint, Connection.Handler[F]]] =
+    liftM(refChannels.get)
+  private inline def setConnections(
+      c: immutable.Map[Fingerprint, Connection.Handler[F]]
+  ): Mutexed[Unit] = liftM(refChannels.set(c))
+
+  private inline def identityProofM(fp: Member.Fingerprint): Mutexed[Option[IdentityProof]] = liftM(
+    identityProofStore.fetch(fp)
+  )
+  private inline def storeIdentityProof(ip: IdentityProof): Mutexed[Unit] = liftM(
+    identityProofStore.store(ip)
+  )
+
+  /////////////////////////////////////////////////
+  //  State Info
+
+  private def state(member: Fingerprint, hidding: Boolean = true): Mutexed[State[Any]] =
+    withMutex {
+      for
+        present   <- refChannels.get.map(_.keySet)
+        absent    <- refAbsent.get
+        questions <- refQuestions.get
+        status    <- refStatus.get
+      yield State(
+        questions,
+        present = present,
+        absent = absent,
+        status match
+          case Harvesting(h, _) if !h.participants.contains(member) && hidding =>
+            Hidden
+          case _ =>
+            status
+      )
+    }
+
+  private def participants: Mutexed[Set[Fingerprint]] =
+    liftM(refStatus.get.map(_.participants))
+
+  private def present: Mutexed[Set[Fingerprint]] =
+    getConnections.map(_.keySet)
+
+  private inline def getAbsent: Mutexed[immutable.Map[Fingerprint, Instant]] = liftM(refAbsent.get)
+
+  private inline def setAbsent(member: Fingerprint): Mutexed[Instant] =
+    liftM {
+      for
+        i <- Sync[F].realTimeInstant
+        q <- refAbsent.modify { x =>
+          val absent = x.toList.sortBy(-_._2.toEpochMilli())
+          val keep   = absent.take(absentSize).toMap + (member -> i)
+          val remove = absent.drop(absentSize).map(_._1)
+          (keep, (i, remove))
+        }
+        _ <- q._2.traverse(identityProofStore.delete)
+      yield q._1
+    }
+
+  private inline def logState(name: String): Mutexed[Unit] =
+    withMutex {
+      state(Fingerprint.fromString(""), false)(true).flatMap { (st: State[Any]) =>
+        Async[F].delay {
+          println(
+            s"${Console.CYAN}[${Instant
+                .now()}] ${name}: state of assembly ${info.name}:${info.id} ${st.asJson.spaces4} ${Console.RESET}"
+          )
+        }
       }
-      _ <- q._2.traverse(identityProofStore.delete)
-    yield q._1
-
-  private inline def logState(name: String)(using Sync[F]): F[Unit] =
-
-    def log(s: String): F[Unit] =
-      Sync[F].delay(println(s"${Console.YELLOW}${s}${Console.RESET}"))
-
-    for
-      ps <- refChannels.get
-      _  <- log(s"=== [${name}] Presents ===")
-      _  <- ps.keys.toList.traverse(p => log(s"  - ${p}"))
-      qs <- refQuestions.get
-      _  <- log(s"=== [${name}] Questions ===")
-      _  <- qs.traverse(q => log(s"  - ${q}"))
-      _  <- log(s"=== [${name}] Status ===")
-      st <- refStatus.get
-      _  <- log(st.asJson.spaces4)
-      _  <- log(s"=== [${name}] END ===")
-    yield ()
+    }
 
   /////////////////////////////////////////////////
   //  Messages
 
-  private def sendMessage(to: Destination, event: Assembly.Event)(using Sync[F]): F[Unit] =
-    refChannels.get.flatMap { channels =>
-      to match
-        case Destination.All =>
-          channels.toSeq.traverse(kv => kv._2.send(event).attempt).void
-        case Destination.Selected(members) =>
-          members.toSeq.traverse { member =>
-            channels.get(member) match
-              case Some(handler) =>
-                handler.send(event).attempt.void
-              case _ =>
-                Sync[F].pure(())
-          }.void
-        case Destination.Filtered(f) =>
-          channels.filter(kv => f(kv._1)).toSeq.traverse(kv => kv._2.send(event).attempt).void
+  private def sendMessage(to: Destination, event: Assembly.Event): Mutexed[Unit] =
+    liftM {
+      refChannels.get.flatMap { channels =>
+        to match
+          case Destination.All =>
+            channels.toSeq.traverse(kv => kv._2.send(event).attempt).void
+          case Destination.Selected(members) =>
+            members.toSeq.traverse { member =>
+              channels.get(member) match
+                case Some(handler) =>
+                  handler.send(event).attempt.void
+                case _ =>
+                  Sync[F].pure(())
+            }.void
+          case Destination.Filtered(f) =>
+            channels.filter(kv => f(kv._1)).toSeq.traverse(kv => kv._2.send(event).attempt).void
+      }
     }
 
   /////////////////////////////////////////////////
   //  Status Manipulation
 
-  private def forcedWaiting(blocking: Option[Fingerprint])(using
-      Sync[F]
-  ): F[Status.Waiting] =
-    refStatus.get.flatMap {
-      case w @ Waiting(i, q, r) =>
-        blocking match
-          case Some(m) =>
-            val w2: Status.Waiting = Waiting(i, q, r + (m -> Member.Readiness.Blocking))
-            refStatus.set(w2) *> Sync[F].pure(w2)
-          case None =>
-            Sync[F].pure(w)
-      case Harvesting(h, _) =>
-        present.flatMap { members =>
-          val w2: Status.Waiting =
-            Waiting(
-              h.id,
-              h.question,
-              members.toList.map { m =>
-                m -> (
-                  if blocking.contains(m)
-                  then Member.Readiness.Blocking
-                  else if h.participants.contains(m)
-                  then Member.Readiness.Ready
-                  else Member.Readiness.Answering
-                )
-              }.toMap
-            )
-          refStatus.set(w2) *> Sync[F].pure(w2)
-        }
-    }
-
-  private def reduceStatus(using Sync[F]): F[Unit] =
-    refStatus.get.flatMap {
-      case Waiting(i, q, r) =>
-        Sync[F].whenA(r.size >= minParticipants && r.forall(_._2 === Member.Readiness.Ready)) {
-          refStatus.set {
-            val participants = r.keys.toSet
-            val harvest      = Harvest(i, q, participants)
-            Harvesting(harvest, Proposed(participants))
-          }
-        }
-      case Harvesting(h, Proposed(r)) =>
-        if h.participants.size < minParticipants
-        then forcedWaiting(None).void
-        else if r.isEmpty
-        then
-          val remaining = h.participants.toList
-          for
-            _ <- refStatus.set(Harvesting(h, Started(HarvestProtocol.Hashes(remaining))))
-            _ <- sendMessage(
-              Destination.Selected(Set(remaining.head)),
-              Assembly.Event.Protocol(HarvestProtocol.Event.Hash(Nil, remaining.tail))
-            )
-          yield ()
-        else Sync[F].pure(())
-      case Harvesting(h, Started(_)) =>
-        Sync[F].pure(())
-    }
-
-  private def reduceAndSync(participants: Set[Member.Fingerprint])(using
-      Sync[F]
-  ): F[Unit] =
-    for
-      before <- refStatus.get
-      _      <- reduceStatus
-      after  <- refStatus.get
-      _ <-
-        if participants.nonEmpty && after.isWaiting
-        then
-          sendMessage(
-            Destination.Filtered((x) => !participants.contains(x)),
-            Assembly.Event.Status(after)
-          )
-        else Sync[F].pure(())
-    yield ()
-
-  def registerMember(id: IdentityProof)(using Sync[F]): F[Unit] =
-    if id.isValid
-    then
-      mutex.permit.surround {
-        identityProofStore.fetch(id.fingerprint).flatMap {
-          case Some(id2) =>
-            if id === id2
-            then Sync[F].pure(())
-            else
-              Sync[F].raiseError(
-                new Exception("Trying to register another identity proof with same fingerprint")
-              )
-          case None =>
-            identityProofStore.store(id) *> setAbsent(id.fingerprint).void
-        } *> logState("registerMember")
-      }
-    else Sync[F].raiseError(new Exception("Trying to register an invalid identity proof"))
-
-  private def unsafeRemoveMember(member: Member.Fingerprint, error: Option[String])(using
-      Sync[F]
-  ): F[Unit] =
-    refChannels.modify(m => (m - member, m.get(member))).flatMap {
-      case Some(handler) =>
-        for
-          _ <- error.traverse(reason => handler.send(Assembly.Event.Error(reason, true)).attempt)
-          _ <- handler.close().attempt
-          i <- setAbsent(member)
-          _ <- sendMessage(
-            Destination.All,
-            Assembly.Event.Public(State.Event.MemberPresence(member, Member.Presence.Absent(i)))
-          )
-          _ <- refStatus.get.flatMap {
-            case Waiting(i, q, r) =>
-              refStatus.set(Waiting(i, q, r - member)) *> reduceStatus
-            case Harvesting(h, phase) if h.participants.contains(member) =>
-              val newParticipants = h.participants - member
-              val newHarvest      = h.copy(participants = newParticipants)
-
-              phase match
-                case Proposed(r) =>
-                  refStatus.set(Harvesting(newHarvest, Proposed(r - member))) *> reduceAndSync(
-                    newParticipants
+  private def forcedWaiting(blocking: Option[Fingerprint]): Mutexed[Status.Waiting] =
+    withMutex {
+      refStatus.get.flatMap {
+        case w @ Waiting(i, q, r) =>
+          blocking match
+            case Some(m) =>
+              val w2: Status.Waiting = Waiting(i, q, r + (m -> Member.Readiness.Blocking))
+              refStatus.set(w2) *> Sync[F].pure(w2)
+            case None =>
+              Sync[F].pure(w)
+        case Harvesting(h, _) =>
+          refChannels.get.flatMap { members =>
+            val w2: Status.Waiting =
+              Waiting(
+                h.id,
+                h.question,
+                members.keys.toList.map { m =>
+                  m -> (
+                    if blocking.contains(m)
+                    then Member.Readiness.Blocking
+                    else if h.participants.contains(m)
+                    then Member.Readiness.Ready
+                    else Member.Readiness.Answering
                   )
-                case Started(_) =>
-                  for
-                    _ <- refStatus.set(Harvesting(newHarvest, Started(HarvestProtocol.Hashes(Nil))))
-                    _ <- forcedWaiting(None)
-                    _ <- reduceAndSync(newParticipants)
-                  yield ()
-            case _ =>
-              Sync[F].pure(())
+                }.toMap
+              )
+            refStatus.set(w2) *> Sync[F].pure(w2)
           }
-        yield ()
-      case None =>
-        Sync[F].pure(())
+      }
     }
 
-  def removeMember(member: Member.Fingerprint, error: Option[String])(using Sync[F]): F[Unit] =
-    mutex.permit.surround {
+  private def reduceStatus: Mutexed[Unit] =
+    withMutexK {
+      getStatus.flatMap {
+        case Waiting(i, q, r) =>
+          Async[Mutexed].whenA(
+            r.size >= minParticipants && r.forall(_._2 === Member.Readiness.Ready)
+          ) {
+            setStatus {
+              val participants = r.keys.toSet
+              val harvest      = Harvest(i, q, participants)
+              Harvesting(harvest, Proposed(participants))
+            }
+          }
+        case Harvesting(h, Proposed(r)) =>
+          if h.participants.size < minParticipants
+          then forcedWaiting(None).void
+          else if r.isEmpty
+          then
+            val remaining = h.participants.toList
+            for
+              _ <- setStatus(Harvesting(h, Started(HarvestProtocol.Hashes(remaining))))
+              _ <- sendMessage(
+                Destination.Selected(Set(remaining.head)),
+                Assembly.Event.Protocol(HarvestProtocol.Event.Hash(Nil, remaining.tail))
+              )
+            yield ()
+          else Async[Mutexed].pure(())
+        case Harvesting(h, Started(_)) =>
+          Async[Mutexed].pure(())
+      }
+    }
+
+  private def reduceAndSync(participants: Set[Member.Fingerprint]): Mutexed[Unit] =
+    withMutexK {
       for
-        _        <- unsafeRemoveMember(member: Member.Fingerprint, error)
-        _        <- logState("removeMember")
-        channels <- refChannels.get
-        _        <- Sync[F].whenA(channels.isEmpty)(close)
+        before <- getStatus
+        _      <- reduceStatus
+        after  <- getStatus
+        _ <-
+          if participants.nonEmpty && after.isWaiting
+          then
+            sendMessage(
+              Destination.Filtered((x) => !participants.contains(x)),
+              Assembly.Event.Status(after)
+            )
+          else Async[Mutexed].pure(())
       yield ()
     }
 
+  private def registerMember(id: IdentityProof): Mutexed[Unit] =
+    if id.isValid
+    then
+      withMutexK {
+        liftM(identityProofStore.fetch(id.fingerprint)).flatMap {
+          case Some(id2) =>
+            if id === id2
+            then Async[Mutexed].pure(())
+            else
+              Async[Mutexed].raiseError(
+                new Exception("Trying to register another identity proof with same fingerprint")
+              )
+          case None =>
+            for
+              _ <- liftM(identityProofStore.store(id))
+              _ <- setAbsent(id.fingerprint)
+            yield ()
+        }
+      }
+    else Async[Mutexed].raiseError(new Exception("Trying to register an invalid identity proof"))
+
+  private def unsafeRemoveMember(member: Member.Fingerprint, error: Option[String]): Mutexed[Unit] =
+    withMutexK {
+      liftM(refChannels.modify(m => (m - member, m.get(member)))).flatMap {
+        case Some(handler) =>
+          for
+            _ <- logState("Before unsafe remove colose")
+            _ <- logM(Console.YELLOW)(s"[${member}] unsafe remove close")
+            _ <- liftM(handler.close().attempt.flatMap(s => log(Console.YELLOW)(s"ATTETMPS ${s}")))
+            _ <- logM(Console.YELLOW)(s"[${member}] set absent")
+            i <- setAbsent(member)
+            _ <- sendMessage(
+              Destination.All,
+              Assembly.Event.Public(State.Event.MemberPresence(member, Member.Presence.Absent(i)))
+            )
+            _ <- logState("Before unsafe remove status change")
+            _ <- logM(Console.YELLOW)(s"[${member}] unsafe remove status change")
+            _ <- getStatus.flatMap {
+              case Waiting(i, q, r) =>
+                for
+                  _ <- setStatus(Waiting(i, q, r - member))
+                  _ <- reduceStatus
+                yield ()
+              case Harvesting(h, phase) if h.participants.contains(member) =>
+                val newParticipants = h.participants - member
+                val newHarvest      = h.copy(participants = newParticipants)
+
+                phase match
+                  case Proposed(r) =>
+                    setStatus(Harvesting(newHarvest, Proposed(r - member))) *> reduceAndSync(
+                      newParticipants
+                    )
+                  case Started(_) =>
+                    for
+                      _ <- setStatus(Harvesting(newHarvest, Started(HarvestProtocol.Hashes(Nil))))
+                      _ <- forcedWaiting(None)
+                      _ <- reduceAndSync(newParticipants)
+                    yield ()
+              case _ =>
+                Async[Mutexed].pure(())
+            }
+          yield ()
+        case None =>
+          Async[Mutexed].pure(())
+      }
+    }
+
+  def removeMember(member: Member.Fingerprint, error: Option[String]): F[Unit] =
+    logState("Before before remove member")(true) *>
+      runWithMutex {
+        for
+          _        <- logState("Before remove member")
+          _        <- logM(Console.YELLOW)(s"RM [${member}] Removing")
+          _        <- unsafeRemoveMember(member: Member.Fingerprint, error)
+          _        <- logState("After unsafe removeMember")
+          channels <- getConnections
+          _        <- liftM(Async[F].whenA(channels.isEmpty)(close))
+        yield ()
+      }
+
+  def logM(color: String)(s: String): Mutexed[Unit] =
+    Async[Mutexed].delay(println(s"${color} $s${Console.RESET}"))
+
+  def log(color: String)(s: String): F[Unit] =
+    Async[F].delay(println(s"${color} $s${Console.RESET}"))
+
   def memberChannel(
       member: Member.Fingerprint,
-      handler: Connection.Handler[F]
-  )(using Sync[F]): F[Unit] =
-    mutex.permit.surround {
+      handler: Connection.Handler[F],
+      establish: State[Any] => F[Unit],
+      identityProof: Option[IdentityProof]
+  ): F[Unit] =
+    runWithMutex {
       for
+        _ <- logState("Before memberChannel")
+        _ <- logM(Console.YELLOW)(s"[${member}] Removing")
         _ <- unsafeRemoveMember(member, Some("Double Connection!"))
+        _ <- logState("After remove")
+        _ <- identityProof match
+          case Some(ip) =>
+            logM(Console.YELLOW)(s"[${member}] Register IP") *> registerMember(ip)
+          case None =>
+            logM(Console.YELLOW)(s"[${member}] NOT Register IP") *> Async[Mutexed].pure(())
+        _ <- liftM {
+          for
+            _  <- log(Console.YELLOW)(s"[${member}] Checking IP Presence")
+            ip <- identityProofStore.fetch(member)
+            _ <- Async[F].whenA(ip.isEmpty)(
+              log(Console.YELLOW)(s"[${member}] IP Absent") *>
+                Async[F].raiseError(new Exception("Identity Proof not provided!"))
+            )
+            _ <- log(Console.YELLOW)(s"[${member}] Alter channels")
+            _ <- refChannels.modify(m => (m + (member -> handler), ()))
+            _ <- log(Console.YELLOW)(s"[${member}] Alter absent")
+            _ <- refAbsent.modify(m => (m - member, ()))
+            _ <- log(Console.YELLOW)(s"[${member}] Alter Status")
+            _ <- refStatus.modify {
+              case Waiting(i, q, r) =>
+                (Waiting(i, q, r + (member -> Member.Readiness.Answering)), ())
+              case st =>
+                (st, ())
+            }
+          yield ()
+        }
+        _  <- logState("After state alter")
+        _  <- logM(Console.YELLOW)(s"[${member}] Fetching state")
+        st <- state(member)
+        _  <- logM(Console.YELLOW)(s"[${member}] Establishing")
+        _  <- liftM(establish(st))
+        _  <- logM(Console.YELLOW)(s"[${member}] Informing others")
         _ <- sendMessage(
           Destination.Filtered(_ =!= member),
           Assembly.Event.Public(State.Event.MemberPresence(member, Member.Presence.Present))
         )
-        _ <- refChannels.modify(m => (m + (member -> handler), ()))
-        _ <- refAbsent.modify(m => (m - member, ()))
-        _ <- refStatus.modify {
-          case Waiting(i, q, r) =>
-            (Waiting(i, q, r + (member -> Member.Readiness.Answering)), ())
-          case st =>
-            (st, ())
-        }
-        st <- state(member)
-        _  <- sendMessage(Destination.Selected(Set(member)), Assembly.Event.State(st))
-        _  <- logState("memberMessage")
+        _ <- logState("memberMessage")
       yield ()
     }
 
   def memberMessage(member: Member.Fingerprint, message: Member.Event)(using Sync[F]): F[Unit] =
     import Member.Event.*
     import chrilves.kuzh.back.lib.isSorted
-    mutex.permit.surround {
+    runWithMutex {
       message match
         case Member.Event.Blocking(b) =>
           memberBlocking(member, b)
         case AcceptHarvest =>
-          refStatus.get.flatMap {
+          getStatus.flatMap {
             case Harvesting(h, Proposed(r))
                 if h.participants.contains(member) && r.contains(member) =>
               for
@@ -305,14 +412,16 @@ final class Assembly[F[_]] private (
                   Destination.Selected(h.participants),
                   Assembly.Event.Harvesting(Harvest.Event.Accepted(member))
                 )
-                _ <- refStatus.set(Harvesting(h, Proposed(r - member)))
+                _ <- setStatus(Harvesting(h, Proposed(r - member)))
                 _ <- reduceStatus
               yield ()
             case _ =>
-              Sync[F].pure(println(s"Ingoring from member ${member} message ${message.toString}."))
+              Async[Mutexed].pure(
+                println(s"Ingoring from member ${member} message ${message.toString}.")
+              )
           }
         case HashNext(msgs) =>
-          refStatus.get.flatMap {
+          getStatus.flatMap {
             case Harvesting(h, Started(HarvestProtocol.Hashes(hd :: tl)))
                 if member === hd && tl.nonEmpty && msgs.isSorted =>
               for
@@ -325,28 +434,34 @@ final class Assembly[F[_]] private (
                     )
                   )
                 )
-                _ <- refStatus.set(Harvesting(h, Started(HarvestProtocol.Hashes(tl))))
+                _ <- setStatus(Harvesting(h, Started(HarvestProtocol.Hashes(tl))))
               yield ()
             case _ =>
-              Sync[F].pure(println(s"Ingoring from member ${member} message ${message.toString}."))
+              Async[Mutexed].pure(
+                println(s"Ingoring from member ${member} message ${message.toString}.")
+              )
           }
         case Hashes(hs) =>
-          refStatus.get.flatMap {
+          getStatus.flatMap {
             case Harvesting(h, Started(HarvestProtocol.Hashes(hd :: Nil))) if hd === member =>
               for
                 _ <- sendMessage(
                   Destination.Selected(h.participants),
                   Assembly.Event.Protocol(HarvestProtocol.Event.Validate(hs))
                 )
-                _ <- refStatus.set(
+                _ <- setStatus(
                   Harvesting(h, Started(HarvestProtocol.Verification(hs, immutable.Map.empty)))
                 )
               yield ()
             case _ =>
-              Sync[F].pure(println(s"Ingoring from member ${member} message ${message.toString}."))
+              Async[Mutexed].pure(
+                println(s"Ingoring from member ${member} message ${message.toString}.")
+              )
           }
         case Member.Event.Invalid =>
-          Sync[F].pure(println(s"Ingoring from member ${member} message ${message.toString}."))
+          Async[Mutexed].pure(
+            println(s"Ingoring from member ${member} message ${message.toString}.")
+          )
         case Member.Event.Vallid(sig) =>
           def verifOk(
               ipOpt: Option[IdentityProof],
@@ -368,8 +483,8 @@ final class Assembly[F[_]] private (
               case None =>
                 false
             }
-          this.identityProofStore.fetch(member).flatMap { ipOpt =>
-            refStatus.get.flatMap {
+          liftM(this.identityProofStore.fetch(member)).flatMap { ipOpt =>
+            getStatus.flatMap {
               case Harvesting(h, Started(HarvestProtocol.Verification(hs, sigs)))
                   if h.participants.contains(member) && !sigs
                     .contains(member) && verifOk(ipOpt, h, hs) =>
@@ -386,19 +501,18 @@ final class Assembly[F[_]] private (
                       Destination.Selected(Set(remaining.head)),
                       Assembly.Event.Protocol(HarvestProtocol.Event.Real(Nil, remaining.tail))
                     )
-                    _ <- refStatus.set(
+                    _ <- setStatus(
                       Harvesting(h, Started(HarvestProtocol.Reals(hs, sigs, remaining)))
                     )
                   yield ()
-                else
-                  refStatus.set(Harvesting(h, Started(HarvestProtocol.Verification(hs, newSigs))))
+                else setStatus(Harvesting(h, Started(HarvestProtocol.Verification(hs, newSigs))))
               case _ =>
-                Sync[F]
+                Async[Mutexed]
                   .pure(println(s"Ingoring from member ${member} message ${message.toString}."))
             }
           }
         case RealNext(msgs) =>
-          refStatus.get.flatMap {
+          getStatus.flatMap {
             case Harvesting(h, Started(HarvestProtocol.Reals(hs, s, hd :: tl))) =>
               for
                 _ <- sendMessage(
@@ -410,42 +524,50 @@ final class Assembly[F[_]] private (
                     )
                   )
                 )
-                _ <- refStatus.set(Harvesting(h, Started(HarvestProtocol.Reals(hs, s, tl))))
+                _ <- setStatus(Harvesting(h, Started(HarvestProtocol.Reals(hs, s, tl))))
               yield ()
             case _ =>
-              Sync[F].pure(println(s"Ingoring from member ${member} message ${message.toString}."))
+              Async[Mutexed].pure(
+                println(s"Ingoring from member ${member} message ${message.toString}.")
+              )
           }
         case Member.Event.Reals(r) =>
-          Sync[F].pure(println(s"Ingoring from member ${member} message ${message.toString}."))
-    } *> logState("memberMessage")
+          Async[Mutexed].pure(
+            println(s"Ingoring from member ${member} message ${message.toString}.")
+          )
+    } *> logState("memberMessage")(true)
 
-  private def memberBlocking(member: Member.Fingerprint, blocking: Member.Blockingness)(using
-      Sync[F]
-  ): F[Unit] =
-    refStatus.get.flatMap {
-      case Waiting(i, q, r) if r.get(member) =!= Some(blocking) =>
-        for
-          _ <- sendMessage(
-            Destination.All,
-            Assembly.Event.Public(State.Event.MemberBlocking(member, blocking))
-          )
-          _ <- refStatus.set(Waiting(i, q, r + (member -> blocking)))
-          _ <- reduceStatus
-        yield ()
-      case p @ Harvesting(h, Proposed(r))
-          if (blocking: Member.Readiness) === Member.Readiness.Blocking && h.participants.contains(
-            member
-          ) && r.contains(member) =>
-        for
-          _ <- sendMessage(
-            Destination.Selected(h.participants),
-            Assembly.Event.Public(State.Event.MemberBlocking(member, blocking))
-          )
-          _ <- forcedWaiting(Some(member))
-          _ <- reduceAndSync(h.participants)
-        yield ()
-      case _ =>
-        Sync[F].pure(())
+  private def memberBlocking(
+      member: Member.Fingerprint,
+      blocking: Member.Blockingness
+  ): Mutexed[Unit] =
+    withMutexK {
+      getStatus.flatMap {
+        case Waiting(i, q, r) if r.get(member) =!= Some(blocking) =>
+          for
+            _ <- sendMessage(
+              Destination.All,
+              Assembly.Event.Public(State.Event.MemberBlocking(member, blocking))
+            )
+            _ <- setStatus(Waiting(i, q, r + (member -> blocking)))
+            _ <- reduceStatus
+          yield ()
+        case p @ Harvesting(h, Proposed(r))
+            if (blocking: Member.Readiness) === Member.Readiness.Blocking && h.participants
+              .contains(
+                member
+              ) && r.contains(member) =>
+          for
+            _ <- sendMessage(
+              Destination.Selected(h.participants),
+              Assembly.Event.Public(State.Event.MemberBlocking(member, blocking))
+            )
+            _ <- forcedWaiting(Some(member))
+            _ <- reduceAndSync(h.participants)
+          yield ()
+        case _ =>
+          Async[Mutexed].pure(())
+      }
     }
 
 object Assembly:
@@ -478,7 +600,6 @@ object Assembly:
     case Filtered(f: Fingerprint => Boolean)
 
   enum Event:
-    case State(public: models.State[Any])
     case Status(status: models.Status[Any])
     case Public(public: models.State.Event)
     case Harvesting(harvesting: Harvest.Event)
@@ -489,11 +610,6 @@ object Assembly:
     given assemblyEventEncoder: Encoder[Event] with
       final def apply(i: Event): Json =
         i match
-          case State(p) =>
-            Json.obj(
-              "tag"   -> Json.fromString("state"),
-              "state" -> p.asJson
-            )
           case Status(status) =>
             Json.obj(
               "tag"    -> Json.fromString("status"),

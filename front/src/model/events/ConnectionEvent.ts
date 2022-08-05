@@ -1,3 +1,5 @@
+import { State } from "../assembly/State";
+
 export namespace ConnectionEvent {
   export type Opened = {
     readonly tag: "opened";
@@ -31,11 +33,15 @@ export namespace ConnectionEvent {
 
   export type Established = {
     readonly tag: "established";
+    readonly state: State;
   };
 
-  export const established: Established = {
-    tag: "established",
-  };
+  export function established(state: State): Established {
+    return {
+      tag: "established",
+      state: state,
+    };
+  }
 }
 
 export type ConnectionEvent =

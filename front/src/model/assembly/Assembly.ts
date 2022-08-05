@@ -164,6 +164,31 @@ export default class Assembly {
       }
     });
 
+  readonly restart = () =>
+    this.mutex.runExclusive(async () => {
+      if (this._runningStatus === "started") {
+        this._runningStatus = "stopping";
+        console.log(
+          `Stopping assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
+        );
+        if (this._connectionController) this._connectionController.close();
+        this._runningStatus = "stopped";
+      }
+
+      if (this._runningStatus === "stopped") {
+        this._runningStatus = "starting";
+        console.log(
+          `Starting assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
+        );
+        this._connectionController = await this._assemblyAPI.connect(
+          this.membership,
+          this.updateState,
+          this.updateConnection
+        );
+        this._runningStatus = "started";
+      }
+    });
+
   ////////////////////////////////////////
   // Getters
 
@@ -436,22 +461,6 @@ export default class Assembly {
   readonly updateState = (ev: AssemblyEvent) =>
     this.mutex.runExclusive(async () => {
       switch (ev.tag) {
-        case "state":
-          this._questions = ev.state.questions;
-          this._present = new Set(ev.state.present);
-          this._absent = new Map();
-          ev.state.absent.forEach((x) => {
-            this._absent.set(x.member, new Date(x.since));
-          });
-          this._status = ev.state.status;
-          if (ev.state.status.tag === "waiting")
-            this._harvestState = new HarvestState(
-              this.membership.me,
-              this.identityProofStore,
-              ev.state.status.id,
-              ev.state.status.question
-            );
-          break;
         case "status":
           this._status = ev.status;
           if (ev.status.tag === "waiting")
@@ -515,12 +524,29 @@ export default class Assembly {
       this.propagateState();
     });
 
-  readonly updateConnection = (event: ConnectionEvent) => {
+  readonly updateConnection = async (event: ConnectionEvent): Promise<void> => {
     switch (event.tag) {
       case "opened":
         this.propagateConnectionStatus("poignée de main en cours.");
         break;
       case "established":
+        await this.mutex.runExclusive(() => {
+          this._questions = event.state.questions;
+          this._present = new Set(event.state.present);
+          this._absent = new Map();
+          event.state.absent.forEach((x) => {
+            this._absent.set(x.member, new Date(x.since));
+          });
+          this._status = event.state.status;
+          if (event.state.status.tag === "waiting")
+            this._harvestState = new HarvestState(
+              this.membership.me,
+              this.identityProofStore,
+              event.state.status.id,
+              event.state.status.question
+            );
+        });
+        this.propagateState();
         this.propagateConnectionStatus("réussie");
         break;
       case "closed":

@@ -136,7 +136,10 @@ export class RealBackAPI implements BackAPI {
       updateConnection(ConnectionEvent.opened);
       socket.send(
         JSONNormalizedStringifyD(
-          Handshake.credentials(membership.assembly, membership.me.fingerprint)
+          Handshake.Out.credentials(
+            membership.assembly,
+            membership.me.fingerprint
+          )
         )
       );
     };
@@ -144,7 +147,7 @@ export class RealBackAPI implements BackAPI {
     socket.onmessage = async (msg: MessageEvent) => {
       switch (status) {
         case "handshake":
-          const message: Handshake = JSON.parse(msg.data);
+          const message: Handshake.In = JSON.parse(msg.data);
           switch (message.tag) {
             case "challenge":
               const response = await Handshake.replyToChallenge(
@@ -154,24 +157,6 @@ export class RealBackAPI implements BackAPI {
               socket.send(JSONNormalizedStringifyD(response));
               break;
 
-            case "challenge_response":
-              updateConnection(
-                ConnectionEvent.error(
-                  "Protocol Error: received challenge_response.",
-                  true
-                )
-              );
-              break;
-
-            case "credentials":
-              updateConnection(
-                ConnectionEvent.error(
-                  "Protocol Error: received credentials.",
-                  true
-                )
-              );
-              break;
-
             case "error":
               updateConnection(
                 ConnectionEvent.error(message.error, message.fatal)
@@ -179,7 +164,7 @@ export class RealBackAPI implements BackAPI {
               break;
 
             case "established":
-              updateConnection(ConnectionEvent.established);
+              updateConnection(ConnectionEvent.established(message.state));
               status = "established";
               break;
           }
