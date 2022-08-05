@@ -22,4 +22,6 @@ export namespace Parameters {
     JSONNormalizedStringifyD(minQuestionBallot).length;
   export const ballotAnswerSize: number =
     minRandomStringSize + JSONNormalizedStringifyD(minAnswerBallot).length;
+
+  export const ballotSaltSize = 9;
 }

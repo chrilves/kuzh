@@ -44,6 +44,11 @@ object Base64UrlEncoded:
     def apply(a: String): Array[Byte] =
       Base64.getUrlDecoder.decode(a)
 
+  inline given [A]: Encoder[Base64UrlEncoded]  = StringInstances.encoder
+  inline given [A]: Decoder[Base64UrlEncoded]  = StringInstances.decoder
+  inline given [A]: Eq[Base64UrlEncoded]       = StringInstances.eq
+  inline given [A]: Ordering[Base64UrlEncoded] = StringInstances.ordering
+
 opaque type Signature[+A] = String
 object Signature:
   inline def fromString[A](str: Base64UrlEncoded): Signature[A] = str

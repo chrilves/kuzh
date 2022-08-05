@@ -3,7 +3,7 @@ import { Fingerprint } from "../Crypto";
 export namespace ProtocolEvent {
   export type Hash = {
     readonly tag: "hash";
-    readonly previous: string;
+    readonly previous: string[];
     readonly remaining: Fingerprint[];
   };
 
@@ -14,7 +14,7 @@ export namespace ProtocolEvent {
 
   export type Real = {
     readonly tag: "real";
-    readonly previous: string;
+    readonly previous: string[];
     readonly remaining: Fingerprint[];
   };
 }

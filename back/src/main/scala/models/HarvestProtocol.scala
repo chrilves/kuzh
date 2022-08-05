@@ -35,10 +35,10 @@ object HarvestProtocol:
         )
 
   enum Event:
-    case Hash(previous: Option[Base64UrlEncoded], remaining: List[Member.Fingerprint])
+    case Hash(previous: List[Base64UrlEncoded], remaining: List[Member.Fingerprint])
     case Validate(hashes: List[Base64UrlEncoded])
     case Validity(signatures: Map[Member.Fingerprint, Signature[HarvestProtocol.Proof]])
-    case Real(previous: Option[Base64UrlEncoded], remaining: List[Member.Fingerprint])
+    case Real(previous: List[Base64UrlEncoded], remaining: List[Member.Fingerprint])
     case Result(ballots: List[Ballot])
 
   object Event:
@@ -48,7 +48,7 @@ object HarvestProtocol:
           case Hash(previous, remaining) =>
             Json.obj(
               "tag"       -> "hash".asJson,
-              "previous"  -> previous.map(_.asString).asJson,
+              "previous"  -> previous.map(_.asString).sorted.asJson,
               "remaining" -> remaining.asJson
             )
           case Validate(hashes) =>
@@ -69,7 +69,7 @@ object HarvestProtocol:
           case Real(previous, remaining) =>
             Json.obj(
               "tag"       -> "real".asJson,
-              "previous"  -> previous.map(_.asString).asJson,
+              "previous"  -> previous.map(_.asString).sorted.asJson,
               "remaining" -> remaining.asJson
             )
           case Result(ballots) =>

@@ -118,11 +118,11 @@ object Member:
   enum Event:
     case Blocking(blockingness: Blockingness)
     case AcceptHarvest
-    case HashNext(message: Base64UrlEncoded)
+    case HashNext(messages: List[Base64UrlEncoded])
     case Hashes(hashes: List[Base64UrlEncoded])
     case Invalid
     case Vallid(signature: Signature[HarvestProtocol.Proof])
-    case RealNext(message: Base64UrlEncoded)
+    case RealNext(message: List[Base64UrlEncoded])
     case Reals(reals: List[Ballot])
 
   object Event:
@@ -142,8 +142,8 @@ object Member:
           case "accept_harvest" =>
             pure(AcceptHarvest)
           case "hash_next" =>
-            for hashNext <- c.downField("message").as[String]
-            yield HashNext(Base64UrlEncoded.unsafeFromString(hashNext))
+            for hashNext <- c.downField("message").as[List[String]]
+            yield HashNext(hashNext.map(Base64UrlEncoded.unsafeFromString(_)))
           case "hashes" =>
             for l <- c.downField("hashes").as[List[String]]
             yield Hashes(l.sorted.map(Base64UrlEncoded.unsafeFromString(_)))
@@ -153,8 +153,8 @@ object Member:
             for v <- c.downField("signature").as[Signature[HarvestProtocol.Proof]]
             yield Vallid(v)
           case "real_next" =>
-            for r <- c.downField("message").as[String]
-            yield RealNext(Base64UrlEncoded.unsafeFromString(r))
+            for r <- c.downField("message").as[List[String]]
+            yield RealNext(r.map(Base64UrlEncoded.unsafeFromString(_)))
           case "reals" =>
             for r <- c.downField("reals").as[List[Ballot]]
             yield Reals(r)

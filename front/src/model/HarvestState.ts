@@ -1,9 +1,11 @@
 import { JSONNormalizedStringifyD } from "../lib/JSONNormalizedStringify";
 import { IdentityProofStore } from "../services/IdentityProofStore";
 import { Ballot } from "./Ballot";
-import { CryptoUtils, Me, Signature } from "./Crypto";
+import { CryptoUtils, Fingerprint, Me, Signature } from "./Crypto";
 import { Harvest } from "./assembly/Harvest";
 import { MemberSignature } from "./Member";
+import { isDistinct, isOrdered } from "../lib/Utils";
+import { Base64URL } from "../lib/Base64URL";
 
 export type Proof = {
   harvest: Harvest;
@@ -68,12 +70,13 @@ export class HarvestState {
 
     if (
       (harvest.question !== null && this._ballot.tag === "question") ||
-      (harvest.question === null && this._ballot.tag === "answer")
+      (harvest.question === null && this._ballot.tag === "answer") ||
+      !isDistinct(harvest.participants)
     )
       throw new Error(`Bad harvest`);
 
     if (
-      this._harvest === null &&
+      this._hashes === null &&
       harvest.id === this.id &&
       harvest.question === this.question
     )
@@ -81,7 +84,68 @@ export class HarvestState {
     else throw new Error("Wrong harvest!");
   };
 
-  readonly setHashes = async (hashes: string[]): Promise<void> => {
+  readonly myHash = async (): Promise<string> => {
+    if (this._ballot === null)
+      throw new Error("Trying to get a hash without a ballot!");
+
+    if (this._harvest === null)
+      throw new Error("Trying to get a hash with no harvest!");
+
+    if (this._hashes !== null)
+      throw new Error("Trying to get a hash after hashes!");
+
+    return Base64URL.getInstance().encode(await CryptoUtils.hash(this._ballot));
+  };
+
+  readonly nextHash = async (
+    previous: string[],
+    remaining: Fingerprint[]
+  ): Promise<string[]> => {
+    if (this._ballot === null)
+      throw new Error("Trying to give my hash without a ballot!");
+
+    if (this._harvest === null)
+      throw new Error("Trying to give my hash with no harvest!");
+
+    if (this._hashes !== null)
+      throw new Error("Trying to give my hash after hashes!");
+
+    if (!isOrdered(previous))
+      throw new Error("The previous list is nor ordered!");
+
+    if (!isDistinct(remaining))
+      throw new Error("nextHash: remaining is not distinct!");
+
+    if (
+      previous.length + remaining.length + 1 !==
+      this._harvest.participants.length
+    )
+      throw new Error("nextHash: sizes don't match!");
+
+    for (const m of remaining)
+      if (this._harvest.participants.findIndex((x) => x === m) === -1)
+        throw new Error(`nextHash: member ${m} not a participant!`);
+
+    let previousHashes: string[] = [];
+    for (const p of previous) {
+      const clear = await this.me.decryptBallot(p);
+      previousHashes.push(clear);
+    }
+
+    let ballotHash = await CryptoUtils.hash(this._ballot);
+    const l = Array.from(remaining);
+    l.reverse();
+    for (const m of l) {
+      const ip = await this.identityProofStore.fetch(m);
+      ballotHash = await ip.encryptBallot(ballotHash);
+    }
+
+    previousHashes.push(Base64URL.getInstance().encode(ballotHash));
+    previousHashes.sort();
+    return previousHashes;
+  };
+
+  readonly setHashes = async (hashes: string[]): Promise<Signature> => {
     if (this._hashes !== null) throw new Error("Hashes already set!");
 
     if (this._ballot === null)
@@ -93,12 +157,14 @@ export class HarvestState {
     if (this._harvest.participants.length !== hashes.length)
       throw new Error("Trying to set hashes, but the sizes don't match!");
 
-    const myHash = await CryptoUtils.hash(this._ballot);
+    const hash = await this.myHash();
 
-    if (hashes.findIndex((x) => x === myHash) === -1)
+    if (hashes.findIndex((x) => x === hash) === -1)
       throw new Error("Trying to set hashes, but my hash is not in it!");
 
     this._hashes = hashes;
+
+    return await this.myValidation();
   };
 
   private readonly proof = async (): Promise<string> => {
@@ -116,9 +182,8 @@ export class HarvestState {
     return JSONNormalizedStringifyD(proof);
   };
 
-  readonly myValidation = async (hashes: string[]): Promise<Signature> => {
-    return await this.me.signB64(new TextEncoder().encode(await this.proof()));
-  };
+  readonly myValidation = async (): Promise<Signature> =>
+    await this.me.signB64(new TextEncoder().encode(await this.proof()));
 
   readonly setValidations = async (
     validations: MemberSignature[]

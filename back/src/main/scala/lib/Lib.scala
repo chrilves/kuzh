@@ -130,3 +130,11 @@ def chronoEnd[F[_]: Sync, A](name: String)(start: Instant): F[Unit] =
       )
     )
   yield ()
+
+extension [A: Ordering](l: List[A])
+  @tailrec def isSorted: Boolean =
+    import math.Ordering.Implicits.infixOrderingOps
+    l match
+      case Nil              => true
+      case hd :: Nil        => true
+      case hd1 :: hd2 :: tl => (hd1 <= hd2) && (hd2 :: tl).isSorted

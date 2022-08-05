@@ -20,9 +20,7 @@ export default function App(props: {
   services: Services;
   refAppState: RefAppState;
 }): JSX.Element {
-  const [appState, setAppState] = useState<AppState>(
-    props.refAppState.appState
-  );
+  const [_, setAppState] = useState<AppState>(props.refAppState.appState);
   const navigate = useNavigate();
 
   useEffect(() => {

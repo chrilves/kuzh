@@ -172,7 +172,7 @@ final class Assembly[F[_]] private (
             _ <- refStatus.set(Harvesting(h, Started(HarvestProtocol.Hashes(remaining))))
             _ <- sendMessage(
               Destination.Selected(Set(remaining.head)),
-              Assembly.Event.Protocol(HarvestProtocol.Event.Hash(None, remaining.tail))
+              Assembly.Event.Protocol(HarvestProtocol.Event.Hash(Nil, remaining.tail))
             )
           yield ()
         else Sync[F].pure(())
@@ -289,9 +289,9 @@ final class Assembly[F[_]] private (
       yield ()
     }
 
-
   def memberMessage(member: Member.Fingerprint, message: Member.Event)(using Sync[F]): F[Unit] =
     import Member.Event.*
+    import chrilves.kuzh.back.lib.isSorted
     mutex.permit.surround {
       message match
         case Member.Event.Blocking(b) =>
@@ -309,18 +309,18 @@ final class Assembly[F[_]] private (
                 _ <- reduceStatus
               yield ()
             case _ =>
-              Sync[F].pure(())
+              Sync[F].pure(println(s"Ingoring from member ${member} message ${message.toString}."))
           }
-        case HashNext(msg) =>
+        case HashNext(msgs) =>
           refStatus.get.flatMap {
             case Harvesting(h, Started(HarvestProtocol.Hashes(hd :: tl)))
-                if member === hd && tl.nonEmpty =>
+                if member === hd && tl.nonEmpty && msgs.isSorted =>
               for
                 _ <- sendMessage(
                   Destination.Selected(Set(tl.head)),
                   Assembly.Event.Protocol(
                     HarvestProtocol.Event.Hash(
-                      Some(msg),
+                      msgs,
                       tl.tail
                     )
                   )
@@ -328,7 +328,7 @@ final class Assembly[F[_]] private (
                 _ <- refStatus.set(Harvesting(h, Started(HarvestProtocol.Hashes(tl))))
               yield ()
             case _ =>
-              Sync[F].pure(())
+              Sync[F].pure(println(s"Ingoring from member ${member} message ${message.toString}."))
           }
         case Hashes(hs) =>
           refStatus.get.flatMap {
@@ -343,10 +343,10 @@ final class Assembly[F[_]] private (
                 )
               yield ()
             case _ =>
-              Sync[F].pure(())
+              Sync[F].pure(println(s"Ingoring from member ${member} message ${message.toString}."))
           }
         case Member.Event.Invalid =>
-          Sync[F].pure(())
+          Sync[F].pure(println(s"Ingoring from member ${member} message ${message.toString}."))
         case Member.Event.Vallid(sig) =>
           def verifOk(
               ipOpt: Option[IdentityProof],
@@ -384,7 +384,7 @@ final class Assembly[F[_]] private (
                     )
                     _ <- sendMessage(
                       Destination.Selected(Set(remaining.head)),
-                      Assembly.Event.Protocol(HarvestProtocol.Event.Real(None, remaining.tail))
+                      Assembly.Event.Protocol(HarvestProtocol.Event.Real(Nil, remaining.tail))
                     )
                     _ <- refStatus.set(
                       Harvesting(h, Started(HarvestProtocol.Reals(hs, sigs, remaining)))
@@ -393,10 +393,11 @@ final class Assembly[F[_]] private (
                 else
                   refStatus.set(Harvesting(h, Started(HarvestProtocol.Verification(hs, newSigs))))
               case _ =>
-                Sync[F].pure(())
+                Sync[F]
+                  .pure(println(s"Ingoring from member ${member} message ${message.toString}."))
             }
           }
-        case RealNext(msg) =>
+        case RealNext(msgs) =>
           refStatus.get.flatMap {
             case Harvesting(h, Started(HarvestProtocol.Reals(hs, s, hd :: tl))) =>
               for
@@ -404,7 +405,7 @@ final class Assembly[F[_]] private (
                   Destination.Selected(Set(hd)),
                   Assembly.Event.Protocol(
                     HarvestProtocol.Event.Real(
-                      Some(msg),
+                      msgs,
                       tl
                     )
                   )
@@ -412,10 +413,10 @@ final class Assembly[F[_]] private (
                 _ <- refStatus.set(Harvesting(h, Started(HarvestProtocol.Reals(hs, s, tl))))
               yield ()
             case _ =>
-              Sync[F].pure(())
+              Sync[F].pure(println(s"Ingoring from member ${member} message ${message.toString}."))
           }
         case Member.Event.Reals(r) =>
-          Sync[F].pure(())
+          Sync[F].pure(println(s"Ingoring from member ${member} message ${message.toString}."))
     } *> logState("memberMessage")
 
   private def memberBlocking(member: Member.Fingerprint, blocking: Member.Blockingness)(using
@@ -446,7 +447,6 @@ final class Assembly[F[_]] private (
       case _ =>
         Sync[F].pure(())
     }
-
 
 object Assembly:
   def make[F[_]: Async](

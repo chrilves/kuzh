@@ -2,11 +2,15 @@ import { Base64URL } from "../lib/Base64URL";
 import { JSONNormalizedStringifyD } from "../lib/JSONNormalizedStringify";
 import { Pair, PairNS } from "../lib/Pair";
 import { AssemblyInfo } from "./assembly/AssembyInfo";
+import { Parameters } from "./Parameters";
 
 namespace CryptoConfig {
   export const hash = "SHA-256";
 
   export const encryptAlg = "RSA-OAEP-256";
+
+  export const encryptionAlgorithm = "RSA-OAEP";
+  export const singingAlgorithm = "RSA-PSS";
 
   export const rsaPssParams: RsaPssParams = {
     name: "RSA-PSS",
@@ -28,14 +32,14 @@ export type Name = string;
 export type Signature = string;
 
 export namespace CryptoUtils {
-  export async function hash(obj: any): Promise<string> {
+  export async function hash(obj: any): Promise<Uint8Array> {
     const serial = JSONNormalizedStringifyD(obj);
     const te = new TextEncoder();
     const hashArray = await window.crypto.subtle.digest(
       CryptoConfig.hash,
       te.encode(serial)
     );
-    return Base64URL.getInstance().encode(new Uint8Array(hashArray));
+    return new Uint8Array(hashArray);
   }
 
   export function randomString(length: number): string {
@@ -57,12 +61,15 @@ export namespace Serial {
     return jwk;
   }
 
-  export async function importCryptoKey(key: JsonWebKey): Promise<CryptoKey> {
-    return await window.crypto.subtle.importKey(
+  export function importCryptoKey(key: JsonWebKey): Promise<CryptoKey> {
+    return window.crypto.subtle.importKey(
       "jwk",
       key,
       {
-        name: key.alg === CryptoConfig.encryptAlg ? "RSA-OAEP" : "RSA-PSS",
+        name:
+          key.alg === CryptoConfig.encryptAlg
+            ? CryptoConfig.encryptionAlgorithm
+            : CryptoConfig.singingAlgorithm,
         hash: CryptoConfig.hash,
       },
       true,
@@ -76,10 +83,8 @@ export namespace Serial {
     return JSONNormalizedStringifyD(await exportCryptoKey(key));
   }
 
-  export async function deSerializeCryptoKey(
-    key: SerializedKey
-  ): Promise<CryptoKey> {
-    return await importCryptoKey(JSON.parse(key));
+  export function deSerializeCryptoKey(key: SerializedKey): Promise<CryptoKey> {
+    return importCryptoKey(JSON.parse(key));
   }
 
   export async function fingerprint(key: CryptoKey): Promise<Fingerprint> {
@@ -187,15 +192,22 @@ export class Me {
     return me;
   }
 
-  readonly encrypt = async (message: BufferSource): Promise<ArrayBuffer> =>
-    await window.crypto.subtle.encrypt(
-      "RSA-OAEP",
+  readonly decrypt = (message: BufferSource): Promise<ArrayBuffer> =>
+    window.crypto.subtle.decrypt(
+      CryptoConfig.encryptionAlgorithm,
       this.encryptPair.private,
       message
     );
 
-  readonly sign = async (message: BufferSource): Promise<ArrayBuffer> =>
-    await window.crypto.subtle.sign(
+  readonly decryptBallot = async (encryptedBallot: string): Promise<string> => {
+    const arr = new Uint8Array(
+      await this.decrypt(Base64URL.getInstance().decode(encryptedBallot))
+    );
+    return Base64URL.getInstance().encode(arr.slice(Parameters.ballotSaltSize));
+  };
+
+  readonly sign = (message: BufferSource): Promise<ArrayBuffer> =>
+    window.crypto.subtle.sign(
       CryptoConfig.rsaPssParams,
       this.signPair.private,
       message
@@ -344,6 +356,22 @@ export class IdentityProof {
       Base64URL.getInstance().decode(sig),
       new TextEncoder().encode(message)
     );
+  };
+
+  readonly encryptArray = (message: BufferSource): Promise<ArrayBuffer> =>
+    window.crypto.subtle.encrypt(
+      CryptoConfig.encryptionAlgorithm,
+      this.encrypt.value,
+      message
+    );
+
+  readonly encryptBallot = async (ballot: Uint8Array): Promise<Uint8Array> => {
+    const salt = new Uint8Array(Parameters.ballotSaltSize);
+    window.crypto.getRandomValues(salt);
+    const salted = new Uint8Array(salt.byteLength + ballot.byteLength);
+    salted.set(salt, 0);
+    salted.set(ballot, salt.byteLength);
+    return new Uint8Array(await this.encryptArray(salted));
   };
 
   readonly toJson = async (): Promise<Serial.IdentityProof> => {

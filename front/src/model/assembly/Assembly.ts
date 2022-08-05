@@ -67,27 +67,25 @@ export default class Assembly {
     );
   }
 
-  private state = (): State => {
-    return {
-      questions: structuredClone(this._questions),
-      present: Array.from(this._present.values()),
-      absent: Array.from(this._absent.entries()).map(
-        (x): MemberAbsent => ({
-          member: x[0],
-          since: x[1].getTime(),
-        })
-      ),
-      status: structuredClone(this._status),
-    };
-  };
+  private readonly state = async (): Promise<State> => ({
+    questions: structuredClone(this._questions),
+    present: Array.from(this._present.values()),
+    absent: Array.from(this._absent.entries()).map(
+      (x): MemberAbsent => ({
+        member: x[0],
+        since: x[1].getTime(),
+      })
+    ),
+    status: structuredClone(this._status),
+  });
 
   /////////////////////////////////
   // Listerners
 
-  readonly addListener = (f: Listerner) => {
+  readonly addListener = async (f: Listerner) => {
     for (const g of this._listeners) if (f === g) return;
     this._listeners.push(f);
-    f.state(this.state());
+    f.state(await this.state());
   };
 
   readonly removeListener = (f: Listerner) => {
@@ -100,8 +98,8 @@ export default class Assembly {
     this._listeners = [];
   };
 
-  private readonly propagateState = () => {
-    const st = this.state();
+  private readonly propagateState = async () => {
+    const st = await this.state();
     for (const l of this._listeners) {
       try {
         l.state(st);
@@ -138,8 +136,8 @@ export default class Assembly {
 
   readonly runningStatus = (): RunningStatus => this._runningStatus;
 
-  readonly start = async () => {
-    return await this.mutex.runExclusive(async () => {
+  readonly start = () =>
+    this.mutex.runExclusive(async () => {
       if (this._runningStatus === "stopped") {
         this._runningStatus = "starting";
         console.log(
@@ -153,10 +151,9 @@ export default class Assembly {
         this._runningStatus = "started";
       }
     });
-  };
 
-  readonly stop = async () => {
-    return await this.mutex.runExclusive(async () => {
+  readonly stop = () =>
+    this.mutex.runExclusive(async () => {
       if (this._runningStatus === "started") {
         this._runningStatus = "stopping";
         console.log(
@@ -166,7 +163,6 @@ export default class Assembly {
         this._runningStatus = "stopped";
       }
     });
-  };
 
   ////////////////////////////////////////
   // Getters
@@ -177,41 +173,43 @@ export default class Assembly {
   ///////////////////////////////////////
   // Question Management
 
-  readonly myQuestion = (question: string | null) => {
-    switch (this._status.tag) {
-      case "waiting":
-        try {
-          this._harvestState.setBallot(Ballot.question(question));
-        } catch (e) {
-          this.propagateFailure(`${e}`);
-        }
-        this.send(MemberEvent.blocking("ready"));
-        break;
-      default:
-        throw new Error("Trying to choose when harvesting???");
-    }
-  };
+  readonly myQuestion = (question: string | null) =>
+    this.mutex.runExclusive(async () => {
+      switch (this._status.tag) {
+        case "waiting":
+          try {
+            this._harvestState.setBallot(Ballot.question(question));
+          } catch (e) {
+            this.propagateFailure(`${e}`);
+          }
+          this.send(MemberEvent.blocking("ready"));
+          break;
+        default:
+          throw new Error("Trying to choose when harvesting???");
+      }
+    });
 
-  readonly myAnswer = (answer: boolean) => {
-    switch (this._status.tag) {
-      case "waiting":
-        try {
-          this._harvestState.setBallot(Ballot.answer(answer));
-        } catch (e) {
-          this.propagateFailure(`${e}`);
-        }
-        this.send(MemberEvent.blocking("ready"));
-        break;
-      default:
-        throw new Error("Trying to choose when harvesting???");
-    }
-  };
+  readonly myAnswer = (answer: boolean) =>
+    this.mutex.runExclusive(async () => {
+      switch (this._status.tag) {
+        case "waiting":
+          try {
+            this._harvestState.setBallot(Ballot.answer(answer));
+          } catch (e) {
+            this.propagateFailure(`${e}`);
+          }
+          this.send(MemberEvent.blocking("ready"));
+          break;
+        default:
+          throw new Error("Trying to choose when harvesting???");
+      }
+    });
 
   readonly acceptHarvest = () => {
     this.send(MemberEvent.acceptHarvest);
   };
 
-  readonly canRefuse = (member: Fingerprint): boolean => {
+  private readonly canRefuse = (member: Fingerprint): boolean => {
     switch (this._status.tag) {
       case "harvesting":
         switch (this._status.phase.tag) {
@@ -231,28 +229,31 @@ export default class Assembly {
     }
   };
 
-  readonly log = (s: string) => {
+  private readonly log = (s: string) => {
     console.log(`[${this.membership.me.nickname}] ${s}`);
   };
 
-  readonly changeReadiness = (r: Member.Blockingness) => {
-    switch (this._status.tag) {
-      case "waiting":
-        const mr = this._status.ready.find(
-          (x) => x.member === this.membership.me.fingerprint
-        );
-        this.log(`Change readiness mr=${JSON.stringify(mr)}, r=${r}`);
-        if (mr !== undefined && mr.readiness !== r)
-          this.send(MemberEvent.blocking(r));
-        break;
-      case "harvesting":
-        if (r === "blocking" && this.canRefuse(this.membership.me.fingerprint))
-          this.send(MemberEvent.blocking("blocking"));
-        break;
-      default:
-        throw new Error("Trying to choose when harvesting???");
-    }
-  };
+  readonly changeReadiness = (r: Member.Blockingness) =>
+    this.mutex.runExclusive(async () => {
+      switch (this._status.tag) {
+        case "waiting":
+          const mr = this._status.ready.find(
+            (x) => x.member === this.membership.me.fingerprint
+          );
+          if (mr !== undefined && mr.readiness !== r)
+            this.send(MemberEvent.blocking(r));
+          break;
+        case "harvesting":
+          if (
+            r === "blocking" &&
+            this.canRefuse(this.membership.me.fingerprint)
+          )
+            this.send(MemberEvent.blocking("blocking"));
+          break;
+        default:
+          throw new Error("Trying to choose when harvesting???");
+      }
+    });
 
   readonly send = (event: MemberEvent) => {
     if (this._connectionController) this._connectionController.sendEvent(event);
@@ -296,6 +297,7 @@ export default class Assembly {
             question: this._status.question,
             participants: participants,
           };
+          this._harvestState.setHarvest(harvest);
           this._status = Status.harvesting(
             harvest,
             Phase.proposed(structuredClone(participants))
@@ -303,44 +305,34 @@ export default class Assembly {
         }
         break;
       case "harvesting":
-        switch (this._status.phase.tag) {
-          case "proposed":
-            if (
-              this._status.harvest.participants.length < this.minParticipants
-            ) {
-              const readiness: Map<Fingerprint, Member.Readiness> = new Map();
+        if (this._status.phase.tag === "proposed")
+          if (this._status.harvest.participants.length < this.minParticipants) {
+            const readiness: Map<Fingerprint, Member.Readiness> = new Map();
 
-              this._present.forEach((x) => {
-                readiness.set(x, "answering");
-              });
-              for (const m of this._status.harvest.participants)
-                readiness.set(m, "ready");
+            this._present.forEach((x) => {
+              readiness.set(x, "answering");
+            });
+            for (const m of this._status.harvest.participants)
+              readiness.set(m, "ready");
 
-              const ready: MemberReadiness[] = [];
-              readiness.forEach((v, k) =>
-                ready.push({
-                  member: k,
-                  readiness: v,
-                })
-              );
+            const ready: MemberReadiness[] = [];
+            readiness.forEach((v, k) =>
+              ready.push({
+                member: k,
+                readiness: v,
+              })
+            );
 
-              this._status = Status.waiting(
-                this._status.harvest.id,
-                this._status.harvest.question,
-                ready
-              );
-            } else if (this._status.phase.remaining.length === 0)
-              this._status = Status.harvesting(
-                this._status.harvest,
-                Phase.started
-              );
-            break;
-          case "started":
-            break;
-        }
-        break;
-      default:
-        break;
+            this._status = Status.waiting(
+              this._status.harvest.id,
+              this._status.harvest.question,
+              ready
+            );
+          } else if (this._status.phase.remaining.length === 0)
+            this._status = Status.harvesting(
+              this._status.harvest,
+              Phase.started
+            );
     }
   };
 
@@ -357,17 +349,14 @@ export default class Assembly {
         this._present.add(member);
         this._absent.delete(member);
 
-        switch (this._status.tag) {
-          case "waiting":
-            if (this._status.ready.findIndex((x) => x.member === member) === -1)
-              this._status.ready.push({
-                member: member,
-                readiness: "answering",
-              });
-            break;
-          default:
-            break;
-        }
+        if (
+          this._status.tag === "waiting" &&
+          this._status.ready.findIndex((x) => x.member === member) === -1
+        )
+          this._status.ready.push({
+            member: member,
+            readiness: "answering",
+          });
         break;
       case "absent":
         this._present.delete(member);
@@ -398,17 +387,8 @@ export default class Assembly {
                   );
                   this.reduceStatus();
                 }
-
-                break;
-              case "started":
-                break;
             }
-
-            break;
-          default:
-            break;
         }
-        break;
     }
   };
 
@@ -450,109 +430,90 @@ export default class Assembly {
             ready
           );
         }
-
-        break;
-      default:
-        break;
     }
   };
 
-  readonly updateState = (ev: AssemblyEvent) => {
-    switch (ev.tag) {
-      case "state":
-        this._questions = ev.state.questions;
-        this._present = new Set(ev.state.present);
-        this._absent = new Map();
-        ev.state.absent.forEach((x) => {
-          this._absent.set(x.member, new Date(x.since));
-        });
-        this._status = ev.state.status;
-        switch (ev.state.status.tag) {
-          case "waiting":
+  readonly updateState = (ev: AssemblyEvent) =>
+    this.mutex.runExclusive(async () => {
+      switch (ev.tag) {
+        case "state":
+          this._questions = ev.state.questions;
+          this._present = new Set(ev.state.present);
+          this._absent = new Map();
+          ev.state.absent.forEach((x) => {
+            this._absent.set(x.member, new Date(x.since));
+          });
+          this._status = ev.state.status;
+          if (ev.state.status.tag === "waiting")
             this._harvestState = new HarvestState(
               this.membership.me,
               this.identityProofStore,
               ev.state.status.id,
               ev.state.status.question
             );
-            break;
-          default:
-            break;
-        }
-        break;
-      case "status":
-        this._status = ev.status;
-        switch (ev.status.tag) {
-          case "waiting":
+          break;
+        case "status":
+          this._status = ev.status;
+          if (ev.status.tag === "waiting")
             this._harvestState = new HarvestState(
               this.membership.me,
               this.identityProofStore,
               ev.status.id,
               ev.status.question
             );
-            break;
-          default:
-            break;
-        }
-        break;
-      case "public":
-        const publicEvent: PublicEvent = ev.public;
-        switch (publicEvent.tag) {
-          case "question_done":
-            this.resetStatus(publicEvent.id, this._questions.slice(0, 1));
-            this._questions = this._questions.slice(1, undefined);
-            break;
-          case "new_questions":
-            this.resetStatus(publicEvent.id, publicEvent.questions.slice(0, 1));
-            this._questions = publicEvent.questions.slice(1, undefined);
-            break;
-          case "member_presence":
-            this.memberPresence(publicEvent.member, publicEvent.presence);
-            break;
-          case "member_blocking":
-            this.memberBlocking(publicEvent.member, publicEvent.blocking);
-            break;
-        }
-        break;
-      case "harvesting":
-        const harvestingEvent: HarvestingEvent = ev.harvesting;
-        switch (harvestingEvent.tag) {
-          case "accepted":
-            switch (this._status.tag) {
-              case "harvesting":
-                switch (this._status.phase.tag) {
-                  case "proposed":
-                    const idxRemaining = this._status.phase.remaining.findIndex(
-                      (x) => x === harvestingEvent.member
-                    );
-                    if (idxRemaining !== -1)
-                      this._status.phase.remaining.splice(idxRemaining, 1);
-                    this.reduceStatus();
-                    break;
-                  case "started":
-                    break;
-                }
-
-                break;
-              default:
-                break;
-            }
-            break;
-          default:
-            break;
-        }
-        break;
-      case "protocol":
-        const protocolEvent: ProtocolEvent = ev.protocol;
-        break;
-      case "error":
-        if (ev.fatal)
-          if (this._connectionController) this._connectionController.close();
-        this.propagateFailure(ev.error);
-        break;
-    }
-    this.propagateState();
-  };
+          break;
+        case "public":
+          const publicEvent: PublicEvent = ev.public;
+          switch (publicEvent.tag) {
+            case "question_done":
+              this.resetStatus(publicEvent.id, this._questions.slice(0, 1));
+              this._questions = this._questions.slice(1, undefined);
+              break;
+            case "new_questions":
+              this.resetStatus(
+                publicEvent.id,
+                publicEvent.questions.slice(0, 1)
+              );
+              this._questions = publicEvent.questions.slice(1, undefined);
+              break;
+            case "member_presence":
+              this.memberPresence(publicEvent.member, publicEvent.presence);
+              break;
+            case "member_blocking":
+              this.memberBlocking(publicEvent.member, publicEvent.blocking);
+              break;
+          }
+          break;
+        case "harvesting":
+          const harvestingEvent: HarvestingEvent = ev.harvesting;
+          switch (harvestingEvent.tag) {
+            case "accepted":
+              if (
+                this._status.tag === "harvesting" &&
+                this._status.phase.tag === "proposed"
+              ) {
+                const idxRemaining = this._status.phase.remaining.findIndex(
+                  (x) => x === harvestingEvent.member
+                );
+                if (idxRemaining !== -1)
+                  this._status.phase.remaining.splice(idxRemaining, 1);
+                this.reduceStatus();
+              }
+          }
+          break;
+        case "protocol":
+          const protocolEvent: ProtocolEvent = ev.protocol;
+          switch (protocolEvent.tag) {
+            case "hash":
+          }
+          break;
+        case "error":
+          if (ev.fatal)
+            if (this._connectionController) this._connectionController.close();
+          this.propagateFailure(ev.error);
+      }
+      this.propagateState();
+    });
 
   readonly updateConnection = (event: ConnectionEvent) => {
     switch (event.tag) {
