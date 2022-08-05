@@ -1,6 +1,5 @@
 import { Operation } from "./Operation";
 import * as AssemblyModel from "./assembly/Assembly";
-import { AppState, Stateful } from "./AppState";
 
 export namespace SeatState {
   export type Prepare = {
@@ -60,6 +59,6 @@ export type GuestSeat = {
 };
 
 export type Seat = {
-  readonly reset: Stateful<Promise<void>>;
+  readonly reset: () => Promise<void>;
   readonly state: SeatState;
 };

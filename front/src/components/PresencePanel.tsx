@@ -28,7 +28,7 @@ export default function PresencePanel(props: Props): JSX.Element {
   }
 
   props.absent.sort((x, y) => {
-    let n = compareNumber(x.since, y.since);
+    let n = compareNumber(y.since, x.since);
     if (n !== 0) return n;
     return compareString(x.member, y.member);
   });

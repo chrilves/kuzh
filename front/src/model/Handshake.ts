@@ -1,23 +1,21 @@
 import { Base64URL } from "../lib/Base64URL";
+import { AssemblyInfo } from "./assembly/AssembyInfo";
 import { Membership, Fingerprint, Serial } from "./Crypto";
 
 export namespace Handshake {
   export type Crententials = {
     readonly tag: "credentials";
-    readonly id: string;
-    readonly secret: string;
+    readonly assembly: AssemblyInfo;
     readonly member: Fingerprint;
   };
 
   export function credentials(
-    id: string,
-    secret: string,
+    assembly: AssemblyInfo,
     member: Fingerprint
   ): Crententials {
     return {
       tag: "credentials",
-      id: id,
-      secret: secret,
+      assembly: assembly,
       member: member,
     };
   }

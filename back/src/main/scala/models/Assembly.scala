@@ -29,13 +29,15 @@ import chrilves.kuzh.back.services.IdentityProofStore
 final class Assembly[F[_]] private (
     val info: assembly.Info,
     private val identityProofStore: IdentityProofStore[F],
+    private val close: F[Unit],
     private val mutex: Semaphore[F],
-    private val refChannels: Ref[F, immutable.Map[Member.Fingerprint, Assembly.Event => F[Unit]]],
+    private val refChannels: Ref[F, immutable.Map[Member.Fingerprint, Connection.Handler[F]]],
     private val refAbsent: Ref[F, immutable.Map[Fingerprint, Instant]],
     private val refQuestions: Ref[F, List[String]],
     private val refStatus: Ref[F, Status[Nothing]]
 ):
   private final val minParticipants = 3;
+  private final val absentSize      = 10;
 
   def identityProof(fp: Member.Fingerprint): F[Option[IdentityProof]] =
     identityProofStore.fetch(fp)
@@ -67,7 +69,16 @@ final class Assembly[F[_]] private (
     refChannels.get.map(_.keySet)
 
   private inline def setAbsent(member: Fingerprint)(using Sync[F]): F[Instant] =
-    Sync[F].realTimeInstant.flatMap { i => refAbsent.modify(x => (x + (member -> i), i)) }
+    for
+      i <- Sync[F].realTimeInstant
+      q <- refAbsent.modify { x =>
+        val absent = x.toList.sortBy(-_._2.toEpochMilli())
+        val keep   = absent.take(absentSize).toMap + (member -> i)
+        val remove = absent.drop(absentSize).map(_._1)
+        (keep, (i, remove))
+      }
+      _ <- q._2.traverse(identityProofStore.delete)
+    yield q._1
 
   private inline def logState(name: String)(using Sync[F]): F[Unit] =
 
@@ -94,17 +105,17 @@ final class Assembly[F[_]] private (
     refChannels.get.flatMap { channels =>
       to match
         case Destination.All =>
-          channels.toSeq.traverse(kv => kv._2(event).attempt).void
+          channels.toSeq.traverse(kv => kv._2.send(event).attempt).void
         case Destination.Selected(members) =>
           members.toSeq.traverse { member =>
             channels.get(member) match
               case Some(handler) =>
-                handler(event).attempt.void
+                handler.send(event).attempt.void
               case _ =>
                 Sync[F].pure(())
           }.void
         case Destination.Filtered(f) =>
-          channels.filter(kv => f(kv._1)).toSeq.traverse(kv => kv._2(event).attempt).void
+          channels.filter(kv => f(kv._1)).toSeq.traverse(kv => kv._2.send(event).attempt).void
     }
 
   /////////////////////////////////////////////////
@@ -204,16 +215,19 @@ final class Assembly[F[_]] private (
       }
     else Sync[F].raiseError(new Exception("Trying to register an invalid identity proof"))
 
-  private def unsafeRemoveMember(member: Member.Fingerprint)(using Sync[F]): F[Unit] =
+  private def unsafeRemoveMember(member: Member.Fingerprint, error: Option[String])(using
+      Sync[F]
+  ): F[Unit] =
     refChannels.modify(m => (m - member, m.get(member))).flatMap {
       case Some(handler) =>
         for
+          _ <- error.traverse(reason => handler.send(Assembly.Event.Error(reason, true)).attempt)
+          _ <- handler.close().attempt
           i <- setAbsent(member)
           _ <- sendMessage(
             Destination.All,
             Assembly.Event.Public(State.Event.MemberPresence(member, Member.Presence.Absent(i)))
           )
-          _ <- handler(Assembly.Event.Error("Removed member!", true)).attempt
           _ <- refStatus.get.flatMap {
             case Waiting(i, q, r) =>
               refStatus.set(Waiting(i, q, r - member)) *> reduceStatus
@@ -240,10 +254,41 @@ final class Assembly[F[_]] private (
         Sync[F].pure(())
     }
 
-  def removeMember(member: Member.Fingerprint)(using Sync[F]): F[Unit] =
+  def removeMember(member: Member.Fingerprint, error: Option[String])(using Sync[F]): F[Unit] =
     mutex.permit.surround {
-      unsafeRemoveMember(member: Member.Fingerprint) *> logState("removeMember")
+      for
+        _        <- unsafeRemoveMember(member: Member.Fingerprint, error)
+        _        <- logState("removeMember")
+        channels <- refChannels.get
+        _        <- Sync[F].whenA(channels.isEmpty)(close)
+      yield ()
     }
+
+  def memberChannel(
+      member: Member.Fingerprint,
+      handler: Connection.Handler[F]
+  )(using Sync[F]): F[Unit] =
+    mutex.permit.surround {
+      for
+        _ <- unsafeRemoveMember(member, Some("Double Connection!"))
+        _ <- sendMessage(
+          Destination.Filtered(_ =!= member),
+          Assembly.Event.Public(State.Event.MemberPresence(member, Member.Presence.Present))
+        )
+        _ <- refChannels.modify(m => (m + (member -> handler), ()))
+        _ <- refAbsent.modify(m => (m - member, ()))
+        _ <- refStatus.modify {
+          case Waiting(i, q, r) =>
+            (Waiting(i, q, r + (member -> Member.Readiness.Answering)), ())
+          case st =>
+            (st, ())
+        }
+        st <- state(member)
+        _  <- sendMessage(Destination.Selected(Set(member)), Assembly.Event.State(st))
+        _  <- logState("memberMessage")
+      yield ()
+    }
+
 
   def memberMessage(member: Member.Fingerprint, message: Member.Event)(using Sync[F]): F[Unit] =
     import Member.Event.*
@@ -402,39 +447,16 @@ final class Assembly[F[_]] private (
         Sync[F].pure(())
     }
 
-  def memberChannel(
-      member: Member.Fingerprint,
-      handler: Assembly.Event => F[Unit]
-  )(using Sync[F]): F[Unit] =
-    mutex.permit.surround {
-      for
-        _ <- unsafeRemoveMember(member)
-        _ <- sendMessage(
-          Destination.Filtered(_ =!= member),
-          Assembly.Event.Public(State.Event.MemberPresence(member, Member.Presence.Present))
-        )
-        _ <- refChannels.modify(m => (m + (member -> handler), ()))
-        _ <- refAbsent.modify(m => (m - member, ()))
-        _ <- refStatus.modify {
-          case Waiting(i, q, r) =>
-            (Waiting(i, q, r + (member -> Member.Readiness.Answering)), ())
-          case st =>
-            (st, ())
-        }
-        st <- state(member)
-        _  <- sendMessage(Destination.Selected(Set(member)), Assembly.Event.State(st))
-        _  <- logState("memberMessage")
-      yield ()
-    }
 
 object Assembly:
   def make[F[_]: Async](
       identityProofStore: IdentityProofStore[F],
-      info: assembly.Info
+      info: assembly.Info,
+      close: F[Unit]
   ): F[Assembly[F]] =
     for
       mutex       <- Semaphore[F](1)
-      refChannels <- Ref.of(immutable.Map.empty[Fingerprint, Assembly.Event => F[Unit]])
+      refChannels <- Ref.of(immutable.Map.empty[Fingerprint, Connection.Handler[F]])
       refAbsent   <- Ref.of(immutable.Map.empty[Fingerprint, Instant])
       refQuestons <- Ref.of(List.empty[String])
       status      <- Status.init
@@ -442,6 +464,7 @@ object Assembly:
     yield new Assembly(
       info,
       identityProofStore,
+      close,
       mutex,
       refChannels,
       refAbsent,

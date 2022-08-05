@@ -22,23 +22,6 @@ export namespace AppState {
       guests: guests,
     };
   }
-
-  export const guests: Stateful<GuestSeat[]> = (
-    appState: AppState,
-    setAppState: (st: AppState) => void
-  ) => {
-    switch (appState.tag) {
-      case "seats":
-        return appState.guests;
-      case "menu":
-        return [];
-    }
-  };
 }
 
 export type AppState = AppState.Menu | AppState.Seats;
-
-export type Stateful<A> = (
-  appState: AppState,
-  setAppState: (appState: AppState) => void
-) => A;

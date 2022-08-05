@@ -16,6 +16,8 @@ import {
 } from "./services/IdentityProofStore";
 import { StorageAPI, LocalStorageAPI } from "./services/StorageAPI";
 import { Services } from "./services/Services";
+import { AppState } from "./model/AppState";
+import { RefAppState } from "./model/RefAppState";
 //import reportWebVitals from './reportWebVitals';
 
 /////////////////////////////
@@ -41,10 +43,12 @@ const services: Services = {
   assemblyAPIFactory: assemblyAPIFactory,
 };
 
+const refAppState = new RefAppState(AppState.menu);
+
 root.render(
   <React.StrictMode>
     <BrowserRouter>
-      <App services={services} />
+      <App services={services} refAppState={refAppState} />
     </BrowserRouter>
   </React.StrictMode>
 );

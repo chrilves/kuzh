@@ -27,6 +27,11 @@ final case class Connection[F[_]](
 )
 
 object Connection:
+
+  trait Handler[F[_]]:
+    def send(event: Assembly.Event): F[Unit]
+    def close(): F[Unit]
+
   def connect[F[_]: Async](assemblies: AssemblyManagement[F]): F[Connection[F[_]]] =
     for
       pingNumber <- Ref.of[F, Long](Long.MinValue)
@@ -40,7 +45,7 @@ object Connection:
       def onClose(message: String): F[Unit] =
         import Status.*
         val terminate =
-          queue.offer(None).attempt.void
+          status.set(Terminated()) *> queue.offer(None).attempt.void
 
         Async[F].delay(println(s"=> Closing connection because of $message")) *>
           status.get.flatMap {
@@ -48,9 +53,11 @@ object Connection:
               sendHandshake(Handshake.Error(message, true)) *> terminate
             case Established(assembly, member) =>
               for
+                _ <- assembly.removeMember(member, Some(message)).attempt
                 _ <- terminate
-                _ <- assembly.removeMember(member).attempt
               yield ()
+            case Terminated() =>
+              Sync[F].pure(())
           }
 
       val send: fs2.Stream[F, WebSocketFrame] =
@@ -100,9 +107,9 @@ object Connection:
                   status.get.flatMap {
                     case Initial() =>
                       read[Handshake]("initial")(str) {
-                        case cp @ Handshake.Crententials(id, secret, member) =>
-                          assemblies.withAssembly(id, secret) {
-                            case Some(asm) =>
+                        case cp @ Handshake.Crententials(info, member) =>
+                          assemblies
+                            .withAssemblyInfo(info) { asm =>
                               for
                                 challenge           <- lib.Random.bytes(32)
                                 storedIdentityProof <- asm.identityProof(member)
@@ -113,9 +120,8 @@ object Connection:
                                   Handshake.Challenge(challenge, storedIdentityProof.isEmpty)
                                 )
                               yield ()
-                            case None =>
-                              onClose(s"No Assembly or wrong secret for ${cp}")
-                          }
+                            }
+                            .handleError(e => onClose(s"No Assembly or wrong secret for ${e}"))
                         case h =>
                           val msg = s"Protocol Error: wrong message ${h}"
                           sendHandshake(Handshake.Error(msg, true)) *> onClose(msg)
@@ -127,26 +133,36 @@ object Connection:
                           case cr: Handshake.ChallengeResponse =>
                             cr.check(member, storedIdentityProof, challenge) match
                               case Some(id) =>
-                                def handler(message: Assembly.Event): F[Unit] =
-                                  val json = message.asJson
-                                  log(
-                                    s"[${assembly.info.id}] Sending message to ${member}: ${json.spaces4}"
-                                  ) *>
-                                    queue.offer(
-                                      Some(WebSocketFrame.Text(message.asJson.noSpacesSortKeys))
-                                    )
+                                val handler = new Handler[F]:
+                                  def send(message: Assembly.Event): F[Unit] =
+                                    val json = message.asJson
+                                    log(
+                                      s"[${assembly.info.id}] Sending message to ${member}: ${json.spaces4}"
+                                    ) *>
+                                      queue.offer(
+                                        Some(WebSocketFrame.Text(message.asJson.noSpacesSortKeys))
+                                      )
+                                  def close(): F[Unit] =
+                                    status.set(Terminated()) *> queue.offer(None).attempt.void
 
                                 for
                                   _ <- status.set(Status.Established[F](assembly, member))
                                   _ <-
                                     (if storedIdentityProof.isEmpty
                                      then
+                                       log(
+                                         s"[${challenge}]: storedIdentityProof=${storedIdentityProof}, registering!"
+                                       )
                                        assembly
                                          .registerMember(id)
                                          .handleErrorWith(e =>
                                            onClose(s"Member registration error ${e}")
                                          )
-                                     else Async[F].pure(()))
+                                     else
+                                       log(
+                                         s"[${challenge}]: storedIdentityProof=${storedIdentityProof}, not registering!"
+                                       ) *> Async[F].pure(())
+                                    )
                                   _ <- sendHandshake(Handshake.Established)
                                   _ <- assembly
                                     .memberChannel(member, handler)
@@ -169,6 +185,8 @@ object Connection:
                             )
                           yield a
                         }
+                    case Terminated() =>
+                      Sync[F].pure(())
                   }
                 }
               }
@@ -204,4 +222,5 @@ object Connection:
     case Established[F[_]](
         assembly: Assembly[F],
         member: Member.Fingerprint
-    ) extends Status[F]
+    )                       extends Status[F]
+    case Terminated[F[_]]() extends Status[F]

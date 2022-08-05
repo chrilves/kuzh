@@ -136,11 +136,7 @@ export class RealBackAPI implements BackAPI {
       updateConnection(ConnectionEvent.opened);
       socket.send(
         JSONNormalizedStringifyD(
-          Handshake.credentials(
-            membership.assembly.id,
-            membership.assembly.secret,
-            membership.me.fingerprint
-          )
+          Handshake.credentials(membership.assembly, membership.me.fingerprint)
         )
       );
     };

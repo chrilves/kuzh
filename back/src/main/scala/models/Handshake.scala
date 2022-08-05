@@ -6,9 +6,10 @@ import cats.syntax.eq.*
 import cats.syntax.functor.*
 import java.util.*
 import chrilves.kuzh.back.lib.crypto.*
+import chrilves.kuzh.back.*
 
 enum Handshake:
-  case Crententials(id: assembly.Info.Id, secret: assembly.Info.Secret, member: Member.Fingerprint)
+  case Crententials(assembly: models.assembly.Info, member: Member.Fingerprint)
   case Challenge(challenge: Array[Byte], identityProofNeeded: Boolean)
   case ChallengeResponse(signature: Signature[Array[Byte]], identityProof: Option[IdentityProof])
   case Error(reason: String, fatal: Boolean)
@@ -40,11 +41,11 @@ object Handshake:
   given handshakeEncoder: Encoder[Handshake] with
     final def apply(h: Handshake): Json =
       h match
-        case Crententials(id, secret, member) =>
+        case Crententials(assembly, member) =>
           Json.obj(
-            "tag"    -> Json.fromString("credentials"),
-            "id"     -> id.asJson,
-            "secret" -> secret.asJson
+            "tag"      -> Json.fromString("credentials"),
+            "assembly" -> assembly.asJson,
+            "member"   -> member.asJson
           )
         case Challenge(challenge, identityProofNeeded) =>
           Json.obj(
@@ -73,10 +74,9 @@ object Handshake:
       c.downField("tag").as[String].flatMap {
         case "credentials" =>
           for
-            id     <- c.downField("id").as[assembly.Info.Id]
-            secret <- c.downField("secret").as[assembly.Info.Secret]
-            member <- c.downField("member").as[Member.Fingerprint]
-          yield Crententials(id, secret, member)
+            assembly <- c.downField("assembly").as[assembly.Info]
+            member   <- c.downField("member").as[Member.Fingerprint]
+          yield Crententials(assembly, member)
         case "challenge" =>
           for
             challenge <- c.downField("challenge").as[String].map(Base64.getUrlDecoder().decode)

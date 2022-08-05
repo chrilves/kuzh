@@ -24,6 +24,8 @@ final case class Info(
 )
 
 object Info:
+  given Eq[Info] = Eq.fromUniversalEquals
+
   opaque type Id = java.util.UUID
 
   object Id:
@@ -72,3 +74,12 @@ object Info:
       "name"   -> i.name.asJson,
       "secret" -> i.secret.asJson
     )
+
+  given assemblyInfoDecoder: Decoder[Info] with
+    final def apply(h: HCursor): Decoder.Result[Info] =
+      import Decoder.resultInstance.*
+      for
+        id     <- h.downField("id").as[Id]
+        name   <- h.downField("name").as[Name]
+        secret <- h.downField("secret").as[Secret]
+      yield Info(id, name, secret)
