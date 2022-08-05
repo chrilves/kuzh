@@ -171,7 +171,13 @@ export default function App(props: {
           const ipStore =
             props.refAppState.appState.host.state.assembly.identityProofStore;
           addGuestElem = (
-            <AddGuest addGuest={(n) => addGuest(info, n, ipStore)} />
+            <AddGuest
+              addGuest={(n) => addGuest(info, n, ipStore)}
+              hostNickname={
+                props.refAppState.appState.host.state.assembly.membership.me
+                  .nickname
+              }
+            />
           );
           break;
         default:
@@ -214,11 +220,14 @@ export default function App(props: {
 
 type AddGuestProps = {
   addGuest: (nickname: string) => Promise<void>;
+  hostNickname: string;
 };
 
 function AddGuest(props: AddGuestProps): JSX.Element {
   const [counter, setCounter] = useState<number>(1);
-  const [nickname, setNickname] = useState<string>(`Guest#${counter}`);
+  const [nickname, setNickname] = useState<string>(
+    `${props.hostNickname}#${counter}`
+  );
 
   function add() {
     if (validInput()) {
