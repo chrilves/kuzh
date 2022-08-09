@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
+import { French } from "../French";
 import Assembly, { ConnectionStatus } from "../model/assembly/Assembly";
 import { State } from "../model/assembly/State";
 import { Status } from "../model/assembly/Status";
+import { Fingerprint } from "../model/Crypto";
 import { HarvestResult } from "../model/HarvestResult";
+import { Question } from "../model/Question";
+import MemberList from "./MemberList";
 import MembershipPanel from "./MembershipPanel";
 import PresencePanel from "./PresencePanel";
 import StatusPanel from "./StatusPanel";
@@ -50,13 +54,17 @@ export default function AssemblyPage(props: Props): JSX.Element {
       <StatusPanel
         myFingerprint={props.assembly.membership.me.fingerprint}
         status={assemblyState.status}
-        sendAnswer={props.assembly.myAnswer}
+        sendOpenAnswer={props.assembly.myOpenAnswer}
+        sendClosedAnswer={props.assembly.myClosedAnswer}
         sendQuestion={props.assembly.myQuestion}
         acceptHarvest={props.assembly.acceptHarvest}
         changeReadiness={props.assembly.changeReadiness}
         name={props.assembly.name}
       />
-      <LastHarvestResult harvestResult={harvestResult} />
+      <LastHarvestResult
+        harvestResult={harvestResult}
+        name={props.assembly.name}
+      />
       <h3>Assemblée</h3>
       <NextQuestions questions={assemblyState.questions} />
       <PresencePanel
@@ -74,14 +82,16 @@ function ConnectionStatusPanel(props: { status: string }): JSX.Element {
   return <p>Connexion: {props.status}</p>;
 }
 
-function NextQuestions(props: { questions: string[] }): JSX.Element {
+function NextQuestions(props: { questions: Question[] }): JSX.Element {
   if (props.questions.length > 0) {
     return (
       <div>
         <h4>Prochaines questions:</h4>
         <ol>
           {props.questions.map((q, i) => (
-            <li key={i}>{q}</li>
+            <li key={i}>
+              ({French.questionKind(q.kind)}) {q.message}
+            </li>
           ))}
         </ol>
       </div>
@@ -93,6 +103,7 @@ function NextQuestions(props: { questions: string[] }): JSX.Element {
 
 function LastHarvestResult(props: {
   harvestResult: HarvestResult | null;
+  name: (member: Fingerprint) => Promise<string>;
 }): JSX.Element {
   const [hidden, setHidden] = useState(false);
 
@@ -112,19 +123,33 @@ function LastHarvestResult(props: {
               <p>Questions posées:</p>
               <ul>
                 {props.harvestResult.questions.map((q, i) => (
-                  <li key={i}>{q}</li>
+                  <li key={i}>
+                    ({French.questionKind(q.kind)}) {q.message}
+                  </li>
                 ))}
               </ul>
             </div>
           );
         break;
-      case "answer":
+      case "closed_answer":
         page = (
           <div>
-            <p>Ont répondu:</p>
+            <p>À la question "{props.harvestResult.question}", ont répondu:</p>
             <ul>
               <li>OUI: {props.harvestResult.yes}</li>
               <li>NON: {props.harvestResult.no}</li>
+            </ul>
+          </div>
+        );
+        break;
+      case "open_answer":
+        page = (
+          <div>
+            <p>Réponses à la question "{props.harvestResult.question}":</p>
+            <ul>
+              {props.harvestResult.answers.map((q, i) => (
+                <li key={i}>{q}</li>
+              ))}
             </ul>
           </div>
         );
@@ -139,7 +164,16 @@ function LastHarvestResult(props: {
           {hidden ? "Démasquer" : "Masquer"}
         </button>
       </h3>
-      {page}
+      {!hidden && (
+        <div>
+          {page}
+          <MemberList
+            title="Participant.e.s"
+            members={props.harvestResult.participants}
+            name={props.name}
+          />
+        </div>
+      )}
     </div>
   );
 }

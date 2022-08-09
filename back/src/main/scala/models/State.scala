@@ -13,12 +13,12 @@ import chrilves.kuzh.back.lib.crypto.*
 import java.time.Instant
 
 final case class State[+A](
-    questions: List[String],
+    questions: List[Question],
     present: Set[Member.Fingerprint],
     absent: Map[Member.Fingerprint, Instant],
     status: Status[A]
 ):
-  def question: Option[String] = questions.headOption
+  def question: Option[Question] = questions.headOption
 
 object State:
   def init[F[_]: Sync]: F[State[Unit]] = Sync[F].delay(
@@ -33,8 +33,8 @@ object State:
   given stateEncoder[A]: Encoder[State[A]] with
     final def apply(ps: State[A]): Json =
       Json.obj(
-        "questions" -> ps.questions.map(Json.fromString).asJson,
-        "present"   -> ps.present.toList.map(_.asJson).asJson,
+        "questions" -> ps.questions.asJson,
+        "present"   -> ps.present.toList.asJson,
         "absent" -> ps.absent.toList
           .map(kv =>
             Json.obj(
@@ -50,7 +50,7 @@ object State:
     case MemberPresence(member: Member.Fingerprint, presence: Member.Presence)
     case MemberBlocking(member: Member.Fingerprint, blocking: Member.Blockingness)
     case QuestionDone(id: UUID)
-    case NewQuestions(id: UUID, questions: List[String])
+    case NewQuestions(id: UUID, questions: List[Question])
 
   object Event:
     given AssemblyEventEncoder: Encoder[Event] with
@@ -58,24 +58,24 @@ object State:
         e match
           case MemberPresence(fp, p) =>
             Json.obj(
-              "tag"      -> Json.fromString("member_presence"),
+              "tag"      -> "member_presence".asJson,
               "member"   -> fp.asJson,
               "presence" -> p.asJson
             )
           case MemberBlocking(fp, b) =>
             Json.obj(
-              "tag"      -> Json.fromString("member_blocking"),
+              "tag"      -> "member_blocking".asJson,
               "member"   -> fp.asJson,
               "blocking" -> (b: Member.Readiness).asJson
             )
           case QuestionDone(id) =>
             Json.obj(
-              "tag" -> Json.fromString("question_done"),
-              "id"  -> Json.fromString(id.toString())
+              "tag" -> "question_done".asJson,
+              "id"  -> id.toString().asJson
             )
           case NewQuestions(id, ql) =>
             Json.obj(
-              "tag"       -> Json.fromString("new_questions"),
-              "id"        -> Json.fromString(id.toString()),
-              "questions" -> Json.fromValues(ql.map(Json.fromString))
+              "tag"       -> "new_questions".asJson,
+              "id"        -> id.toString().asJson,
+              "questions" -> ql.asJson
             )

@@ -17,7 +17,7 @@ import chrilves.kuzh.back.models.Member.Fingerprint
 
 final case class Harvest(
     id: UUID,
-    question: Option[String],
+    question: Option[Question],
     participants: immutable.Set[Fingerprint]
 )
 
@@ -36,7 +36,7 @@ object Harvest:
       import Decoder.resultInstance.*
       for
         id           <- c.downField("id").as[String].map(UUID.fromString)
-        question     <- c.downField("question").as[Option[String]]
+        question     <- c.downField("question").as[Option[Question]]
         participants <- c.downField("participants").as[List[Fingerprint]].map(_.toSet)
       yield Harvest(id, question, participants)
 

@@ -9,6 +9,7 @@ import { MemberEvent } from "../events/MemberEvent";
 import { HarvestResult } from "../HarvestResult";
 import { Member } from "../Member";
 import { Parameters } from "../Parameters";
+import { Question } from "../Question";
 import { SeatState } from "../SteatState";
 import { AssemblyState } from "./AssemblyState";
 import { State } from "./State";
@@ -211,9 +212,12 @@ export default class Assembly {
   /////////////////////////////////////////////////
   // Question Management
 
-  readonly myQuestion = (question: string | null) =>
+  readonly myQuestion = (question: Question | null) =>
     this.assemblyState.myQuestion(question);
-  readonly myAnswer = (answer: boolean) => this.assemblyState.myAnswer(answer);
+  readonly myClosedAnswer = (answer: boolean) =>
+    this.assemblyState.myClosedAnswer(answer);
+  readonly myOpenAnswer = (answer: string) =>
+    this.assemblyState.myOpenAnswer(answer);
   readonly changeReadiness = (r: Member.Blockingness) =>
     this.assemblyState.changeReadiness(r);
   readonly acceptHarvest = () => this.send(MemberEvent.accept);

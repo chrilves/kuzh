@@ -8,6 +8,7 @@ import { checkListEqual, isDistinct, isOrdered, sortJSON } from "../lib/Utils";
 import { Base64URL } from "../lib/Base64URL";
 import { HarvestResult } from "./HarvestResult";
 import { Listener } from "../lib/Listener";
+import { Question } from "./Question";
 
 export type Proof = {
   harvest: Harvest;
@@ -27,7 +28,7 @@ export class HarvestState {
   private readonly me: Me;
   private readonly identityProofStore: IdentityProofStore;
   private id: string;
-  private question: string | null;
+  private question: Question | null;
 
   private _ballot: Ballot | null = null;
   private _harvest: Harvest | null = null;
@@ -47,7 +48,7 @@ export class HarvestState {
     me: Me,
     identityProofStore: IdentityProofStore,
     id: string,
-    question: string | null
+    question: Question | null
   ) {
     this.me = me;
     this.identityProofStore = identityProofStore;
@@ -58,7 +59,7 @@ export class HarvestState {
   private readonly log = (s: string) =>
     console.log(`[${this.me.nickname}] ${s}`);
 
-  readonly reset = (id: string, question: string | null) => {
+  readonly reset = (id: string, question: Question | null) => {
     this._ballot = null;
     this.id = id;
     this.question = question;
@@ -97,12 +98,15 @@ export class HarvestState {
     if (this._ballot === null)
       throw new Error("Trying to set harvest with no ballot!");
 
-    if (
-      (harvest.question !== null && this._ballot.tag === "question") ||
-      (harvest.question === null && this._ballot.tag === "answer") ||
-      !isDistinct(harvest.participants)
-    )
-      throw new Error(`Bad harvest`);
+    if (this._ballot.tag !== Harvest.kind(harvest))
+      throw new Error(
+        `The havest type ${Harvest.kind(harvest)} and my ballot type ${
+          this._ballot.tag
+        } don't match!`
+      );
+
+    if (!isDistinct(harvest.participants))
+      throw new Error(`Duplicate participants detected.`);
 
     if (
       this._hashes === null &&
@@ -330,6 +334,11 @@ export class HarvestState {
   readonly verifyBallots = async (
     ballots: Ballot[]
   ): Promise<HarvestResult> => {
+    if (this._ballot === null)
+      throw new Error("Trying to verify results without my ballot!");
+
+    const expectedType = this._ballot.tag;
+
     if (this._harvest === null)
       throw new Error("Trying to verify results with no harvest!");
 
@@ -344,11 +353,8 @@ export class HarvestState {
         "Trying to verify results, ballots and participants numbers don't match!"
       );
 
-    const exprectedType: "question" | "answer" =
-      this.question === null ? "question" : "answer";
-
-    if (!ballots.every((x) => x.tag === exprectedType))
-      throw new Error(`Ballots not of the expected type ${exprectedType}`);
+    if (!ballots.every((x) => x.tag === expectedType))
+      throw new Error(`Ballots not of the expected type ${expectedType}`);
 
     if (ballots.length !== this._hashes.length)
       throw new Error(
@@ -373,7 +379,7 @@ export class HarvestState {
         )} are not the same!`
       );
 
-    switch (exprectedType) {
+    switch (expectedType) {
       case "question":
         let questions = [];
 
@@ -381,19 +387,49 @@ export class HarvestState {
           if (ballot.tag === "question" && ballot.question !== null)
             questions.push(ballot.question);
 
-        this.result = HarvestResult.questions(questions);
+        this.result = HarvestResult.questions(
+          this._harvest.participants,
+          questions
+        );
         break;
-      case "answer":
+      case "closed_answer":
+        if (this.question === null)
+          throw new Error(
+            "Expected closed answer with an harvest without a question."
+          );
+
         let yes = 0;
         let no = 0;
 
         for (const ballot of ballots) {
-          if (ballot.tag === "answer")
+          if (ballot.tag === "closed_answer")
             if (ballot.answer) yes += 1;
             else no += 1;
         }
 
-        this.result = HarvestResult.answer(yes, no);
+        this.result = HarvestResult.closedAnswer(
+          this._harvest.participants,
+          this.question.message,
+          yes,
+          no
+        );
+        break;
+      case "open_answer":
+        if (this.question === null)
+          throw new Error(
+            "Expected closed answer with an harvest without a question."
+          );
+
+        let answers = [];
+
+        for (const ballot of ballots)
+          if (ballot.tag === "open_answer") answers.push(ballot.answer);
+
+        this.result = HarvestResult.openAnswer(
+          this._harvest.participants,
+          this.question.message,
+          answers
+        );
     }
     this.resultListerner.propagate(this.result);
     this._ballots = ballots;

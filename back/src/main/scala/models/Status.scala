@@ -10,7 +10,7 @@ import chrilves.kuzh.back.models.*
 enum Status[+A]:
   case Waiting(
       id: UUID,
-      question: Option[String],
+      question: Option[Question],
       ready: immutable.Map[Member.Fingerprint, Member.Readiness]
   )                                               extends Status[Nothing]
   case Harvesting(harvest: Harvest, phase: Phase) extends Status[Nothing]

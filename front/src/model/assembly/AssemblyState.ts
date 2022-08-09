@@ -12,6 +12,7 @@ import { HarvestResult } from "../HarvestResult";
 import { HarvestState } from "../HarvestState";
 import { Member, MemberAbsent, MemberReadiness } from "../Member";
 import { Parameters } from "../Parameters";
+import { Question } from "../Question";
 import { Harvest } from "./Harvest";
 import { Phase } from "./Phase";
 import { State } from "./State";
@@ -25,7 +26,7 @@ export class AssemblyState {
 
   private mutex = new Mutex();
   private _harvestState: HarvestState;
-  private _questions: string[] = [];
+  private _questions: Question[] = [];
   private _present: Set<Fingerprint> = new Set();
   private _absent: Map<Fingerprint, Date> = new Map();
   private _status: Status = Status.waiting("", null, []);
@@ -73,7 +74,7 @@ export class AssemblyState {
   readonly harvestResultListener = (): Listener<HarvestResult | null> =>
     this._harvestState.resultListerner;
 
-  private readonly resetStatus = (id: string, qs: string[]) => {
+  private readonly resetStatus = (id: string, qs: Question[]) => {
     const question = qs.length > 0 ? qs[0] : null;
     this._harvestState.reset(id, question);
     this._status = Status.waiting(
@@ -399,7 +400,7 @@ export class AssemblyState {
   ///////////////////////////////////////
   // Question Management
 
-  readonly myQuestion = (question: string | null) =>
+  readonly myQuestion = (question: Question | null) =>
     this.failOnException(() => {
       switch (this._status.tag) {
         case "waiting":
@@ -411,11 +412,23 @@ export class AssemblyState {
       }
     });
 
-  readonly myAnswer = (answer: boolean) =>
+  readonly myClosedAnswer = (answer: boolean) =>
     this.failOnException(() => {
       switch (this._status.tag) {
         case "waiting":
-          this._harvestState.setBallot(Ballot.answer(answer));
+          this._harvestState.setBallot(Ballot.closedAnswer(answer));
+          this.send(MemberEvent.blocking("ready"));
+          break;
+        default:
+          throw new Error("Trying to choose when harvesting???");
+      }
+    });
+
+  readonly myOpenAnswer = (answer: string) =>
+    this.failOnException(() => {
+      switch (this._status.tag) {
+        case "waiting":
+          this._harvestState.setBallot(Ballot.openAnswer(answer));
           this.send(MemberEvent.blocking("ready"));
           break;
         default:

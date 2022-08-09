@@ -2,9 +2,9 @@
 
 **For now only available in french, sorry :(**
 
-[kuzh.cc](kuzh.cc) est une application de vote anonyme open-source, sous GPVv3, permettant à chaque participant.e
-de poser et répondre aux questions du groupe sans se dévoiler. Du moins autant que le permet la
-fiabilité du protocole de vote.
+[kuzh.cc](kuzh.cc) est une application de questions/réponses anonyme open-source, sous GPVv3,
+permettant à chaque participant.e de poser et répondre aux questions du groupe sans se dévoiler.
+Du moins autant que le permet la fiabilité du protocole de vote.
 
 Créer une assemblée est trivial. Il vous suffit d'entrer le nom que vous souhaitez lui donner
 et de choisir un pseudo. Vous pourrez ensuite inviter des membres dans l'assemblée via le lien
@@ -21,9 +21,10 @@ pas les risques, ne l'utilisez pas, ou encore mieux lisez le et vérifiez de sa 
 
 ## Le Protocole
 
-Il y a deux types de "vote", une récolte des questions que posent les membres,
+Il y a deux types de "vote" (3 si con compte les réponses ouvertes et fermées),
+une récolte des questions que posent les membres,
 et une récolte des réponses quand une question est posée.
-Le processus est exactement le même dans les deux cas.
+Le processus est exactement le même dans tous les cas.
 Dans la suite nous appellerons récolte la phase de collecte des questions/réponses
 et bulletin la question/réponse d'un membre.
 
@@ -95,3 +96,5 @@ Et encore une fois, les membres ont pu remplacer un bulletin par un autre lors d
 Bob envoie les bulletins en clair au serveur qui les diffuse à tous les membres. Chacun.e hash alors les bulletins qui viennent
 du serveur et vérifie que les hashs sont bien ceux collectés dans la phase précédente.
 Si les bulletins ont bien les bons hash, la récolte est donc correcte.
+
+# Amusez vous bien :)

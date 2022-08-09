@@ -1,4 +1,5 @@
 import { MemberReadiness } from "../Member";
+import { Question } from "../Question";
 import { Harvest } from "./Harvest";
 import { Phase } from "./Phase";
 
@@ -6,13 +7,13 @@ export namespace Status {
   export type Waiting = {
     readonly tag: "waiting";
     id: string;
-    question: string | null;
+    question: Question | null;
     ready: MemberReadiness[];
   };
 
   export function waiting(
     id: string,
-    question: string | null,
+    question: Question | null,
     ready: MemberReadiness[]
   ): Waiting {
     return {

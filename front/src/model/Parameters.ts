@@ -1,31 +1,16 @@
 import { JSONNormalizedStringifyD } from "../lib/JSONNormalizedStringify";
 import { Ballot } from "./Ballot";
+import { Question } from "./Question";
 
 export namespace Parameters {
   export const kuzhURL = "https://kuzh.cc/";
+  export const sourceURL = "https://github.com/chrilves/kuzh";
+
   export const reconnectDelay = 30000;
-  export const minParticipants = 3;
+  export const minParticipants = 0;
 
-  const minQuestionBallot: Ballot.Question = {
-    tag: "question",
-    question: "",
-    random: "",
-  };
-
-  const minAnswerBallot: Ballot.Answer = {
-    tag: "answer",
-    answer: false,
-    random: "",
-  };
-
-  export const maxQuestionSize: number = 300;
+  export const maxTextSize: number = 300;
   export const minRandomStringSize: number = 32;
-  export const ballotQuestionSize: number =
-    maxQuestionSize +
-    minRandomStringSize +
-    JSONNormalizedStringifyD(minQuestionBallot).length;
-  export const ballotAnswerSize: number =
-    minRandomStringSize + JSONNormalizedStringifyD(minAnswerBallot).length;
 
   export const saltSize = 16;
 }

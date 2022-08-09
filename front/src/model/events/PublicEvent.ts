@@ -1,5 +1,6 @@
 import { Member } from "../Member";
 import { Fingerprint } from "../Crypto";
+import { Question } from "../Question";
 
 export namespace PublicEvent {
   export type MemberPresence = {
@@ -17,7 +18,7 @@ export namespace PublicEvent {
   export type NewQuestions = {
     readonly tag: "new_questions";
     readonly id: string;
-    readonly questions: [string];
+    readonly questions: Question[];
   };
 
   export type QuestionDone = {

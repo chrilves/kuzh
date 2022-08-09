@@ -39,6 +39,11 @@ export default function ProposedPanel(props: Props): JSX.Element {
               Blocker la récolte.
             </button>
           </div>
+          <MemberList
+            title="Participant.e.s à la récolte"
+            members={props.harvest.participants}
+            name={props.name}
+          />
         </div>
       );
       break;
@@ -50,11 +55,6 @@ export default function ProposedPanel(props: Props): JSX.Element {
   return (
     <div>
       <h4>Tout le monde est prêt.e pour la récolte.</h4>
-      <MemberList
-        title="Participant.e.s à la récolte"
-        members={props.harvest.participants}
-        name={props.name}
-      />
       {page}
       <MemberList
         title="N'ont pas encore accepté la récolte"

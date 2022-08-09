@@ -22,6 +22,7 @@ import chrilves.kuzh.back.models.State.*
 import chrilves.kuzh.back.models.Status.*
 import chrilves.kuzh.back.models.Phase.*
 import chrilves.kuzh.back.models.Member.*
+import chrilves.kuzh.back.models.Parameters.*
 import chrilves.kuzh.back.lib.crypto.*
 import chrilves.kuzh.back.lib.isSorted
 import chrilves.kuzh.back.services.IdentityProofStore
@@ -33,11 +34,9 @@ final class Assembly[F[_]] private (
     private val stateMutex: Semaphore[F],
     private val refChannels: Ref[F, immutable.Map[Member.Fingerprint, Connection.Handler[F]]],
     private val refAbsent: Ref[F, immutable.Map[Fingerprint, Instant]],
-    private val refQuestions: Ref[F, List[String]],
+    private val refQuestions: Ref[F, List[Question]],
     private val refStatus: Ref[F, Status[Nothing]]
 )(using F: Async[F]):
-  private final val minParticipants = 3;
-  private final val absentSize      = 10;
 
   def log(color: String)(s: String): F[Unit] =
     Async[F].delay(println(s"${color} $s${Console.RESET}"))
@@ -440,7 +439,7 @@ final class Assembly[F[_]] private (
         Async[F].raiseError(new Exception(s"No identity proof for member ${member}"))
     }
 
-  def harvestDone(newQuestions: Option[List[String]]): F[Unit] =
+  def harvestDone(newQuestions: Option[List[Question]]): F[Unit] =
     for
       id      <- Async[F].delay(UUID.randomUUID())
       members <- present
@@ -602,14 +601,14 @@ final class Assembly[F[_]] private (
 
       case (SBallots(hashes, sigs, current :: Nil), MBallots(ballots)) if member === current =>
         val expectedBallotType =
-          if harvest.question.isDefined
-          then Ballot.BallotType.Answer
-          else Ballot.BallotType.Question
+          harvest.question match
+            case Some(q) => Ballot.Kind.Answer(q.kind)
+            case None    => Ballot.Kind.Question
 
         val check: Option[String] =
           if !ballots.map(_.asJson.noSpacesSortKeys).isSorted
           then Some("Ballots not sorted!")
-          else if !ballots.forall(_.tpe === expectedBallotType)
+          else if !ballots.forall(_.kind === expectedBallotType)
           then Some(s"Ballots not of exected type ${expectedBallotType}")
           if !Ballot.verifyHashes(hashes, ballots)
           then
@@ -627,8 +626,8 @@ final class Assembly[F[_]] private (
               Assembly.Event.Protocol(HarvestProtocol.Event.Ballots(ballots))
             ) *>
               harvestDone(expectedBallotType match
-                case Ballot.BallotType.Question => Some(Ballot.questions(ballots))
-                case Ballot.BallotType.Answer   => None
+                case Ballot.Kind.Question  => Some(Ballot.questions(ballots))
+                case Ballot.Kind.Answer(_) => None
               )
 
         }
@@ -645,7 +644,7 @@ object Assembly:
       mutex       <- Semaphore[F](1)
       refChannels <- Ref.of(immutable.Map.empty[Fingerprint, Connection.Handler[F]])
       refAbsent   <- Ref.of(immutable.Map.empty[Fingerprint, Instant])
-      refQuestons <- Ref.of(List.empty[String]) // (2 to 5).map(n => s"Question ${n}").toList)
+      refQuestons <- Ref.of(List.empty[Question]) // (2 to 5).map(n => s"Question ${n}").toList)
       status      <- Status.init
       refStatus   <- Ref.of(status)
     // Status.Waiting(UUID.randomUUID(), Some("Question 1"), immutable.Map.empty)) FOR DEBUG TODO REMOVE

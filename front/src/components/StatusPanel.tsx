@@ -4,12 +4,14 @@ import ProposedPanel from "./ProposedPanel";
 import { Member } from "../model/Member";
 import { Status } from "../model/assembly/Status";
 import { Harvest } from "../model/assembly/Harvest";
+import { Question } from "../model/Question";
 
 type Props = {
   myFingerprint: Fingerprint;
   status: Status;
-  sendAnswer(answer: boolean): void;
-  sendQuestion(question: string | null): void;
+  sendClosedAnswer(answer: boolean): void;
+  sendOpenAnswer(answer: string): void;
+  sendQuestion(question: Question | null): void;
   acceptHarvest(): void;
   changeReadiness(r: Member.Blockingness): void;
   name: (member: Fingerprint) => Promise<Name>;
@@ -22,7 +24,8 @@ export default function StatusPanel(props: Props): JSX.Element {
         <WaitingPanel
           myFingerprint={props.myFingerprint}
           waiting={props.status}
-          sendAnswer={props.sendAnswer}
+          sendOpenAnswer={props.sendOpenAnswer}
+          sendClosedAnswer={props.sendClosedAnswer}
           sendQuestion={props.sendQuestion}
           changeReadiness={props.changeReadiness}
           name={props.name}
