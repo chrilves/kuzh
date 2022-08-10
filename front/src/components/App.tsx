@@ -123,6 +123,7 @@ export default function App(props: {
 
       const operation = Operation.join(
         assemblyInfo.id,
+        assemblyInfo.name,
         assemblyInfo.secret,
         nickname
       );
@@ -252,9 +253,8 @@ export default function App(props: {
             {addGuestElem}
           </div>
           {props.refAppState.appState.guests.map((g) => (
-            <div style={{ display: "auto" }}>
+            <div key={g.guestID} style={{ display: "auto" }}>
               <Seat
-                key={g.guestID}
                 state={g.seat.state}
                 setState={g.seat.setState}
                 exit={g.seat.exit}
@@ -300,10 +300,10 @@ function AddGuest(props: AddGuestProps): JSX.Element {
 
   return (
     <div className="kuzh-join-assembly">
-      <h3 className="kuzh-style-action">Ajouter Un.e invitée</h3>
+      <h2 className="kuzh-style-action">Ajouter Un.e invitée</h2>
       <Nickname nickname={nickname} setNickname={setNickname} />
       {validInput() ? (
-        <div>
+        <div style={{ paddingBottom: "10%" }}>
           <button type="button" onClick={add}>
             Ajouter l'invité.e
           </button>
@@ -320,9 +320,20 @@ function KuzhTitle(): JSX.Element {
     navigator.clipboard.writeText(Parameters.kuzhURL);
 
   return (
-    <h1 onClick={urlIntoClipboard}>
-      kuzh.cc{" "}
-      <QRCodeSVG value={Parameters.kuzhURL} size={25} includeMargin={false} />
-    </h1>
+    <header>
+      <h1 onClick={urlIntoClipboard}>
+        <QRCodeSVG
+          value={Parameters.kuzhURL}
+          size={25}
+          includeMargin={false}
+          style={{ paddingLeft: "5px", paddingRight: "5px" }}
+        />
+        kuzh.cc : questions/réponses anonymes, et{" "}
+        <a href={Parameters.sourceURL} target="_blank">
+          open-source
+        </a>
+        !
+      </h1>
+    </header>
   );
 }

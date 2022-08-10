@@ -30,17 +30,17 @@ export default function ProposedPanel(props: Props): JSX.Element {
         <div>
           <div>
             <button type="button" onClick={goToAccepted}>
-              Accepter la récolte.
+              J'accepte cette récolte.
             </button>
             <button
               type="button"
               onClick={() => props.changeReadiness("blocking")}
             >
-              Blocker la récolte.
+              Je refuse cette récolote!
             </button>
           </div>
           <MemberList
-            title="Participant.e.s à la récolte"
+            title="Membres participant à la récolte"
             members={props.harvest.participants}
             name={props.name}
           />
@@ -54,10 +54,15 @@ export default function ProposedPanel(props: Props): JSX.Element {
 
   return (
     <div>
-      <h4>Tout le monde est prêt.e pour la récolte.</h4>
+      <h3>Acceptes tu cette récolte?</h3>
+      <p>
+        Le consentement c'est important! La récolte ne démarrera pas tant que tu
+        ne l'auras pas accepté. Personne ne peux plus rejoindre la récolte, à
+        moins que tu ne la refuse pour revenir en arrière!
+      </p>
       {page}
       <MemberList
-        title="N'ont pas encore accepté la récolte"
+        title="Membre n'ayant pas encore accepté la récolte"
         members={props.remaining}
         name={props.name}
       />

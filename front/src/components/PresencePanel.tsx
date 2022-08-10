@@ -43,13 +43,6 @@ export default function PresencePanel(props: Props): JSX.Element {
 
   return (
     <div>
-      <h4>Membres de l'Assemblée</h4>
-      <MemberList
-        title="Présent.e.s"
-        members={props.present}
-        name={props.name}
-      />
-
       {absentLines.length > 0 && (
         <div>
           <h5>Absent.e.s: {absentLines.length}</h5>
@@ -67,6 +60,11 @@ export default function PresencePanel(props: Props): JSX.Element {
           )}
         </div>
       )}
+      <MemberList
+        title="Présent.e.s"
+        members={props.present}
+        name={props.name}
+      />
     </div>
   );
 }

@@ -28,14 +28,17 @@ export default function ReadinessPanel(props: Props): JSX.Element {
 
   return (
     <div>
-      <h4>Qui est prêt.e?</h4>
       <MemberList
-        title="En train de répondre"
+        title="Membres en train de répondre"
         members={answering}
         name={props.name}
       />
-      <MemberList title="Bloquant.e.s" members={blocking} name={props.name} />
-      <MemberList title="Prêt.e.s" members={ready} name={props.name} />
+      <MemberList
+        title="Membres qui bloquent la récolte"
+        members={blocking}
+        name={props.name}
+      />
+      <MemberList title="Membres prêt.e.s" members={ready} name={props.name} />
     </div>
   );
 }

@@ -14,6 +14,9 @@ import { StorageAPI } from "../services/StorageAPI";
 import Fuse from "../lib/Fuse";
 import { Nickname } from "./Nickname";
 import { Validation } from "../model/Validation";
+import { Base64URL } from "../lib/Base64URL";
+import Assembly from "../model/assembly/Assembly";
+import { AsssemblyInfo } from "../model/assembly/AssembyInfo";
 
 interface Nav {
   prepare(operation: Operation): void;
@@ -51,12 +54,12 @@ export default function Menu(
                 assembly={props.assembly}
               />
             )}
-            <Join
+            <Create
               prepare={props.prepare}
               assembly={props.assembly}
               nick={nick}
             />
-            <Create
+            <Join
               prepare={props.prepare}
               assembly={props.assembly}
               nick={nick}
@@ -86,13 +89,14 @@ function LastAssembly(
   return (
     <div className="kuzh-rejoin-last-assembly">
       <h2 className="kuzh-style-action">Revenir à la dernière Assemblée</h2>
-      <MembershipPanel membership={props.lastMembership} />
+      <p>La dernière assemblé ou tu étais. Tu peux y revenir!</p>
       <button
         type="button"
         onClick={() => props.assembly(props.lastMembership)}
       >
-        Revenir à la dernière Assemblée
+        Rejoindre la dernière Assemblée
       </button>
+      <MembershipPanel membership={props.lastMembership} />
     </div>
   );
 }
@@ -102,25 +106,31 @@ function Join(props: Nav & { nick: string }): JSX.Element {
   const [nickname, setNickname] = useState<string>(props.nick);
 
   async function join() {
-    const re = /.*[/]([^/]+)\?secret=(.*)/;
-    const match = assemblyKey.match(re);
-
-    if (match) {
-      props.prepare(Operation.join(match[1], match[2], nickname));
-    }
+    const info = AsssemblyInfo.parseAssemblyURL(assemblyKey);
+    if (info !== null) {
+      props.prepare(Operation.join(info.id, info.name, info.secret, nickname));
+    } else alert("URL d'assemblée invalide");
   }
 
   function validInput(): boolean {
-    const re = /.*[/]([^/]+)\?secret=(.*)/;
-    const match = assemblyKey.match(re);
-    return match !== null && !!nickname && !!nickname.trim();
+    return (
+      AsssemblyInfo.parseAssemblyURL(assemblyKey) !== null &&
+      !!nickname &&
+      !!nickname.trim()
+    );
   }
 
   return (
     <div className="kuzh-join-assembly">
       <h2 className="kuzh-style-action">Rejoindre une Assemblée existante</h2>
+      <p>
+        Pour rejoindre une assemblée existance, entre ici le lien de
+        l'assemblée, choisi un pseudo et c'est parti!
+      </p>
       <div>
-        <label>URL de l'assemblée : </label>
+        <label>
+          Lien (URL) complet (celui avec "?secret=" dedans) de l'assemblée :{" "}
+        </label>
         <input
           type="text"
           name="assembly_key"
@@ -137,14 +147,14 @@ function Join(props: Nav & { nick: string }): JSX.Element {
           </button>
         </div>
       ) : (
-        <p>Entrées invalide!</p>
+        <p>Les informations ne sont pas valides.</p>
       )}
     </div>
   );
 }
 
 function Create(props: Nav & { nick: string }): JSX.Element {
-  const [assemblyName, setAssemblyName] = useState<string>("");
+  const [assemblyName, setAssemblyName] = useState<string>("mon assemblée");
   const [nickname, setNickname] = useState<string>(props.nick);
 
   function create() {
@@ -160,8 +170,12 @@ function Create(props: Nav & { nick: string }): JSX.Element {
   return (
     <div className="kuzh-create-assembly">
       <h2 className="kuzh-style-action">Créer une nouvelle Assemblée</h2>
+      <p>
+        Donne un nom à ton assemblée, n'importe lequel, oui "mon assemblée" fera
+        très bien l'affaire! Choisi un pseudo et c'est parti!
+      </p>
       <div>
-        <label>assemblée : </label>
+        <label>Choisi un nom pour ton assemblée : </label>
         <input
           type="text"
           name="assemblyName"
@@ -192,6 +206,7 @@ function Wizzard(
 
   const [URLSearchParams] = useSearchParams();
   const secretQS = URLSearchParams.get("secret");
+  const nameQS = URLSearchParams.get("name");
 
   const [secret, setSecret] = useState<string>(secretQS ? secretQS : "");
   const [nickname, setNickname] = useState<string>(props.nick);
@@ -222,12 +237,22 @@ function Wizzard(
 
   function join() {
     let refinedSecret: string;
-    const m = secret.match(/https?:[/][/].*[?]secret=(.*)/);
-    if (m !== null && m.groups !== null) {
-      refinedSecret = m[1];
-    } else refinedSecret = secret;
+    let refinedName: string | null = null;
+    const m = AsssemblyInfo.parseAssemblyURL(secret);
+    if (m !== null) {
+      refinedSecret = m.secret;
+      refinedName = m.name;
+    } else {
+      refinedSecret = secret;
+    }
 
-    props.prepare(Operation.join(assemblyId, refinedSecret, nickname));
+    if (refinedName === null) {
+      refinedName = nameQS;
+    }
+
+    props.prepare(
+      Operation.join(assemblyId, refinedName, refinedSecret, nickname)
+    );
   }
 
   function validInput(): boolean {
@@ -241,7 +266,10 @@ function Wizzard(
       </button>
       {!secretQS && (
         <div>
-          <label>secret : </label>
+          <label>
+            Entre ici le lien (URL) complet de l'assemblée (celui avec
+            "?secret=" dedans):{" "}
+          </label>
           <input
             type="text"
             name="secret"
@@ -272,7 +300,7 @@ function Lost(): JSX.Element {
       <button type="button" onClick={() => navigate("/")}>
         Menu
       </button>
-      <p>Euh ... tu voulais aller ou déja?</p>
+      <p>Euh ... tu voulais aller où déja?</p>
     </div>
   );
 }

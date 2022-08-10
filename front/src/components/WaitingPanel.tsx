@@ -38,7 +38,7 @@ export default function WaitingPanel(props: Props): JSX.Element {
       case "closed":
         waitingPanel = (
           <ClosedAnswerPanel
-            question={props.waiting.question}
+            question={props.waiting.question.message}
             sendClosedAnswer={props.sendClosedAnswer}
             myReadiness={myMemberReadiness?.readiness}
             changeReadiness={props.changeReadiness}
@@ -48,7 +48,7 @@ export default function WaitingPanel(props: Props): JSX.Element {
       case "open":
         waitingPanel = (
           <OpenAnswerPanel
-            question={props.waiting.question}
+            question={props.waiting.question.message}
             sendOpenAnswer={props.sendOpenAnswer}
             myReadiness={myMemberReadiness?.readiness}
             changeReadiness={props.changeReadiness}
@@ -133,6 +133,7 @@ function Confirmed(props: {
   );
 
   function renderOk(
+    title: string,
     msg: string,
     buttonMsg: string,
     other: Member.Blockingness
@@ -144,6 +145,7 @@ function Confirmed(props: {
 
     return (
       <div>
+        <h3>{title}</h3>
         <p>{msg}</p>
         {desired === props.myBlockingness && (
           <div>
@@ -158,11 +160,17 @@ function Confirmed(props: {
 
   switch (props.myBlockingness) {
     case "blocking":
-      return renderOk("Vous bloquez le vote.", "Debloquer le vote", "ready");
+      return renderOk(
+        "Tu bloques la récolte!",
+        "Pense à la débloquer un jour.",
+        "Je débloque la récolte.",
+        "ready"
+      );
     case "ready":
       return renderOk(
-        "Votre choix est enregistré!",
-        "Bloquer le vote",
+        "Attends le début de la récolote.",
+        "Ton choix est confirmé!",
+        "Bloquer la récolote",
         "blocking"
       );
   }
@@ -173,12 +181,17 @@ function Confirmed(props: {
 
 namespace ClosedAnswerPanelNS {
   type ReplyProps = {
+    question: string;
     changePhase: (phase: Phase<boolean>) => void;
   };
 
   export function Reply(props: ReplyProps): JSX.Element {
     return (
       <div>
+        <h3>Il est temps de répondre!</h3>
+        <p>
+          La question est: "<span className="question">{props.question}</span>"
+        </p>
         <button
           type="button"
           onClick={() => props.changePhase(Phase.confirm(true))}
@@ -196,6 +209,7 @@ namespace ClosedAnswerPanelNS {
   }
 
   type ConfirmProps = {
+    question: string;
     changeState: (phase: Phase<boolean>) => void;
     answer: boolean;
   };
@@ -203,18 +217,22 @@ namespace ClosedAnswerPanelNS {
   export function Confirm(props: ConfirmProps): JSX.Element {
     return (
       <div>
+        <h3>Confirme ta réponse</h3>
         <p>
-          Vous avez choisi de répondre :{" "}
-          <span className="answer">{props.answer ? "OUI" : "NON"}.</span>
+          Confirmes tu ton{" "}
+          <span className="answer" style={{ fontWeight: "bold" }}>
+            {props.answer ? "OUI" : "NON"}
+          </span>{" "}
+          à la question "<span className="question">{props.question}</span>" ?
         </p>
         <button
           type="button"
           onClick={() => props.changeState(Phase.confirmed)}
         >
-          Je confirme ma réponse!
+          Je confirme mon {props.answer ? "OUI" : "NON"}!
         </button>
         <button type="button" onClick={() => props.changeState(Phase.reply)}>
-          Revenir en arrière!
+          Je veux changer de réponse.
         </button>
       </div>
     );
@@ -222,7 +240,7 @@ namespace ClosedAnswerPanelNS {
 }
 
 type ClosedAnswerProps = {
-  question: Question;
+  question: string;
   sendClosedAnswer(answer: boolean): void;
   myReadiness: Member.Readiness | undefined;
   changeReadiness(r: Member.Blockingness): void;
@@ -242,42 +260,33 @@ function ClosedAnswerPanel(props: ClosedAnswerProps): JSX.Element {
       );
   }
 
-  let phasePanel: JSX.Element;
-
   switch (phase.tag) {
     case "reply":
-      phasePanel = <ClosedAnswerPanelNS.Reply changePhase={changePhase} />;
-      break;
+      return (
+        <ClosedAnswerPanelNS.Reply
+          question={props.question}
+          changePhase={changePhase}
+        />
+      );
+
     case "confirm":
-      phasePanel = (
+      return (
         <ClosedAnswerPanelNS.Confirm
+          question={props.question}
           changeState={changePhase}
           answer={phase.answer}
         />
       );
-      break;
     case "confirmed":
       if (props.myReadiness === "blocking" || props.myReadiness === "ready")
-        phasePanel = (
+        return (
           <Confirmed
             changeReadiness={props.changeReadiness}
             myBlockingness={props.myReadiness}
           />
         );
-      else phasePanel = <div />;
-      break;
+      else return <div />;
   }
-
-  return (
-    <div>
-      <h3>Il est temps de répondre!</h3>
-      <p>
-        La question {French.questionKind(props.question.kind)} est: "
-        <span className="question">{props.question.message}</span>"
-      </p>
-      {phasePanel}
-    </div>
-  );
 }
 
 //////////////////////////////////////////
@@ -285,6 +294,7 @@ function ClosedAnswerPanel(props: ClosedAnswerProps): JSX.Element {
 
 namespace OpenAnswerPanelNS {
   type ReplyProps = {
+    question: string;
     changePhase: (phase: Phase<string>) => void;
   };
 
@@ -303,6 +313,10 @@ namespace OpenAnswerPanelNS {
 
     return (
       <div>
+        <h3>Il est temps de répondre!</h3>
+        <p>
+          La question est: "<span className="question">{props.question}</span>"
+        </p>
         <textarea
           rows={5}
           cols={60}
@@ -312,7 +326,7 @@ namespace OpenAnswerPanelNS {
         />
         <div>
           <button type="button" onClick={answer}>
-            Valider ma reponse.
+            Je validte ma réponse.
           </button>
         </div>
       </div>
@@ -320,6 +334,7 @@ namespace OpenAnswerPanelNS {
   }
 
   type ConfirmProps = {
+    question: string;
     changeState: (phase: Phase<string>) => void;
     answer: string;
   };
@@ -327,10 +342,18 @@ namespace OpenAnswerPanelNS {
   export function Confirm(props: ConfirmProps): JSX.Element {
     return (
       <div>
+        <h3>Il est temps de répondre!</h3>
+        <p>Tu as choisi de répondre :</p>
         <p>
-          Vous avez choisi de répondre : "
-          <span className="answer">{props.answer}</span>".
+          "<span className="answer">{props.answer}</span>"
         </p>
+
+        <p> à la question:</p>
+
+        <p>
+          "<span className="question">{props.question}</span>"
+        </p>
+
         <button
           type="button"
           onClick={() => props.changeState(Phase.confirmed)}
@@ -338,7 +361,7 @@ namespace OpenAnswerPanelNS {
           Je confirme ma réponse!
         </button>
         <button type="button" onClick={() => props.changeState(Phase.reply)}>
-          Revenir en arrière!
+          Je veux revenir en arrière.
         </button>
       </div>
     );
@@ -346,7 +369,7 @@ namespace OpenAnswerPanelNS {
 }
 
 type OpenAnswerProps = {
-  question: Question;
+  question: string;
   sendOpenAnswer(answer: string): void;
   myReadiness: Member.Readiness | undefined;
   changeReadiness(r: Member.Blockingness): void;
@@ -365,42 +388,32 @@ function OpenAnswerPanel(props: OpenAnswerProps): JSX.Element {
       );
   }
 
-  let phasePanel: JSX.Element;
-
   switch (phase.tag) {
     case "reply":
-      phasePanel = <OpenAnswerPanelNS.Reply changePhase={changePhase} />;
-      break;
+      return (
+        <OpenAnswerPanelNS.Reply
+          question={props.question}
+          changePhase={changePhase}
+        />
+      );
     case "confirm":
-      phasePanel = (
+      return (
         <OpenAnswerPanelNS.Confirm
+          question={props.question}
           changeState={changePhase}
           answer={phase.answer}
         />
       );
-      break;
     case "confirmed":
       if (props.myReadiness === "blocking" || props.myReadiness === "ready")
-        phasePanel = (
+        return (
           <Confirmed
             changeReadiness={props.changeReadiness}
             myBlockingness={props.myReadiness}
           />
         );
-      else phasePanel = <div />;
-      break;
+      else return <div />;
   }
-
-  return (
-    <div>
-      <h3>Il est temps de répondre!</h3>
-      <p>
-        La question {French.questionKind(props.question.kind)} est: "
-        <span className="question">{props.question.message}</span>"
-      </p>
-      {phasePanel}
-    </div>
-  );
 }
 
 //////////////////////////////////////////
@@ -431,50 +444,65 @@ namespace QuestionPanelNS {
         setInput(s);
     }
 
-    let questionKindPanel: JSX.Element;
-    switch (kind) {
-      case "closed":
-        questionKindPanel = (
-          <div>
-            <p>
-              Vous posez une question fermée (réponse par OUI ou NON
-              uniquement!)
-            </p>
-            <button type="button" onClick={() => setKind("open")}>
-              Non! Ma question est ouverte (réponse libre!)!
-            </button>
-          </div>
-        );
-        break;
-      case "open":
-        questionKindPanel = (
-          <div>
-            <p>Vous posez une question ouverte (réponse libre!)</p>
-            <button type="button" onClick={() => setKind("closed")}>
-              Non! Ma question est fermée (réponse par OUI ou NON uniquement)!
-            </button>
-          </div>
-        );
-    }
+    const setOpen = () => setKind("open");
+    const setClosed = () => setKind("closed");
 
     return (
       <div>
-        {questionKindPanel}
-        <textarea
-          rows={5}
-          cols={60}
-          maxLength={Parameters.maxTextSize}
-          value={input}
-          onChange={change}
-        />
-        <div>
-          <button type="button" onClick={ask}>
-            Valider ma question.
-          </button>
-          <button type="button" onClick={dontAsk}>
-            Je ne pose aucune question!
-          </button>
-        </div>
+        <h3>Pose une question anonymement!</h3>
+        <fieldset>
+          <legend>Question ouverte ou fermée?</legend>
+          <div onClick={setOpen}>
+            <input
+              type="radio"
+              name="open"
+              checked={kind === "open"}
+              onChange={() => {}}
+            />
+            <label>Ouverte: la réponse est libre.</label>
+          </div>
+          <div onClick={setClosed}>
+            <input
+              type="radio"
+              name="closed"
+              checked={kind === "closed"}
+              onChange={() => {}}
+            />
+            <label>
+              Fermée: réponse par OUI ou NON{" "}
+              <span style={{ fontWeight: "bold", textDecoration: "underline" }}>
+                uniquement!
+              </span>
+            </label>
+          </div>
+          <div>
+            {" "}
+            <textarea
+              rows={5}
+              cols={60}
+              maxLength={Parameters.maxTextSize}
+              value={input}
+              onChange={change}
+            />
+          </div>
+
+          <div>
+            <button type="button" onClick={ask} style={{ marginRight: "10px" }}>
+              Valider ma question{" "}
+              <span style={{ fontWeight: "bold", textDecoration: "underline" }}>
+                {French.questionKind(kind)}
+              </span>
+              .
+            </button>
+            <button
+              type="button"
+              onClick={dontAsk}
+              style={{ marginLeft: "10px" }}
+            >
+              Je ne pose aucune question!
+            </button>
+          </div>
+        </fieldset>
       </div>
     );
   }
@@ -487,16 +515,20 @@ namespace QuestionPanelNS {
   export function Confirm(props: ConfirmProps): JSX.Element {
     return (
       <div>
+        <h3>Confirme ton choix</h3>
         {props.question ? (
-          <p>
-            Vous avez choisi de poser une question{" "}
-            {props.question.kind === "closed"
-              ? "férmée (reponse par OUI ou NON uniquement)"
-              : "ouverte (réponse libre)"}
-            : <br />"<span className="question">{props.question.message}</span>"
-          </p>
+          <div>
+            <p>
+              Tu as choisi de poser la question{" "}
+              <span style={{ fontWeight: "bold" }}>
+                {French.questionKind(props.question.kind)}
+              </span>
+              :
+            </p>
+            <p>"{props.question.message}"</p>
+          </div>
         ) : (
-          <p>Vous avez choisi de ne pas poser de question.</p>
+          <p>Tu as choisi de ne pas poser de question.</p>
         )}
         <button
           type="button"
@@ -505,7 +537,7 @@ namespace QuestionPanelNS {
           Je confirme mon choix!
         </button>
         <button type="button" onClick={() => props.changePhase(Phase.reply)}>
-          Revenir en arrière!
+          Je veux changer mon choix.
         </button>
       </div>
     );
@@ -529,36 +561,24 @@ function QuestionPanel(props: {
       );
   }
 
-  let phasePanel: JSX.Element;
-
   switch (phase.tag) {
     case "reply":
-      phasePanel = <QuestionPanelNS.Reply changePhase={changePhase} />;
-      break;
+      return <QuestionPanelNS.Reply changePhase={changePhase} />;
     case "confirm":
-      phasePanel = (
+      return (
         <QuestionPanelNS.Confirm
           changePhase={changePhase}
           question={phase.answer}
         />
       );
-      break;
     case "confirmed":
       if (props.myReadiness === "blocking" || props.myReadiness === "ready")
-        phasePanel = (
+        return (
           <Confirmed
             changeReadiness={props.changeReadiness}
             myBlockingness={props.myReadiness}
           />
         );
-      else phasePanel = <div />;
-      break;
+      else return <div />;
   }
-
-  return (
-    <div>
-      <h3>Pose une question anonymement!</h3>
-      {phasePanel}
-    </div>
-  );
 }

@@ -97,4 +97,19 @@ Bob envoie les bulletins en clair au serveur qui les diffuse à tous les membres
 du serveur et vérifie que les hashs sont bien ceux collectés dans la phase précédente.
 Si les bulletins ont bien les bons hash, la récolte est donc correcte.
 
+## Faire tourner l'application en local.
+
+Il vous faut avoir:
+
+- [yarn](https://yarnpkg.com/) pour le front.
+- [sbt](https://www.scala-sbt.org/) pour le back.
+
+Une fois que ceux deux outils sont installés:
+
+- Lancer `sbt run` pour lancer le back.
+- Lancer `yarn install` pour télécharger les dépendances du front.
+- Puis `yarn start` pour lancer l'application.
+
+C'est bon à l'application est diponible à l'adresse http://localhost:3000
+
 # Amusez vous bien :)

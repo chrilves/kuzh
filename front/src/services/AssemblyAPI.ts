@@ -9,7 +9,12 @@ import { ConnectionEvent } from "../model/events/ConnectionEvent";
 
 export interface AssemblyAPI {
   create(assemblyName: string, nickname: string): Promise<Membership>;
-  join(id: string, secret: string, nickname: string): Promise<Membership>;
+  join(
+    id: string,
+    name: string | null,
+    secret: string,
+    nickname: string
+  ): Promise<Membership>;
   connect(
     membership: Membership,
     updateAssembly: (state: AssemblyEvent) => void,
@@ -30,6 +35,7 @@ export namespace AssemblyAPI {
         case "join":
           return assemblyAPI.join(
             operation.id,
+            operation.name,
             operation.secret,
             operation.nickname
           );
@@ -57,9 +63,14 @@ export class MutexedAssemblyAPI implements AssemblyAPI {
     );
   }
 
-  join(id: string, secret: string, nickname: string): Promise<Membership> {
+  join(
+    id: string,
+    name: string | null,
+    secret: string,
+    nickname: string
+  ): Promise<Membership> {
     return this.mutex.runExclusive(() =>
-      this.baseAPI.join(id, secret, nickname)
+      this.baseAPI.join(id, name, secret, nickname)
     );
   }
 
@@ -96,6 +107,7 @@ export class RealAssemblyAPI implements AssemblyAPI {
 
   async join(
     id: string,
+    name: string | null,
     secret: string,
     nickname: string
   ): Promise<Membership> {
@@ -105,12 +117,12 @@ export class RealAssemblyAPI implements AssemblyAPI {
     if (last && last.assembly.id === id) {
       membership = last;
     } else {
-      const assemblyName = await this.backAPI.assemblyName(id, secret);
-      if (assemblyName) {
+      if (name === null) name = await this.backAPI.assemblyName(id, secret);
+      if (name) {
         const assembly = {
           id: id,
           secret: secret,
-          name: assemblyName,
+          name: name,
         };
         const me = await Me.generate(nickname);
         membership = new Membership(assembly, me);

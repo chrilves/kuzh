@@ -4,7 +4,7 @@ export function Nickname(props: {
 }): JSX.Element {
   return (
     <div>
-      <label>pseudo : </label>
+      <label>Choisi un pseudo : </label>
       <input
         type="text"
         name="nickname"

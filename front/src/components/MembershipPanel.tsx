@@ -1,5 +1,5 @@
 import { Membership } from "../model/Crypto";
-import { QRCodeSVG } from "qrcode.react";
+import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 
 type Props = {
   membership: Membership;
@@ -8,11 +8,18 @@ type Props = {
 export default function MembershipPanel(props: Props): JSX.Element {
   function connectionURL(): string {
     const loc = window.location;
-    return `${loc.protocol}//${loc.host}/assembly/${props.membership.assembly.id}?secret=${props.membership.assembly.secret}`;
+    return `${loc.protocol}//${loc.host}/assembly/${
+      props.membership.assembly.id
+    }?secret=${props.membership.assembly.secret}&name=${encodeURIComponent(
+      props.membership.assembly.name
+    )}`;
   }
 
   async function connectionKeyToClipboard() {
     await navigator.clipboard.writeText(connectionURL());
+    alert(
+      `Le lien vers l'assemblée, ${connectionURL()}, à été copié dans le presse papier.`
+    );
   }
 
   return (
@@ -39,6 +46,12 @@ export default function MembershipPanel(props: Props): JSX.Element {
           </tr>
         </tbody>
       </table>
+      <h5>Diffuser le lien vers cette assemblée</h5>
+      <p>
+        Pour rejoindre l'asemblée il faut le lien que tu peux récupérer ici! Tu
+        peux le copier dans le presse presse-papier, en cliquant sur le bouton
+        ou utiliser le QR code.
+      </p>
       <button type="button" onClick={connectionKeyToClipboard}>
         Copier le lien vers l'assemblée dans le presse passier.
       </button>
