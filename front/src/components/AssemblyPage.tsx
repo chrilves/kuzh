@@ -1,17 +1,27 @@
 import { useEffect, useState } from "react";
 import { French } from "../French";
 import Assembly, { ConnectionStatus } from "../model/assembly/Assembly";
+import { AssemblyInfo } from "../model/assembly/AssembyInfo";
 import { State } from "../model/assembly/State";
 import { Status } from "../model/assembly/Status";
 import { Fingerprint } from "../model/Crypto";
 import { HarvestResult } from "../model/HarvestResult";
 import { Question } from "../model/Question";
+import { IdentityProofStore } from "../services/IdentityProofStore";
+import { AssemblySharing } from "./AssemblySharing";
+import { ID } from "./ID";
 import MemberList from "./MemberList";
 import MembershipPanel from "./MembershipPanel";
+import { Nickname } from "./Nickname";
 import PresencePanel from "./PresencePanel";
 import StatusPanel from "./StatusPanel";
 
 type Props = {
+  addGuest: (
+    assemblyInfo: AssemblyInfo,
+    nickname: string,
+    identityProofStore: IdentityProofStore
+  ) => Promise<void>;
   assembly: Assembly;
   fail(error: string): void;
 };
@@ -65,21 +75,44 @@ export default function AssemblyPage(props: Props): JSX.Element {
         harvestResult={harvestResult}
         name={props.assembly.name}
       />
-      <h3>Assemblée</h3>
-      <NextQuestions questions={assemblyState.questions} />
-      <PresencePanel
-        present={assemblyState.present}
-        absent={assemblyState.absent}
-        name={props.assembly.name}
-      />
-      <MembershipPanel membership={props.assembly.membership} />
-      <ConnectionStatusPanel status={connectionStatus} />
+      <section className="assembly-info">
+        <h3>Assemblée</h3>
+        <ConnectionStatusPanel
+          assemblyInfo={props.assembly.membership.assembly}
+          status={connectionStatus}
+        />
+        <NextQuestions questions={assemblyState.questions} />
+        <AssemblySharing assembly={props.assembly.membership.assembly} />
+        <PresencePanel
+          present={assemblyState.present}
+          absent={assemblyState.absent}
+          name={props.assembly.name}
+        />
+        <AddGuest
+          addGuest={(n) =>
+            props.addGuest(
+              props.assembly.membership.assembly,
+              n,
+              props.assembly.identityProofStore
+            )
+          }
+          seatNickname={props.assembly.membership.me.nickname}
+        />
+      </section>
     </div>
   );
 }
 
-function ConnectionStatusPanel(props: { status: string }): JSX.Element {
-  return <p>Connexion: {props.status}</p>;
+function ConnectionStatusPanel(props: {
+  assemblyInfo: AssemblyInfo;
+  status: string;
+}): JSX.Element {
+  return (
+    <div>
+      <ID name={props.assemblyInfo.name} id={props.assemblyInfo.id} />
+      Connexion: {props.status}
+    </div>
+  );
 }
 
 function NextQuestions(props: { questions: Question[] }): JSX.Element {
@@ -157,7 +190,7 @@ function LastHarvestResult(props: {
   }
 
   return (
-    <div>
+    <section>
       <h3>
         Dernière récolte{" "}
         <button type="button" onClick={() => setHidden(!hidden)}>
@@ -174,6 +207,46 @@ function LastHarvestResult(props: {
           />
         </div>
       )}
-    </div>
+    </section>
+  );
+}
+
+type AddGuestProps = {
+  addGuest: (nickname: string) => Promise<void>;
+  seatNickname: string;
+};
+
+function AddGuest(props: AddGuestProps): JSX.Element {
+  const [counter, setCounter] = useState<number>(1);
+  const [nickname, setNickname] = useState<string>(
+    `${props.seatNickname}#${counter}`
+  );
+
+  function add() {
+    if (validInput()) {
+      props.addGuest(nickname);
+      setCounter(counter + 1);
+      setNickname(`${props.seatNickname}#${counter + 1}`);
+    }
+  }
+
+  function validInput(): boolean {
+    return !!nickname;
+  }
+
+  return (
+    <section id="add-guest">
+      <h3>Ajouter Un.e invitée</h3>
+      <Nickname nickname={nickname} setNickname={setNickname} />
+      {validInput() ? (
+        <div>
+          <button type="button" onClick={add}>
+            Ajouter l'invité.e
+          </button>
+        </div>
+      ) : (
+        <p>Pseudo invalide</p>
+      )}
+    </section>
   );
 }

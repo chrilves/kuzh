@@ -1,8 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import "./index.css";
 import App from "./components/App";
+import { AppState } from "./model/AppState";
+import { RefAppState } from "./model/RefAppState";
 import {
   AssemblyAPI,
   AssemblyAPIFactory,
@@ -14,12 +15,10 @@ import {
   BackCachingIdentityProofStoreFactory,
   IdentityProofStoreFactory,
 } from "./services/IdentityProofStore";
-import { StorageAPI, LocalStorageAPI } from "./services/StorageAPI";
 import { Services } from "./services/Services";
-import { AppState } from "./model/AppState";
-import { RefAppState } from "./model/RefAppState";
-import { Parameters } from "./model/Parameters";
+import { LocalStorageAPI, StorageAPI } from "./services/StorageAPI";
 //import reportWebVitals from './reportWebVitals';
+import "./style.css";
 
 /////////////////////////////
 // Initialisation!

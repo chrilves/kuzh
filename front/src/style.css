@@ -1,0 +1,157 @@
+@font-face {
+  font-family: "Alice";
+  src: url("fonts/Alice-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Open-Baskerville";
+  src: url("fonts/OpenBaskerville.woff") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@import url("fonts/overpass/overpass.css");
+@import url("fonts/overpass-mono/overpass-mono.css");
+
+html {
+  font-family: "Alice";
+  font-size: 1.5vh;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: rgb(100, 236, 236);
+}
+
+ul {
+  padding-left: 15px;
+}
+
+/* WIDTH */
+
+article {
+  width: 98vw;
+  margin: 0;
+  padding-left: 1vw;
+  padding-right: 1vw;
+  padding-top: 0;
+  padding-bottom: 0;
+  flex-shrink: 0;
+  flex-grow: 0;
+}
+
+/* MARGIN */
+
+#title {
+  width: 100%;
+  text-align: center;
+}
+
+#title h1 {
+  font-size: 5rem;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+#title svg {
+  width: 4rem;
+  height: 4rem;
+  margin-left: 1vh;
+  margin-right: 1vh;
+}
+
+h2 {
+  margin-bottom: 1%;
+}
+
+h2 .name {
+  font-size: 1.5em;
+}
+
+h2 .id {
+  font-size: 1rem;
+}
+
+.seats {
+  display: inline-flex;
+  width: 100vw;
+  overflow: scroll;
+  flex-direction: row;
+}
+
+.name {
+  margin-bottom: 0;
+  display: block;
+}
+
+.id {
+  display: block;
+  font-family: "overpass-mono";
+  margin-top: 0;
+}
+
+.question {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+fieldset {
+  margin: 0;
+}
+
+textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+button {
+  font-size: 1rem;
+}
+
+.yes-no-button {
+  width: 50%;
+}
+
+.the-answer {
+  font-style: italic;
+}
+
+.the-question {
+  font-weight: bold;
+}
+
+.assembly-url-copy-button {
+  width: 100%;
+}
+
+.assembly-url-qr-code {
+  margin-left: auto;
+  margin-right: auto;
+  display: block;
+  margin-top: 1%;
+  margin-bottom: 1%;
+}
+
+h3 {
+  font-size: 1.5rem;
+  margin-top: 2%;
+  margin-bottom: 2%;
+}
+
+h4 {
+  margin-top: 2%;
+  margin-bottom: 2%;
+}
+
+p {
+  margin-top: 1%;
+  margin-bottom: 1%;
+}
+
+.absent {
+  font-size: 0.9rem;
+}

@@ -3,6 +3,7 @@ import { MemberAbsent } from "../model/Member";
 import { Fingerprint, Name } from "../model/Crypto";
 import MemberList from "./MemberList";
 import { useState } from "react";
+import { ID } from "./ID";
 
 export declare function structuredClone(value: any): any;
 
@@ -35,9 +36,10 @@ export default function PresencePanel(props: Props): JSX.Element {
 
   let absentLines: JSX.Element[] = props.absent.map((value: MemberAbsent) => (
     <tr key={value.member}>
-      <td>{withName(value.member)}</td>
-      <td>{value.member}</td>
-      <td>{new Date(value.since).toLocaleString()}</td>
+      <td>{new Date(value.since).toLocaleTimeString()}</td>
+      <td>
+        <ID name={withName(value.member)} id={value.member} />
+      </td>
     </tr>
   ));
 
@@ -45,16 +47,9 @@ export default function PresencePanel(props: Props): JSX.Element {
     <div>
       {absentLines.length > 0 && (
         <div>
-          <h5>Absent.e.s: {absentLines.length}</h5>
+          <h4>Absent.e.s: {absentLines.length}</h4>
           {absentLines.length > 0 && (
-            <table>
-              <thead>
-                <tr key="header">
-                  <th>Nom</th>
-                  <th>Identifiant</th>
-                  <th>Depuis</th>
-                </tr>
-              </thead>
+            <table className="absent">
               <tbody>{absentLines}</tbody>
             </table>
           )}

@@ -58,10 +58,10 @@ export default function WaitingPanel(props: Props): JSX.Element {
   }
 
   return (
-    <div>
+    <section>
       {waitingPanel}
       <ReadinessPanel readiness={props.waiting.ready} name={props.name} />
-    </div>
+    </section>
   );
 }
 
@@ -190,19 +190,22 @@ namespace ClosedAnswerPanelNS {
       <div>
         <h3>Il est temps de répondre!</h3>
         <p>
-          La question est: "<span className="question">{props.question}</span>"
+          La question est: "
+          <strong className="the-question">{props.question}</strong>"
         </p>
         <button
+          className="yes-no-button"
           type="button"
           onClick={() => props.changePhase(Phase.confirm(true))}
         >
-          Je réponds OUI!
+          Je réponds <em className="the-answer">OUI</em>!
         </button>
         <button
+          className="yes-no-button"
           type="button"
           onClick={() => props.changePhase(Phase.confirm(false))}
         >
-          Je réponds NON!
+          Je réponds <em className="the-answer">NON</em>!
         </button>
       </div>
     );
@@ -220,18 +223,23 @@ namespace ClosedAnswerPanelNS {
         <h3>Confirme ta réponse</h3>
         <p>
           Confirmes tu ton{" "}
-          <span className="answer" style={{ fontWeight: "bold" }}>
-            {props.answer ? "OUI" : "NON"}
-          </span>{" "}
-          à la question "<span className="question">{props.question}</span>" ?
+          <strong className="the-answer">{props.answer ? "OUI" : "NON"}</strong>{" "}
+          à la question "
+          <strong className="the-question">{props.question}</strong>" ?
         </p>
         <button
+          className="yes-no-button"
           type="button"
           onClick={() => props.changeState(Phase.confirmed)}
         >
-          Je confirme mon {props.answer ? "OUI" : "NON"}!
+          Je confirme mon{" "}
+          <em className="the-answer">{props.answer ? "OUI" : "NON"}</em>!
         </button>
-        <button type="button" onClick={() => props.changeState(Phase.reply)}>
+        <button
+          className="yes-no-button"
+          type="button"
+          onClick={() => props.changeState(Phase.reply)}
+        >
           Je veux changer de réponse.
         </button>
       </div>
@@ -315,7 +323,7 @@ namespace OpenAnswerPanelNS {
       <div>
         <h3>Il est temps de répondre!</h3>
         <p>
-          La question est: "<span className="question">{props.question}</span>"
+          La question est: "<em className="the-question">{props.question}</em>"
         </p>
         <textarea
           rows={5}
@@ -323,9 +331,10 @@ namespace OpenAnswerPanelNS {
           maxLength={Parameters.maxTextSize}
           value={input}
           onChange={change}
+          placeholder={"Écrivez ici votre réponse."}
         />
         <div>
-          <button type="button" onClick={answer}>
+          <button className="open-answer-button" type="button" onClick={answer}>
             Je validte ma réponse.
           </button>
         </div>
@@ -345,22 +354,27 @@ namespace OpenAnswerPanelNS {
         <h3>Il est temps de répondre!</h3>
         <p>Tu as choisi de répondre :</p>
         <p>
-          "<span className="answer">{props.answer}</span>"
+          "<em className="the-answer">{props.answer}</em>"
         </p>
 
         <p> à la question:</p>
 
         <p>
-          "<span className="question">{props.question}</span>"
+          "<strong className="the-question">{props.question}</strong>"
         </p>
 
         <button
+          className="yes-no-button"
           type="button"
           onClick={() => props.changeState(Phase.confirmed)}
         >
           Je confirme ma réponse!
         </button>
-        <button type="button" onClick={() => props.changeState(Phase.reply)}>
+        <button
+          className="yes-no-button"
+          type="button"
+          onClick={() => props.changeState(Phase.reply)}
+        >
           Je veux revenir en arrière.
         </button>
       </div>
@@ -469,40 +483,31 @@ namespace QuestionPanelNS {
               onChange={() => {}}
             />
             <label>
-              Fermée: réponse par OUI ou NON{" "}
-              <span style={{ fontWeight: "bold", textDecoration: "underline" }}>
-                uniquement!
-              </span>
+              Fermée: réponse par OUI ou NON <em>uniquement!</em>
             </label>
           </div>
-          <div>
-            {" "}
-            <textarea
-              rows={5}
-              cols={60}
-              maxLength={Parameters.maxTextSize}
-              value={input}
-              onChange={change}
-            />
-          </div>
-
-          <div>
-            <button type="button" onClick={ask} style={{ marginRight: "10px" }}>
-              Valider ma question{" "}
-              <span style={{ fontWeight: "bold", textDecoration: "underline" }}>
-                {French.questionKind(kind)}
-              </span>
-              .
-            </button>
-            <button
-              type="button"
-              onClick={dontAsk}
-              style={{ marginLeft: "10px" }}
-            >
-              Je ne pose aucune question!
-            </button>
-          </div>
         </fieldset>
+
+        <textarea
+          className="question"
+          rows={8}
+          cols={40}
+          maxLength={Parameters.maxTextSize}
+          value={input}
+          onChange={change}
+          placeholder={`Écrivez ici votre question ${French.questionKind(
+            kind
+          )}.`}
+        />
+
+        <div>
+          <button className="yes-no-button" type="button" onClick={ask}>
+            Valider ma question <em>{French.questionKind(kind)}</em>.
+          </button>
+          <button className="yes-no-button" type="button" onClick={dontAsk}>
+            Je ne pose aucune question!
+          </button>
+        </div>
       </div>
     );
   }
@@ -520,23 +525,25 @@ namespace QuestionPanelNS {
           <div>
             <p>
               Tu as choisi de poser la question{" "}
-              <span style={{ fontWeight: "bold" }}>
-                {French.questionKind(props.question.kind)}
-              </span>
-              :
+              <strong>{French.questionKind(props.question.kind)}</strong>:
             </p>
-            <p>"{props.question.message}"</p>
+            <p className="the-answer">"{props.question.message}"</p>
           </div>
         ) : (
           <p>Tu as choisi de ne pas poser de question.</p>
         )}
         <button
+          className="yes-no-button"
           type="button"
           onClick={() => props.changePhase(Phase.confirmed)}
         >
           Je confirme mon choix!
         </button>
-        <button type="button" onClick={() => props.changePhase(Phase.reply)}>
+        <button
+          className="yes-no-button"
+          type="button"
+          onClick={() => props.changePhase(Phase.reply)}
+        >
           Je veux changer mon choix.
         </button>
       </div>

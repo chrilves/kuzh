@@ -1,7 +1,4 @@
 import { useEffect, useState } from "react";
-import { Membership } from "../model/Crypto";
-import MembershipPanel from "./MembershipPanel";
-import { withAsync } from "../lib/Utils";
 import {
   Route,
   Routes,
@@ -9,14 +6,15 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import { Operation } from "../model/Operation";
-import { StorageAPI } from "../services/StorageAPI";
 import Fuse from "../lib/Fuse";
-import { Nickname } from "./Nickname";
-import { Validation } from "../model/Validation";
-import { Base64URL } from "../lib/Base64URL";
-import Assembly from "../model/assembly/Assembly";
+import { withAsync } from "../lib/Utils";
 import { AsssemblyInfo } from "../model/assembly/AssembyInfo";
+import { Membership } from "../model/Crypto";
+import { Operation } from "../model/Operation";
+import { Validation } from "../model/Validation";
+import { StorageAPI } from "../services/StorageAPI";
+import MembershipPanel from "./MembershipPanel";
+import { Nickname } from "./Nickname";
 
 interface Nav {
   prepare(operation: Operation): void;
@@ -46,25 +44,27 @@ export default function Menu(
       <Route
         path="/"
         element={
-          <div className="App">
-            {lastMembership && (
-              <LastAssembly
-                lastMembership={lastMembership}
+          <main>
+            <article>
+              {lastMembership && (
+                <LastAssembly
+                  lastMembership={lastMembership}
+                  prepare={props.prepare}
+                  assembly={props.assembly}
+                />
+              )}
+              <Create
                 prepare={props.prepare}
                 assembly={props.assembly}
+                nick={nick}
               />
-            )}
-            <Create
-              prepare={props.prepare}
-              assembly={props.assembly}
-              nick={nick}
-            />
-            <Join
-              prepare={props.prepare}
-              assembly={props.assembly}
-              nick={nick}
-            />
-          </div>
+              <Join
+                prepare={props.prepare}
+                assembly={props.assembly}
+                nick={nick}
+              />
+            </article>
+          </main>
         }
       />
       <Route
@@ -87,17 +87,16 @@ function LastAssembly(
   props: Nav & { lastMembership: Membership }
 ): JSX.Element {
   return (
-    <div className="kuzh-rejoin-last-assembly">
-      <h2 className="kuzh-style-action">Revenir à la dernière Assemblée</h2>
-      <p>La dernière assemblé ou tu étais. Tu peux y revenir!</p>
+    <section id="last-assembly">
+      <h2>Revenir à ta dernière Assemblée</h2>
+      <MembershipPanel membership={props.lastMembership} />
       <button
         type="button"
         onClick={() => props.assembly(props.lastMembership)}
       >
-        Rejoindre la dernière Assemblée
+        Rejoindre ta dernière Assemblée
       </button>
-      <MembershipPanel membership={props.lastMembership} />
-    </div>
+    </section>
   );
 }
 
@@ -121,8 +120,8 @@ function Join(props: Nav & { nick: string }): JSX.Element {
   }
 
   return (
-    <div className="kuzh-join-assembly">
-      <h2 className="kuzh-style-action">Rejoindre une Assemblée existante</h2>
+    <section id="join">
+      <h2>Rejoindre une Assemblée existante</h2>
       <p>
         Pour rejoindre une assemblée existance, entre ici le lien de
         l'assemblée, choisi un pseudo et c'est parti!
@@ -140,16 +139,18 @@ function Join(props: Nav & { nick: string }): JSX.Element {
         />
       </div>
       <Nickname nickname={nickname} setNickname={setNickname} />
-      {validInput() ? (
-        <div>
-          <button type="button" onClick={join}>
-            Rejoindre l'Assemblée
-          </button>
-        </div>
-      ) : (
-        <p>Les informations ne sont pas valides.</p>
-      )}
-    </div>
+      <button
+        type="button"
+        onClick={
+          validInput()
+            ? join
+            : () => alert("Les données que tu as entrées ne sont pas valides.")
+        }
+      >
+        Rejoindre l'Assemblée{" "}
+        {validInput() ? "" : "(Les informations ne sont pas valides.)"}
+      </button>
+    </section>
   );
 }
 
@@ -168,8 +169,8 @@ function Create(props: Nav & { nick: string }): JSX.Element {
   }
 
   return (
-    <div className="kuzh-create-assembly">
-      <h2 className="kuzh-style-action">Créer une nouvelle Assemblée</h2>
+    <section id="create">
+      <h2>Créer une nouvelle Assemblée</h2>
       <p>
         Donne un nom à ton assemblée, n'importe lequel, oui "mon assemblée" fera
         très bien l'affaire! Choisi un pseudo et c'est parti!
@@ -185,16 +186,18 @@ function Create(props: Nav & { nick: string }): JSX.Element {
         />
       </div>
       <Nickname nickname={nickname} setNickname={setNickname} />
-      {validInput() ? (
-        <div>
-          <button type="button" onClick={create}>
-            Créer l'Assemblée
-          </button>
-        </div>
-      ) : (
-        <p>Clef d'assemblée ou pseudo invalide.</p>
-      )}
-    </div>
+      <button
+        type="button"
+        onClick={
+          validInput()
+            ? create
+            : () => alert("Clef d'assemblée ou pseudo invalide.")
+        }
+      >
+        Créer l'Assemblée{" "}
+        {validInput() ? "" : "(Clef d'assemblée ou pseudo invalide.)"}
+      </button>
+    </section>
   );
 }
 
@@ -260,47 +263,51 @@ function Wizzard(
   }
 
   return (
-    <div>
-      <button type="button" onClick={() => navigate("/")}>
-        Menu
-      </button>
-      {!secretQS && (
-        <div>
-          <label>
-            Entre ici le lien (URL) complet de l'assemblée (celui avec
-            "?secret=" dedans):{" "}
-          </label>
-          <input
-            type="text"
-            name="secret"
-            placeholder="secret"
-            value={secret}
-            onChange={(e) => setSecret(e.target.value)}
-          />
-        </div>
-      )}
-      <Nickname nickname={nickname} setNickname={setNickname} />
-      {validInput() ? (
-        <div>
-          <button type="button" onClick={join}>
-            Rejoindre l'assemblée
-          </button>
-        </div>
-      ) : (
-        <p>Entrées invalides.</p>
-      )}
-    </div>
+    <main>
+      <article>
+        <button type="button" onClick={() => navigate("/")}>
+          Menu
+        </button>
+        {!secretQS && (
+          <div>
+            <label>
+              Entre ici le lien (URL) complet de l'assemblée (celui avec
+              "?secret=" dedans):{" "}
+            </label>
+            <input
+              type="text"
+              name="secret"
+              placeholder="secret"
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+            />
+          </div>
+        )}
+        <Nickname nickname={nickname} setNickname={setNickname} />
+        {validInput() ? (
+          <div>
+            <button type="button" onClick={join}>
+              Rejoindre l'assemblée
+            </button>
+          </div>
+        ) : (
+          <p>Entrées invalides.</p>
+        )}
+      </article>
+    </main>
   );
 }
 
 function Lost(): JSX.Element {
   const navigate = useNavigate();
   return (
-    <div>
-      <button type="button" onClick={() => navigate("/")}>
-        Menu
-      </button>
-      <p>Euh ... tu voulais aller où déja?</p>
-    </div>
+    <main>
+      <article>
+        <button type="button" onClick={() => navigate("/")}>
+          Menu
+        </button>
+        <p>Euh ... tu voulais aller où déja?</p>
+      </article>
+    </main>
   );
 }

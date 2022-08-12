@@ -219,50 +219,27 @@ export default function App(props: {
       );
       break;
     case "seats":
-      let addGuestElem: JSX.Element | null;
-      switch (props.refAppState.appState.host.state.tag) {
-        case "assembly":
-          const info =
-            props.refAppState.appState.host.state.assembly.membership.assembly;
-          const ipStore =
-            props.refAppState.appState.host.state.assembly.identityProofStore;
-          addGuestElem = (
-            <AddGuest
-              addGuest={(n) => addGuest(info, n, ipStore)}
-              hostNickname={
-                props.refAppState.appState.host.state.assembly.membership.me
-                  .nickname
-              }
-            />
-          );
-          break;
-        default:
-          addGuestElem = null;
-      }
-
       page = (
-        <div style={{ display: "flex", flexDirection: "row" }}>
-          <div style={{ display: "auto" }}>
-            <Seat
-              key="host"
-              state={props.refAppState.appState.host.state}
-              setState={props.refAppState.setHostState}
-              exit={menu}
-              reset={props.refAppState.appState.host.reset}
-            />
-            {addGuestElem}
-          </div>
+        <main className="seats">
+          <Seat
+            key="host"
+            state={props.refAppState.appState.host.state}
+            setState={props.refAppState.setHostState}
+            exit={menu}
+            reset={props.refAppState.appState.host.reset}
+            addGuest={addGuest}
+          />
           {props.refAppState.appState.guests.map((g) => (
-            <div key={g.guestID} style={{ display: "auto" }}>
-              <Seat
-                state={g.seat.state}
-                setState={g.seat.setState}
-                exit={g.seat.exit}
-                reset={g.seat.reset}
-              />
-            </div>
+            <Seat
+              key={g.guestID}
+              state={g.seat.state}
+              setState={g.seat.setState}
+              exit={g.seat.exit}
+              reset={g.seat.reset}
+              addGuest={addGuest}
+            />
           ))}
-        </div>
+        </main>
       );
       break;
   }
@@ -275,65 +252,21 @@ export default function App(props: {
   );
 }
 
-type AddGuestProps = {
-  addGuest: (nickname: string) => Promise<void>;
-  hostNickname: string;
-};
-
-function AddGuest(props: AddGuestProps): JSX.Element {
-  const [counter, setCounter] = useState<number>(1);
-  const [nickname, setNickname] = useState<string>(
-    `${props.hostNickname}#${counter}`
-  );
-
-  function add() {
-    if (validInput()) {
-      props.addGuest(nickname);
-      setCounter(counter + 1);
-      setNickname(`${props.hostNickname}#${counter + 1}`);
-    }
-  }
-
-  function validInput(): boolean {
-    return !!nickname;
-  }
-
-  return (
-    <div className="kuzh-join-assembly">
-      <h2 className="kuzh-style-action">Ajouter Un.e invitée</h2>
-      <Nickname nickname={nickname} setNickname={setNickname} />
-      {validInput() ? (
-        <div style={{ paddingBottom: "10%" }}>
-          <button type="button" onClick={add}>
-            Ajouter l'invité.e
-          </button>
-        </div>
-      ) : (
-        <p>Pseudo invalide</p>
-      )}
-    </div>
-  );
-}
-
 function KuzhTitle(): JSX.Element {
   const urlIntoClipboard = () =>
     navigator.clipboard.writeText(Parameters.kuzhURL);
 
   return (
-    <header>
+    <header id="title">
       <h1 onClick={urlIntoClipboard}>
-        <QRCodeSVG
-          value={Parameters.kuzhURL}
-          size={25}
-          includeMargin={false}
-          style={{ paddingLeft: "5px", paddingRight: "5px" }}
-        />
-        kuzh.cc : questions/réponses anonymes, et{" "}
-        <a href={Parameters.sourceURL} target="_blank">
-          open-source
-        </a>
-        !
+        <QRCodeSVG value={Parameters.kuzhURL} includeMargin={false} />
+        kuzh.cc
       </h1>
+      Questions/Réponses anonymes, et{" "}
+      <a href={Parameters.sourceURL} target="_blank">
+        open-source
+      </a>
+      !
     </header>
   );
 }

@@ -29,10 +29,15 @@ export default function ProposedPanel(props: Props): JSX.Element {
       page = (
         <div>
           <div>
-            <button type="button" onClick={goToAccepted}>
+            <button
+              className="yes-no-button"
+              type="button"
+              onClick={goToAccepted}
+            >
               J'accepte cette récolte.
             </button>
             <button
+              className="yes-no-button"
               type="button"
               onClick={() => props.changeReadiness("blocking")}
             >
@@ -53,7 +58,7 @@ export default function ProposedPanel(props: Props): JSX.Element {
   }
 
   return (
-    <div>
+    <section>
       <h3>Acceptes tu cette récolte?</h3>
       <p>
         Le consentement c'est important! La récolte ne démarrera pas tant que tu
@@ -66,6 +71,6 @@ export default function ProposedPanel(props: Props): JSX.Element {
         members={props.remaining}
         name={props.name}
       />
-    </div>
+    </section>
   );
 }

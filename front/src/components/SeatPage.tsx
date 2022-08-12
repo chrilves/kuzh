@@ -1,8 +1,16 @@
+import { AssemblyInfo } from "../model/assembly/AssembyInfo";
 import { Operation } from "../model/Operation";
 import { SeatState } from "../model/SteatState";
+import { IdentityProofStore } from "../services/IdentityProofStore";
 import AssemblyPage from "./AssemblyPage";
+import { ID } from "./ID";
 
 type Props = {
+  addGuest: (
+    assemblyInfo: AssemblyInfo,
+    nickname: string,
+    identityProofStore: IdentityProofStore
+  ) => Promise<void>;
   state: SeatState;
   setState(st: SeatState): void;
   reset: () => Promise<void>;
@@ -35,9 +43,11 @@ export default function SeatPage(props: Props): JSX.Element {
 
     case "assembly":
       page = (
-        <div>
-          <AssemblyPage assembly={props.state.assembly} fail={fail} />
-        </div>
+        <AssemblyPage
+          addGuest={props.addGuest}
+          assembly={props.state.assembly}
+          fail={fail}
+        />
       );
       break;
   }
@@ -45,55 +55,60 @@ export default function SeatPage(props: Props): JSX.Element {
   const member = SeatState.member(props.state);
 
   return (
-    <div>
-      <div>
-        <button type="button" onClick={props.exit}>
-          Quitter
-        </button>
-        <button type="button" onClick={props.reset}>
-          Relancer
-        </button>
-      </div>
-      <h2>{member.nickname}</h2>
-      <h3>{member.assembly?.membership.me.fingerprint}</h3>
+    <article>
+      <header>
+        <h2>
+          <ID
+            name={member.nickname}
+            id={
+              member.assembly ? member.assembly.membership.me.fingerprint : ""
+            }
+          />
+        </h2>
+        <div>
+          <button type="button" onClick={props.exit}>
+            Quitter
+          </button>
+          <button type="button" onClick={props.reset}>
+            Relancer
+          </button>
+        </div>{" "}
+      </header>
       {page}
-    </div>
+    </article>
   );
 }
 
 function Create(props: { create: Operation.Create }): JSX.Element {
   return (
-    <div>
+    <section>
       <p>Création d'une nouvelle assemblée</p>
       <ul>
         <li>
-          <span className="listKey">Nom de l'assemblée:</span>{" "}
-          <span className="assemblyId">{props.create.assemblyName}</span>
+          <label>Nom de l'assemblée:</label>{" "}
+          <em>{props.create.assemblyName}</em>
         </li>
         <li>
-          <span className="listKey">Votre pesudo:</span>{" "}
-          <span className="nickName">{props.create.nickname}</span>.
+          <label>Votre pesudo:</label> <em>{props.create.nickname}</em>.
         </li>
       </ul>
-    </div>
+    </section>
   );
 }
 
 export function Join(props: { join: Operation.Join }): JSX.Element {
   return (
-    <div>
+    <section>
       <p>Connection à une assemblée existance.</p>
       <ul>
         <li>
-          <span className="listKey">Identifiant de l'assemblée:</span>{" "}
-          <span className="assemblyId">{props.join.id}</span>
+          <label>Identifiant de l'assemblée:</label> <em>{props.join.id}</em>
         </li>
         <li>
-          <span className="listKey">Votre pesudo:</span>{" "}
-          <span className="nickName">{props.join.nickname}</span>.
+          <label>Votre pesudo:</label> <em>{props.join.nickname}</em>.
         </li>
       </ul>
-    </div>
+    </section>
   );
 }
 
@@ -102,8 +117,12 @@ export function Failure(props: { error: any }): JSX.Element {
 
   function renderError(err: Error): JSX.Element {
     let lines = [
-      <p>Nom: {props.error.name}</p>,
-      <p>Message: {props.error.message}</p>,
+      <p>
+        <label>Nom</label>: <em>{props.error.name}</em>
+      </p>,
+      <p>
+        <label>Message</label>: <em>{props.error.message}</em>
+      </p>,
     ];
     if (props.error.cause)
       lines.push(<p>Cause: {renderError(props.error.cause)}</p>);
@@ -145,11 +164,9 @@ export function Failure(props: { error: any }): JSX.Element {
   }
 
   return (
-    <div>
+    <section>
       <h3>Erreur:</h3>
-      <p>
-        <span className="error">{errorMessage}</span>.
-      </p>
-    </div>
+      {errorMessage}
+    </section>
   );
 }

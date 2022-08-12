@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { compareString } from "../lib/Compare";
 import { Fingerprint, Name } from "../model/Crypto";
+import { ID } from "./ID";
 
 export declare function structuredClone(value: any): any;
 
@@ -37,10 +38,9 @@ export default function MemberList(props: Props): JSX.Element {
     array: [Name, Fingerprint][]
   ): JSX.Element {
     return (
-      <tr key={value[1]}>
-        <td>{value[0]}</td>
-        <td>{value[1]}</td>
-      </tr>
+      <li key={value[1]}>
+        <ID name={value[0]} id={value[1]} />
+      </li>
     );
   }
 
@@ -51,20 +51,12 @@ export default function MemberList(props: Props): JSX.Element {
           {props.title}: {props.members.length}
         </h4>
         {props.members.length > 0 && (
-          <table>
-            <thead>
-              <tr key="header">
-                <th>Nom</th>
-                <th>Identifiant</th>
-              </tr>
-            </thead>
-            <tbody>
-              {props.members
-                .map((x: Fingerprint): [Name, Fingerprint] => [withName(x), x])
-                .sort(compare)
-                .map(renderLine)}
-            </tbody>
-          </table>
+          <ul>
+            {props.members
+              .map((x: Fingerprint): [Name, Fingerprint] => [withName(x), x])
+              .sort(compare)
+              .map(renderLine)}
+          </ul>
         )}
       </div>
     );

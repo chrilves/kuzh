@@ -51,7 +51,6 @@ export default function StatusPanel(props: Props): JSX.Element {
             />
           );
       }
-      break;
     case "hidden":
       return <Hidden />;
   }
@@ -62,21 +61,21 @@ function HarvestingStartedPanel(props: {
   name: (member: Fingerprint) => Promise<Name>;
 }): JSX.Element {
   return (
-    <div>
+    <section>
       <h3>La récolote est en cours</h3>
       <p>
         Le protocole de récolte anonyme est lancé. Tu auras les résultats dans
         quelques instants.
       </p>
-    </div>
+    </section>
   );
 }
 
 function Hidden(): JSX.Element {
   return (
-    <div>
+    <section>
       <h3>Veuillez attendre</h3>
       <p>Une récolte est en cours. Vous pourrez participer bientôt.</p>
-    </div>
+    </section>
   );
 }
