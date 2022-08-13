@@ -1,8 +1,8 @@
-# [kuzh.cc](https://kuzh.cc)
+# [kuzh](https://kuzh.cc/)
 
 **For now only available in french, sorry :(**
 
-[kuzh.cc](kuzh.cc) est une application de questions/réponses anonyme open-source, sous GPVv3,
+[kuzh](https://kuzh.cc/) est une application de questions/réponses anonyme open-source, sous GPVv3,
 permettant à chaque participant.e de poser et répondre aux questions du groupe sans se dévoiler.
 Du moins autant que le permet la fiabilité du protocole de vote.
 
@@ -111,5 +111,13 @@ Une fois que ceux deux outils sont installés:
 - Puis `yarn start` pour lancer l'application.
 
 C'est bon à l'application est diponible à l'adresse http://localhost:3000
+
+# Credits to the fonts used in Kuzh
+
+[Kuzh](https://kuzh.cc) uses some great open source fonts. Many thanks to their authors for theses fonts ❤️.
+
+- The [Alice](https://github.com/cyrealtype/Alice) (SIL Open Font License 1.1)
+- The [Open Baskerville](https://github.com/klepas/open-baskerville) (GPLv3)
+- The [Overpass](https://github.com/RedHatOfficial/Overpass) (SIL Open Font License 1.1)
 
 # Amusez vous bien :)
