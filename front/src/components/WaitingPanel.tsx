@@ -351,7 +351,7 @@ namespace OpenAnswerPanelNS {
   export function Confirm(props: ConfirmProps): JSX.Element {
     return (
       <div>
-        <h3>Il est temps de répondre!</h3>
+        <h3>Confirme ton choix</h3>
         <p>Tu as choisi de répondre :</p>
         <p>
           "<em className="the-answer">{props.answer}</em>"

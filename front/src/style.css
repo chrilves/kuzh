@@ -31,7 +31,7 @@ ul {
 
 /* WIDTH */
 
-@media (orientation : portrait) {
+@media (orientation: portrait) {
   html {
     font-size: 1.5vh;
   }
@@ -42,7 +42,7 @@ ul {
   }
 }
 
-@media (orientation : landscape) {
+@media (orientation: landscape) {
   html {
     font-size: 100%;
   }
@@ -152,7 +152,7 @@ button {
 
 .assembly-url-qr-code {
   width: 33%;
-  height:33%;
+  height: 33%;
   margin-left: auto;
   margin-right: auto;
   display: block;
@@ -183,4 +183,3 @@ p {
 input {
   font-size: 1rem;
 }
-
