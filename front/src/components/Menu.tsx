@@ -46,6 +46,11 @@ export default function Menu(
         element={
           <main>
             <article>
+              <h3>Qu'est ce ?</h3>
+              <p>
+                <strong>kuzh</strong> permet aux membre d'un groupe, appelée ici une <em>assemblée</em>, de poser
+                des questions aux autres membres <strong>anonymement</strong> et d'y répondre tout aussi <strong>anonymement</strong>.
+              </p>
               {lastMembership && (
                 <LastAssembly
                   lastMembership={lastMembership}
