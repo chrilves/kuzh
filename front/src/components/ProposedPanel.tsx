@@ -3,6 +3,7 @@ import { Fingerprint, Name } from "../model/Crypto";
 import MemberList from "./MemberList";
 import { Member } from "../model/Member";
 import { Harvest } from "../model/assembly/Harvest";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   harvest: Harvest;
@@ -16,6 +17,7 @@ type Phase = "proposed" | "accepted";
 
 export default function ProposedPanel(props: Props): JSX.Element {
   const [phase, setPhase] = useState<Phase>("proposed");
+  const { t } = useTranslation();
 
   function goToAccepted() {
     props.acceptHarvest();
@@ -28,24 +30,30 @@ export default function ProposedPanel(props: Props): JSX.Element {
     case "proposed":
       page = (
         <div>
+          <h3>{t("Do you accept this harvest ?")}</h3>
+          <p>
+            {t(
+              "Consent matters! The harvest won't start until everyone accepts it. Nobody is allowed to join the harvest any more, not until someone refuses it to go back!"
+            )}
+          </p>
           <div>
             <button
               className="yes-no-button"
               type="button"
               onClick={goToAccepted}
             >
-              J'accepte cette récolte.
+              {t("I accept this harvest")}
             </button>
             <button
               className="yes-no-button"
               type="button"
               onClick={() => props.changeReadiness("blocking")}
             >
-              Je refuse cette récolote!
+              {t("I refuse this harvest !")}
             </button>
           </div>
           <MemberList
-            title="Membres participant à la récolte"
+            title={t("Participants in this harvest")}
             members={props.harvest.participants}
             name={props.name}
           />
@@ -53,21 +61,24 @@ export default function ProposedPanel(props: Props): JSX.Element {
       );
       break;
     case "accepted":
-      page = <p>Vous avez accepté de démarrer le vote</p>;
+      page = (
+        <div>
+          <h3>{t("Waiting others")}</h3>
+          <p>
+            {t(
+              "You have accepted to start the harvest. You need to wait until everyone accepts the harvest or one refuses it."
+            )}
+          </p>
+        </div>
+      );
       break;
   }
 
   return (
     <section>
-      <h3>Acceptes tu cette récolte?</h3>
-      <p>
-        Le consentement c'est important! La récolte ne démarrera pas tant que tu
-        ne l'auras pas accepté. Personne ne peux plus rejoindre la récolte, à
-        moins que tu ne la refuse pour revenir en arrière!
-      </p>
       {page}
       <MemberList
-        title="Membre n'ayant pas encore accepté la récolte"
+        title={t("Participants having not accept the harvest yet")}
         members={props.remaining}
         name={props.name}
       />

@@ -15,6 +15,7 @@ import { Validation } from "../model/Validation";
 import { StorageAPI } from "../services/StorageAPI";
 import MembershipPanel from "./MembershipPanel";
 import { Nickname } from "./Nickname";
+import { useTranslation } from "react-i18next";
 
 interface Nav {
   prepare(operation: Operation): void;
@@ -27,6 +28,7 @@ export default function Menu(
   const [lastMembership, setlastMembership] = useState<
     Membership | null | undefined
   >(undefined);
+  const { t } = useTranslation();
 
   const fetchLast = withAsync(async () => {
     const last = await props.storageAPI.fetchLastMembership();
@@ -46,12 +48,15 @@ export default function Menu(
         element={
           <main>
             <article>
-              <h3>Qu'est ce ?</h3>
+              <h3>{t("What is kuzh ?")}</h3>
               <p>
-                <strong>kuzh</strong> permet aux membre d'un groupe, appelée ici
-                une <em>assemblée</em>, de poser des questions aux autres
-                membres <strong>anonymement</strong> et d'y répondre tout aussi{" "}
-                <strong>anonymement</strong>.
+                <strong>kuzh</strong>{" "}
+                {t("allows members of group, called here an")}{" "}
+                <em>{t("assembly")}</em>,{" "}
+                {t("to ask questions to other members")}{" "}
+                <strong>{t("anonymously")}</strong>{" "}
+                {t("and reply to these questions")}{" "}
+                <strong>{t("anonymously")}</strong>.
               </p>
               {lastMembership && (
                 <LastAssembly
@@ -93,15 +98,16 @@ export default function Menu(
 function LastAssembly(
   props: Nav & { lastMembership: Membership }
 ): JSX.Element {
+  const { t } = useTranslation();
   return (
     <section id="last-assembly">
-      <h2>Revenir à ta dernière Assemblée</h2>
+      <h2>{t("Going back to the last assembly")}</h2>
       <MembershipPanel membership={props.lastMembership} />
       <button
         type="button"
         onClick={() => props.assembly(props.lastMembership)}
       >
-        Rejoindre ta dernière Assemblée
+        {t("Going back to your last assembly")}
       </button>
     </section>
   );
@@ -110,6 +116,7 @@ function LastAssembly(
 function Join(props: Nav & { nick: string }): JSX.Element {
   const [assemblyKey, setAssemblyKey] = useState<string>("");
   const [nickname, setNickname] = useState<string>(props.nick);
+  const { t } = useTranslation();
 
   async function join() {
     const info = AsssemblyInfo.parseAssemblyURL(assemblyKey);
@@ -128,19 +135,20 @@ function Join(props: Nav & { nick: string }): JSX.Element {
 
   return (
     <section id="join">
-      <h2>Rejoindre une Assemblée existante</h2>
+      <h2>{t("Join an existing assembly")}</h2>
       <p>
-        Pour rejoindre une assemblée existance, entre ici le lien de
-        l'assemblée, choisi un pseudo et c'est parti!
+        {t(
+          "To join an existing assembly, type here the assembly link, choose a nickname and have fun!"
+        )}
       </p>
       <div>
         <label>
-          Lien (URL) complet (celui avec "?secret=" dedans) de l'assemblée :{" "}
+          {t('Full link (the one containing "?secret=") of the assembly')} :{" "}
         </label>
         <input
           type="text"
           name="assembly_key"
-          placeholder="url de l'assemblée"
+          placeholder={t("assembly url")}
           value={assemblyKey}
           onChange={(e) => setAssemblyKey(e.target.value)}
         />
@@ -151,18 +159,19 @@ function Join(props: Nav & { nick: string }): JSX.Element {
         onClick={
           validInput()
             ? join
-            : () => alert("Les données que tu as entrées ne sont pas valides.")
+            : () => alert(t("The information you gave is incorrect, sorry."))
         }
       >
-        Rejoindre l'Assemblée{" "}
-        {validInput() ? "" : "(Les informations ne sont pas valides.)"}
+        {t("Join the assembly")}{" "}
+        {validInput() ? "" : `(${t("invalid input")}.)`}
       </button>
     </section>
   );
 }
 
 function Create(props: Nav & { nick: string }): JSX.Element {
-  const [assemblyName, setAssemblyName] = useState<string>("mon assemblée");
+  const { t } = useTranslation();
+  const [assemblyName, setAssemblyName] = useState<string>(t("my assembly"));
   const [nickname, setNickname] = useState<string>(props.nick);
 
   function create() {
@@ -177,17 +186,18 @@ function Create(props: Nav & { nick: string }): JSX.Element {
 
   return (
     <section id="create">
-      <h2>Créer une nouvelle Assemblée</h2>
+      <h2>{t("Create a new assembly")}</h2>
       <p>
-        Donne un nom à ton assemblée, n'importe lequel, oui "mon assemblée" fera
-        très bien l'affaire! Choisi un pseudo et c'est parti!
+        {t(
+          'Give a name to your new assembly, any one, yes "my assembly" is a good fit! Choose a nickname and have fun!'
+        )}
       </p>
       <div>
-        <label>Choisi un nom pour ton assemblée : </label>
+        <label>{t("Give a name to your assembly")} : </label>
         <input
           type="text"
           name="assemblyName"
-          placeholder="nom de l'assemblée"
+          placeholder={t("the assembly name")}
           value={assemblyName}
           onChange={(e) => setAssemblyName(e.target.value)}
         />
@@ -198,11 +208,11 @@ function Create(props: Nav & { nick: string }): JSX.Element {
         onClick={
           validInput()
             ? create
-            : () => alert("Clef d'assemblée ou pseudo invalide.")
+            : () => alert(t("Invalid assembly link or nickname."))
         }
       >
-        Créer l'Assemblée{" "}
-        {validInput() ? "" : "(Clef d'assemblée ou pseudo invalide.)"}
+        {t("Create the assembly")}{" "}
+        {validInput() ? "" : `(${t("Invalid assembly link or nickname.")})`}
       </button>
     </section>
   );
@@ -221,6 +231,7 @@ function Wizzard(
   const [secret, setSecret] = useState<string>(secretQS ? secretQS : "");
   const [nickname, setNickname] = useState<string>(props.nick);
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   let postAction: (() => void) | undefined = undefined;
 
@@ -273,13 +284,15 @@ function Wizzard(
     <main>
       <article>
         <button type="button" onClick={() => navigate("/")}>
-          Menu
+          {t("Menu")}
         </button>
         {!secretQS && (
           <div>
             <label>
-              Entre ici le lien (URL) complet de l'assemblée (celui avec
-              "?secret=" dedans):{" "}
+              {t(
+                'Type here the full link (URL) of the assemblée (the one containing "?secret=")'
+              )}
+              :{" "}
             </label>
             <input
               type="text"
@@ -294,11 +307,11 @@ function Wizzard(
         {validInput() ? (
           <div>
             <button type="button" onClick={join}>
-              Rejoindre l'assemblée
+              {t("Join the assembly")}
             </button>
           </div>
         ) : (
-          <p>Entrées invalides.</p>
+          <p>{t("Invalid inputs")}.</p>
         )}
       </article>
     </main>
@@ -307,13 +320,14 @@ function Wizzard(
 
 function Lost(): JSX.Element {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   return (
     <main>
       <article>
         <button type="button" onClick={() => navigate("/")}>
-          Menu
+          {t("Menu")}
         </button>
-        <p>Euh ... tu voulais aller où déja?</p>
+        <p>{t("Oops ... where do you wanted to go ?")}</p>
       </article>
     </main>
   );

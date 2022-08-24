@@ -4,6 +4,7 @@ import { Fingerprint, Name } from "../model/Crypto";
 import MemberList from "./MemberList";
 import { useState } from "react";
 import { ID } from "./ID";
+import { useTranslation } from "react-i18next";
 
 export declare function structuredClone(value: any): any;
 
@@ -15,6 +16,7 @@ type Props = {
 
 export default function PresencePanel(props: Props): JSX.Element {
   const [names, setNames] = useState<Map<Fingerprint, Name>>(new Map());
+  const { t } = useTranslation();
 
   function withName(member: Fingerprint): Name {
     const name = names.get(member);
@@ -47,7 +49,9 @@ export default function PresencePanel(props: Props): JSX.Element {
     <div>
       {absentLines.length > 0 && (
         <div>
-          <h4>Absent.e.s: {absentLines.length}</h4>
+          <h4>
+            {t("Absent members")}: {absentLines.length}
+          </h4>
           {absentLines.length > 0 && (
             <table className="absent">
               <tbody>{absentLines}</tbody>
@@ -56,7 +60,7 @@ export default function PresencePanel(props: Props): JSX.Element {
         </div>
       )}
       <MemberList
-        title="Présent.e.s"
+        title={t("Present members")}
         members={props.present}
         name={props.name}
       />

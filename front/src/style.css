@@ -183,3 +183,9 @@ p {
 input {
   font-size: 1rem;
 }
+
+.language-flag {
+  margin: 0.2rem;
+  width: 2rem;
+  height: 1rem;
+}

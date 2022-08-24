@@ -1,5 +1,4 @@
 import { ChangeEvent, useState } from "react";
-import { French } from "../French";
 import { JSONNormalizedStringifyD } from "../lib/JSONNormalizedStringify";
 import { Status } from "../model/assembly/Status";
 import { Fingerprint, Name } from "../model/Crypto";
@@ -7,6 +6,7 @@ import { Member } from "../model/Member";
 import { Parameters } from "../model/Parameters";
 import { Question } from "../model/Question";
 import ReadinessPanel from "./ReadinessPanel";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   myFingerprint: Fingerprint;
@@ -17,6 +17,19 @@ type Props = {
   changeReadiness(r: Member.Blockingness): void;
   name(member: Fingerprint): Promise<Name>;
 };
+
+function RenderKindedText(props: {
+  txt: string;
+  kind: Question.Kind;
+}): JSX.Element {
+  const { t } = useTranslation();
+  const arr = t(props.txt).split("<KIND>");
+  return (
+    <span>
+      {arr[0]} <strong>{t(props.kind)}</strong> {arr[1]}
+    </span>
+  );
+}
 
 export default function WaitingPanel(props: Props): JSX.Element {
   let waitingPanel: JSX.Element;
@@ -131,6 +144,7 @@ function Confirmed(props: {
   const [desired, setDesired] = useState<Member.Blockingness>(
     props.myBlockingness
   );
+  const { t } = useTranslation();
 
   function renderOk(
     title: string,
@@ -161,16 +175,16 @@ function Confirmed(props: {
   switch (props.myBlockingness) {
     case "blocking":
       return renderOk(
-        "Tu bloques la récolte!",
-        "Pense à la débloquer un jour.",
-        "Je débloque la récolte.",
+        t("You're blocking the harvest!"),
+        t("Please do not forget to unblock it."),
+        t("I stop blocking the harvest"),
         "ready"
       );
     case "ready":
       return renderOk(
-        "Attends le début de la récolote.",
-        "Ton choix est confirmé!",
-        "Bloquer la récolote",
+        t("Wait the start of the harvest."),
+        t("Your choice is confirmed."),
+        t("I want block the harvest"),
         "blocking"
       );
   }
@@ -186,11 +200,13 @@ namespace ClosedAnswerPanelNS {
   };
 
   export function Reply(props: ReplyProps): JSX.Element {
+    const { t } = useTranslation();
+
     return (
       <div>
-        <h3>Il est temps de répondre!</h3>
+        <h3>{t("Time to answer !")}</h3>
         <p>
-          La question est: "
+          {t("The question is")}: "
           <strong className="the-question">{props.question}</strong>"
         </p>
         <button
@@ -198,14 +214,14 @@ namespace ClosedAnswerPanelNS {
           type="button"
           onClick={() => props.changePhase(Phase.confirm(true))}
         >
-          Je réponds <em className="the-answer">OUI</em>!
+          {t("I answer")} <em className="the-answer">{t("YES")}</em>!
         </button>
         <button
           className="yes-no-button"
           type="button"
           onClick={() => props.changePhase(Phase.confirm(false))}
         >
-          Je réponds <em className="the-answer">NON</em>!
+          {t("I answer")} <em className="the-answer">{t("NO")}</em>!
         </button>
       </div>
     );
@@ -218,13 +234,17 @@ namespace ClosedAnswerPanelNS {
   };
 
   export function Confirm(props: ConfirmProps): JSX.Element {
+    const { t } = useTranslation();
+
     return (
       <div>
-        <h3>Confirme ta réponse</h3>
+        <h3>{t("Confirm your answer")}</h3>
         <p>
-          Confirmes tu ton{" "}
-          <strong className="the-answer">{props.answer ? "OUI" : "NON"}</strong>{" "}
-          à la question "
+          {t("Do you confirm answering")}{" "}
+          <strong className="the-answer">
+            {props.answer ? t("YES") : t("NO")}
+          </strong>{" "}
+          {t("to the question")} "
           <strong className="the-question">{props.question}</strong>" ?
         </p>
         <button
@@ -232,15 +252,15 @@ namespace ClosedAnswerPanelNS {
           type="button"
           onClick={() => props.changeState(Phase.confirmed)}
         >
-          Je confirme mon{" "}
-          <em className="the-answer">{props.answer ? "OUI" : "NON"}</em>!
+          {t("I confirm answering")}{" "}
+          <em className="the-answer">{props.answer ? t("YES") : t("NO")}</em>!
         </button>
         <button
           className="yes-no-button"
           type="button"
           onClick={() => props.changeState(Phase.reply)}
         >
-          Je veux changer de réponse.
+          {t("I want to change my answer")}
         </button>
       </div>
     );
@@ -308,6 +328,7 @@ namespace OpenAnswerPanelNS {
 
   export function Reply(props: ReplyProps): JSX.Element {
     const [input, setInput] = useState<string>("");
+    const { t } = useTranslation();
 
     function answer() {
       if (input.trim().length > 0) props.changePhase(Phase.confirm(input));
@@ -321,9 +342,10 @@ namespace OpenAnswerPanelNS {
 
     return (
       <div>
-        <h3>Il est temps de répondre!</h3>
+        <h3>{t("Time to answer !")}</h3>
         <p>
-          La question est: "<em className="the-question">{props.question}</em>"
+          {t("The question is")}: "
+          <em className="the-question">{props.question}</em>"
         </p>
         <textarea
           rows={5}
@@ -335,7 +357,7 @@ namespace OpenAnswerPanelNS {
         />
         <div>
           <button className="open-answer-button" type="button" onClick={answer}>
-            Je validte ma réponse.
+            {t("I validate my answer")}
           </button>
         </div>
       </div>
@@ -349,15 +371,17 @@ namespace OpenAnswerPanelNS {
   };
 
   export function Confirm(props: ConfirmProps): JSX.Element {
+    const { t } = useTranslation();
+
     return (
       <div>
-        <h3>Confirme ton choix</h3>
-        <p>Tu as choisi de répondre :</p>
+        <h3>{t("Confirm your choice")}</h3>
+        <p>{t("You have chosen to answer")} :</p>
         <p>
           "<em className="the-answer">{props.answer}</em>"
         </p>
 
-        <p> à la question:</p>
+        <p>{t("to the question")} :</p>
 
         <p>
           "<strong className="the-question">{props.question}</strong>"
@@ -368,14 +392,14 @@ namespace OpenAnswerPanelNS {
           type="button"
           onClick={() => props.changeState(Phase.confirmed)}
         >
-          Je confirme ma réponse!
+          {t("I confirm my answer !")}
         </button>
         <button
           className="yes-no-button"
           type="button"
           onClick={() => props.changeState(Phase.reply)}
         >
-          Je veux revenir en arrière.
+          {t("I want to go back")}
         </button>
       </div>
     );
@@ -441,6 +465,7 @@ namespace QuestionPanelNS {
   export function Reply(props: ReplyProps): JSX.Element {
     const [input, setInput] = useState<string>("");
     const [kind, setKind] = useState<Question.Kind>("closed");
+    const { t } = useTranslation();
 
     function ask() {
       props.changePhase(
@@ -463,9 +488,9 @@ namespace QuestionPanelNS {
 
     return (
       <div>
-        <h3>Pose une question anonymement!</h3>
+        <h3>{t("Ask a question anonymously !")}</h3>
         <fieldset>
-          <legend>Question ouverte ou fermée?</legend>
+          <legend>{t("An open or closed-ended question ?")}</legend>
           <div onClick={setOpen}>
             <input
               type="radio"
@@ -473,7 +498,7 @@ namespace QuestionPanelNS {
               checked={kind === "open"}
               onChange={() => {}}
             />
-            <label>Ouverte: la réponse est libre.</label>
+            <label>{t("Open-ended: any textual answer")}</label>
           </div>
           <div onClick={setClosed}>
             <input
@@ -483,7 +508,7 @@ namespace QuestionPanelNS {
               onChange={() => {}}
             />
             <label>
-              Fermée: réponse par OUI ou NON <em>uniquement!</em>
+              {t("Closed-ended: answer by YES or NO")} <em>{t("only")} !</em>
             </label>
           </div>
         </fieldset>
@@ -495,17 +520,17 @@ namespace QuestionPanelNS {
           maxLength={Parameters.maxTextSize}
           value={input}
           onChange={change}
-          placeholder={`Écrivez ici votre question ${French.questionKind(
-            kind
-          )}.`}
+          placeholder={t("Type here your {{kind}} question.", {
+            kind: t(Question.kindText(kind)),
+          })}
         />
 
         <div>
           <button className="yes-no-button" type="button" onClick={ask}>
-            Valider ma question <em>{French.questionKind(kind)}</em>.
+            <RenderKindedText txt="I validate my <KIND> question" kind={kind} />
           </button>
           <button className="yes-no-button" type="button" onClick={dontAsk}>
-            Je ne pose aucune question!
+            {t("I don't ask any question !")}
           </button>
         </div>
       </div>
@@ -518,33 +543,38 @@ namespace QuestionPanelNS {
   };
 
   export function Confirm(props: ConfirmProps): JSX.Element {
+    const { t } = useTranslation();
+
     return (
       <div>
-        <h3>Confirme ton choix</h3>
+        <h3>{t("Confirm your choice")}</h3>
         {props.question ? (
           <div>
             <p>
-              Tu as choisi de poser la question{" "}
-              <strong>{French.questionKind(props.question.kind)}</strong>:
+              <RenderKindedText
+                txt="You have chosen to ask the <KIND> question"
+                kind={props.question.kind}
+              />{" "}
+              :
             </p>
             <p className="the-answer">"{props.question.message}"</p>
           </div>
         ) : (
-          <p>Tu as choisi de ne pas poser de question.</p>
+          <p>{t("You have chosen not to ask question.")}</p>
         )}
         <button
           className="yes-no-button"
           type="button"
           onClick={() => props.changePhase(Phase.confirmed)}
         >
-          Je confirme mon choix!
+          {t("I confirm my choice !")}
         </button>
         <button
           className="yes-no-button"
           type="button"
           onClick={() => props.changePhase(Phase.reply)}
         >
-          Je veux changer mon choix.
+          {t("I want to change my choice")}
         </button>
       </div>
     );

@@ -1,6 +1,7 @@
 import { MemberReadiness } from "../model/Member";
 import { Fingerprint, Name } from "../model/Crypto";
 import MemberList from "./MemberList";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   readiness: MemberReadiness[];
@@ -8,6 +9,8 @@ type Props = {
 };
 
 export default function ReadinessPanel(props: Props): JSX.Element {
+  const { t } = useTranslation();
+
   let ready: Fingerprint[] = [];
   let blocking: Fingerprint[] = [];
   let answering: Fingerprint[] = [];
@@ -29,16 +32,20 @@ export default function ReadinessPanel(props: Props): JSX.Element {
   return (
     <div>
       <MemberList
-        title="Membres en train de répondre"
+        title={t("Members answering")}
         members={answering}
         name={props.name}
       />
       <MemberList
-        title="Membres qui bloquent la récolte"
+        title={t("Members blocking the harvest")}
         members={blocking}
         name={props.name}
       />
-      <MemberList title="Membres prêt.e.s" members={ready} name={props.name} />
+      <MemberList
+        title={t("Members ready")}
+        members={ready}
+        name={props.name}
+      />
     </div>
   );
 }

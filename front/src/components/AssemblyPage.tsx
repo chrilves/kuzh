@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { French } from "../French";
 import Assembly, { ConnectionStatus } from "../model/assembly/Assembly";
 import { AssemblyInfo } from "../model/assembly/AssembyInfo";
 import { State } from "../model/assembly/State";
@@ -11,10 +10,10 @@ import { IdentityProofStore } from "../services/IdentityProofStore";
 import { AssemblySharing } from "./AssemblySharing";
 import { ID } from "./ID";
 import MemberList from "./MemberList";
-import MembershipPanel from "./MembershipPanel";
 import { Nickname } from "./Nickname";
 import PresencePanel from "./PresencePanel";
 import StatusPanel from "./StatusPanel";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   addGuest: (
@@ -39,6 +38,7 @@ export default function AssemblyPage(props: Props): JSX.Element {
   const [harvestResult, setHarvestResult] = useState<HarvestResult | null>(
     null
   );
+  const { t } = useTranslation();
 
   function setLastHarvestResult(hr: HarvestResult | null): void {
     if (hr) setHarvestResult(hr);
@@ -76,7 +76,7 @@ export default function AssemblyPage(props: Props): JSX.Element {
         name={props.assembly.name}
       />
       <section className="assembly-info">
-        <h3>Assemblée</h3>
+        <h3>{t("Assembly")}</h3>
         <ConnectionStatusPanel
           assemblyInfo={props.assembly.membership.assembly}
           status={connectionStatus}
@@ -105,25 +105,27 @@ export default function AssemblyPage(props: Props): JSX.Element {
 
 function ConnectionStatusPanel(props: {
   assemblyInfo: AssemblyInfo;
-  status: string;
+  status: ConnectionStatus;
 }): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div>
       <ID name={props.assemblyInfo.name} id={props.assemblyInfo.id} />
-      Connexion: {props.status}
+      {t("Connection")}: {t(props.status)}
     </div>
   );
 }
 
 function NextQuestions(props: { questions: Question[] }): JSX.Element {
+  const { t } = useTranslation();
   if (props.questions.length > 0) {
     return (
       <div>
-        <h4>Prochaines questions:</h4>
+        <h4>{t("Next questions")}:</h4>
         <ol>
           {props.questions.map((q, i) => (
             <li key={i}>
-              ({French.questionKind(q.kind)}) {q.message}
+              ({t(Question.kindText(q.kind))}) {q.message}
             </li>
           ))}
         </ol>
@@ -139,6 +141,7 @@ function LastHarvestResult(props: {
   name: (member: Fingerprint) => Promise<string>;
 }): JSX.Element {
   const [hidden, setHidden] = useState(false);
+  const { t } = useTranslation();
 
   if (props.harvestResult === null) return <div />;
 
@@ -149,15 +152,15 @@ function LastHarvestResult(props: {
     switch (props.harvestResult.tag) {
       case "question":
         if (props.harvestResult.questions.length === 0)
-          page = <p>Aucune question posée</p>;
+          page = <p>{t("No more asked question")}.</p>;
         else
           page = (
             <div>
-              <p>Questions posées:</p>
+              <p>{t("Asked questions")}:</p>
               <ul>
                 {props.harvestResult.questions.map((q, i) => (
                   <li key={i}>
-                    ({French.questionKind(q.kind)}) {q.message}
+                    ({t(Question.kindText(q.kind))}) {q.message}
                   </li>
                 ))}
               </ul>
@@ -167,10 +170,17 @@ function LastHarvestResult(props: {
       case "closed_answer":
         page = (
           <div>
-            <p>À la question "{props.harvestResult.question}", ont répondu:</p>
+            <p>
+              {t("To the question")} "{props.harvestResult.question}",{" "}
+              {t("results are")}:
+            </p>
             <ul>
-              <li>OUI: {props.harvestResult.yes}</li>
-              <li>NON: {props.harvestResult.no}</li>
+              <li>
+                {t("YES")}: {props.harvestResult.yes}
+              </li>
+              <li>
+                {t("NO")}: {props.harvestResult.no}
+              </li>
             </ul>
           </div>
         );
@@ -178,7 +188,9 @@ function LastHarvestResult(props: {
       case "open_answer":
         page = (
           <div>
-            <p>Réponses à la question "{props.harvestResult.question}":</p>
+            <p>
+              {t("Answers to the question")} "{props.harvestResult.question}":
+            </p>
             <ul>
               {props.harvestResult.answers.map((q, i) => (
                 <li key={i}>{q}</li>
@@ -192,16 +204,16 @@ function LastHarvestResult(props: {
   return (
     <section>
       <h3>
-        Dernière récolte{" "}
+        {t("Last harvest")}{" "}
         <button type="button" onClick={() => setHidden(!hidden)}>
-          {hidden ? "Démasquer" : "Masquer"}
+          {hidden ? t("Unhide") : t("Hide")}
         </button>
       </h3>
       {!hidden && (
         <div>
           {page}
           <MemberList
-            title="Participant.e.s"
+            title={t("Participants")}
             members={props.harvestResult.participants}
             name={props.name}
           />
@@ -221,6 +233,7 @@ function AddGuest(props: AddGuestProps): JSX.Element {
   const [nickname, setNickname] = useState<string>(
     `${props.seatNickname}#${counter}`
   );
+  const { t } = useTranslation();
 
   function add() {
     if (validInput()) {
@@ -236,16 +249,16 @@ function AddGuest(props: AddGuestProps): JSX.Element {
 
   return (
     <section id="add-guest">
-      <h3>Ajouter Un.e invitée</h3>
+      <h3>{t("Add a guest")}</h3>
       <Nickname nickname={nickname} setNickname={setNickname} />
       {validInput() ? (
         <div>
           <button type="button" onClick={add}>
-            Ajouter l'invité.e
+            {t("Add the guest")}
           </button>
         </div>
       ) : (
-        <p>Pseudo invalide</p>
+        <p>{t("Invalid nickname")}</p>
       )}
     </section>
   );

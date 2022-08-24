@@ -12,4 +12,13 @@ export namespace Question {
       kind,
     };
   }
+
+  export function kindText(kind: Kind): string {
+    switch (kind) {
+      case "closed":
+        return "closed-ended";
+      case "open":
+        return "open-ended";
+    }
+  }
 }

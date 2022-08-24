@@ -5,6 +5,8 @@ import { Member } from "../model/Member";
 import { Status } from "../model/assembly/Status";
 import { Harvest } from "../model/assembly/Harvest";
 import { Question } from "../model/Question";
+import { useTranslation } from "react-i18next";
+import { t } from "i18next";
 
 type Props = {
   myFingerprint: Fingerprint;
@@ -18,6 +20,8 @@ type Props = {
 };
 
 export default function StatusPanel(props: Props): JSX.Element {
+  const { t } = useTranslation();
+
   switch (props.status.tag) {
     case "waiting":
       return (
@@ -60,22 +64,29 @@ function HarvestingStartedPanel(props: {
   harvest: Harvest;
   name: (member: Fingerprint) => Promise<Name>;
 }): JSX.Element {
+  const { t } = useTranslation();
+
   return (
     <section>
-      <h3>La récolote est en cours</h3>
+      <h3>{t("The harvest is in progress")}</h3>
       <p>
-        Le protocole de récolte anonyme est lancé. Tu auras les résultats dans
-        quelques instants.
+        {t(
+          "The protocol of anonymous harvesting is in progress. You'll have the results in a moment."
+        )}
       </p>
     </section>
   );
 }
 
 function Hidden(): JSX.Element {
+  const { t } = useTranslation();
+
   return (
     <section>
-      <h3>Veuillez attendre</h3>
-      <p>Une récolte est en cours. Vous pourrez participer bientôt.</p>
+      <h3>{t("Please wait")}</h3>
+      <p>
+        {t("A harvest is in progress. You'll be able to participate soon.")}
+      </p>
     </section>
   );
 }

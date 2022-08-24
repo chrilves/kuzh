@@ -4,6 +4,7 @@ import { SeatState } from "../model/SteatState";
 import { IdentityProofStore } from "../services/IdentityProofStore";
 import AssemblyPage from "./AssemblyPage";
 import { ID } from "./ID";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   addGuest: (
@@ -18,6 +19,8 @@ type Props = {
 };
 
 export default function SeatPage(props: Props): JSX.Element {
+  const { t } = useTranslation();
+
   let page: JSX.Element;
 
   function fail(error: string) {
@@ -67,10 +70,10 @@ export default function SeatPage(props: Props): JSX.Element {
         </h2>
         <div>
           <button type="button" onClick={props.exit}>
-            Quitter
+            {t("Exit")}
           </button>
           <button type="button" onClick={props.reset}>
-            Relancer
+            {t("Reset")}
           </button>
         </div>{" "}
       </header>
@@ -80,16 +83,18 @@ export default function SeatPage(props: Props): JSX.Element {
 }
 
 function Create(props: { create: Operation.Create }): JSX.Element {
+  const { t } = useTranslation();
+
   return (
     <section>
-      <p>Création d'une nouvelle assemblée</p>
+      <p>{t("Creating a new assembly")}</p>
       <ul>
         <li>
-          <label>Nom de l'assemblée:</label>{" "}
+          <label>{t("Assembly name")}:</label>{" "}
           <em>{props.create.assemblyName}</em>
         </li>
         <li>
-          <label>Votre pesudo:</label> <em>{props.create.nickname}</em>.
+          <label>{t("Your nickname")}:</label> <em>{props.create.nickname}</em>.
         </li>
       </ul>
     </section>
@@ -97,15 +102,16 @@ function Create(props: { create: Operation.Create }): JSX.Element {
 }
 
 export function Join(props: { join: Operation.Join }): JSX.Element {
+  const { t } = useTranslation();
   return (
     <section>
-      <p>Connection à une assemblée existance.</p>
+      <p>{t("Connecting to an existing assembly.")}</p>
       <ul>
         <li>
-          <label>Identifiant de l'assemblée:</label> <em>{props.join.id}</em>
+          <label>{t("Assembly ID")}:</label> <em>{props.join.id}</em>
         </li>
         <li>
-          <label>Votre pesudo:</label> <em>{props.join.nickname}</em>.
+          <label>{t("Your nickname")}:</label> <em>{props.join.nickname}</em>.
         </li>
       </ul>
     </section>
@@ -113,15 +119,17 @@ export function Join(props: { join: Operation.Join }): JSX.Element {
 }
 
 export function Failure(props: { error: any }): JSX.Element {
+  const { t } = useTranslation();
+
   let errorMessage: JSX.Element;
 
   function renderError(err: Error): JSX.Element {
     let lines = [
       <p>
-        <label>Nom</label>: <em>{props.error.name}</em>
+        <label>{t("Name")}</label>: <em>{props.error.name}</em>
       </p>,
       <p>
-        <label>Message</label>: <em>{props.error.message}</em>
+        <label>{t("Message")}</label>: <em>{props.error.message}</em>
       </p>,
     ];
     if (props.error.cause)
@@ -148,7 +156,7 @@ export function Failure(props: { error: any }): JSX.Element {
       errorMessage = <p>{String(props.error)}</p>;
       break;
     case "function":
-      errorMessage = <p>L'erreur est .... une fonction ??? Etrange ...</p>;
+      errorMessage = <p>{t("The error is a ... function ???")}</p>;
       break;
     case "object":
       if (props.error instanceof Error) errorMessage = renderError(props.error);
@@ -157,7 +165,7 @@ export function Failure(props: { error: any }): JSX.Element {
       else
         errorMessage = (
           <p>
-            Erreur inconue de type ${typeof props.error} et valeur $
+            {t("Unknown error of type")} ${typeof props.error} {t("and value")}{" "}
             {JSON.stringify(props.error)}
           </p>
         );
@@ -165,7 +173,7 @@ export function Failure(props: { error: any }): JSX.Element {
 
   return (
     <section>
-      <h3>Erreur:</h3>
+      <h3>{t("Error")}:</h3>
       {errorMessage}
     </section>
   );

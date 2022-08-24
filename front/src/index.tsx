@@ -19,6 +19,7 @@ import { Services } from "./services/Services";
 import { LocalStorageAPI, StorageAPI } from "./services/StorageAPI";
 //import reportWebVitals from './reportWebVitals';
 import "./style.css";
+import "./i18n";
 
 /////////////////////////////
 // Initialisation!

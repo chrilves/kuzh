@@ -1,22 +1,22 @@
+import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { v4 as uuidv4 } from "uuid";
 import { AppState } from "../model/AppState";
 import Assembly from "../model/assembly/Assembly";
+import { AssemblyInfo } from "../model/assembly/AssembyInfo";
 import { Membership } from "../model/Crypto";
 import { Operation } from "../model/Operation";
-import { AssemblyAPI } from "../services/AssemblyAPI";
-import { Services } from "../services/Services";
-import Menu from "./Menu";
-import { v4 as uuidv4 } from "uuid";
-import { Nickname } from "./Nickname";
-import { AssemblyInfo } from "../model/assembly/AssembyInfo";
-import { IdentityProofStore } from "../services/IdentityProofStore";
-import { DummyStorageAPI } from "../services/StorageAPI";
-import { SeatState } from "../model/SteatState";
-import Seat from "./SeatPage";
-import { RefAppState } from "../model/RefAppState";
-import { QRCodeSVG } from "qrcode.react";
 import { Parameters } from "../model/Parameters";
+import { RefAppState } from "../model/RefAppState";
+import { SeatState } from "../model/SteatState";
+import { AssemblyAPI } from "../services/AssemblyAPI";
+import { IdentityProofStore } from "../services/IdentityProofStore";
+import { Services } from "../services/Services";
+import { DummyStorageAPI } from "../services/StorageAPI";
+import { useTranslation } from "react-i18next";
+import Menu from "./Menu";
+import Seat from "./SeatPage";
 
 export default function App(props: {
   services: Services;
@@ -24,6 +24,7 @@ export default function App(props: {
 }): JSX.Element {
   const [_, setAppState] = useState<AppState>(props.refAppState.appState);
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
 
   useEffect(() => {
     props.refAppState.listerners.addListener(setAppState);
@@ -173,7 +174,7 @@ export default function App(props: {
           }
 
           return asm.start();
-        } else throw new Error("Trying to connect a guest not in seat mode");
+        } else throw new Error(t("ERROR_CONNECT_GUEST_NO_SEAT_MODE"));
       };
 
       const newGuests = Array.from(props.refAppState.appState.guests);
@@ -255,16 +256,31 @@ export default function App(props: {
 function KuzhTitle(): JSX.Element {
   const urlIntoClipboard = () =>
     navigator.clipboard.writeText(Parameters.kuzhURL);
+  const { t, i18n } = useTranslation();
 
   return (
     <header id="title">
       <h1 onClick={urlIntoClipboard}>
         <QRCodeSVG value={Parameters.kuzhURL} includeMargin={false} />
         kuzh.cc
+        <span>
+          <img
+            alt="fr"
+            className="language-flag"
+            src="/flags/fr.svg"
+            onClick={() => i18n.changeLanguage("fr")}
+          />
+          <img
+            alt="en"
+            className="language-flag"
+            src="/flags/en.svg"
+            onClick={() => i18n.changeLanguage("en")}
+          />
+        </span>
       </h1>
-      Questions/Réponses anonymes, et{" "}
+      {t("Anonymous Questions and Answers")}, {t("in")}{" "}
       <a href={Parameters.sourceURL} target="_blank">
-        open-source
+        {t("free software")}
       </a>
       !
     </header>
