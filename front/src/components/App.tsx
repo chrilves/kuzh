@@ -17,6 +17,7 @@ import { DummyStorageAPI } from "../services/StorageAPI";
 import { useTranslation } from "react-i18next";
 import Menu from "./Menu";
 import Seat from "./SeatPage";
+import Install from "../services/Install";
 
 export default function App(props: {
   services: Services;
@@ -247,16 +248,23 @@ export default function App(props: {
 
   return (
     <div>
-      <KuzhTitle />
+      <KuzhTitle install={props.services.install} />
       {page}
     </div>
   );
 }
 
-function KuzhTitle(): JSX.Element {
+function KuzhTitle(props: { install: Install }): JSX.Element {
+  const { t, i18n } = useTranslation();
+  const [installable, setInstallable] = useState(props.install.installable());
+
+  useEffect(() => {
+    props.install.listerners.addListener(setInstallable);
+    return () => props.install.listerners.removeListener(setInstallable);
+  });
+
   const urlIntoClipboard = () =>
     navigator.clipboard.writeText(Parameters.kuzhURL);
-  const { t, i18n } = useTranslation();
 
   return (
     <header id="title">
@@ -283,6 +291,13 @@ function KuzhTitle(): JSX.Element {
         {t("free software")}
       </a>
       !
+      {installable && (
+        <div>
+          <button type="button" onClick={props.install.install}>
+            {t("Install kuzh")}
+          </button>
+        </div>
+      )}
     </header>
   );
 }

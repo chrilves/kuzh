@@ -11,6 +11,7 @@ import {
   RealAssemblyAPIFactory,
 } from "./services/AssemblyAPI";
 import { BackAPI, RealBackAPI } from "./services/BackAPI";
+import Install from "./services/Install";
 import {
   BackCachingIdentityProofStoreFactory,
   IdentityProofStoreFactory,
@@ -24,6 +25,8 @@ import "./i18n";
 
 /////////////////////////////
 // Initialisation!
+
+const install = new Install();
 
 if (!process.env.REACT_APP_BACK_URL)
   throw new Error("Variable REACT_APP_BACK_URL not set!");
@@ -42,10 +45,11 @@ const assemblyAPIFactory: AssemblyAPIFactory = new RealAssemblyAPIFactory(
 );
 
 const services: Services = {
-  storageAPI: storageAPI,
-  assemblyAPI: assemblyAPI,
-  identityProofStoreFactory: identityProofStoreFactory,
-  assemblyAPIFactory: assemblyAPIFactory,
+  storageAPI,
+  assemblyAPI,
+  identityProofStoreFactory,
+  assemblyAPIFactory,
+  install,
 };
 
 const refAppState = new RefAppState(AppState.menu);

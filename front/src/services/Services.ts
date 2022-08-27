@@ -1,5 +1,6 @@
 import { AssemblyAPI, AssemblyAPIFactory } from "./AssemblyAPI";
 import { IdentityProofStoreFactory } from "./IdentityProofStore";
+import Install from "./Install";
 import { StorageAPI } from "./StorageAPI";
 
 export type Services = {
@@ -7,4 +8,5 @@ export type Services = {
   assemblyAPI: AssemblyAPI;
   identityProofStoreFactory: IdentityProofStoreFactory;
   assemblyAPIFactory: AssemblyAPIFactory;
+  install: Install;
 };

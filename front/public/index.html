@@ -22,6 +22,33 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>kuzh.cc</title>
+    <script>
+      var deferredPrompt = {
+        state: undefined,
+        propagate: () => {},
+      };
+      try {
+        window
+          .matchMedia("(display-mode: standalone)")
+          .addEventListener("change", ({ matches }) => {
+            if (matches && deferredPrompt.state === undefined) {
+              deferredPrompt.state = null;
+              deferredPrompt.propagate();
+            }
+          });
+        window.addEventListener("beforeinstallprompt", (event) => {
+          event.preventDefault();
+          if (deferredPrompt.state === undefined) {
+            deferredPrompt.state = event;
+            deferredPrompt.propagate();
+          }
+        });
+      } catch (e) {
+        deferredPrompt.state = null;
+        deferredPrompt.propagate();
+        console.log(`Kuzh Install setup error: ${JSON.stringify(e)}`);
+      }
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
