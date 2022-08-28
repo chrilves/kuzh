@@ -1,7 +1,7 @@
 import { MemberEvent } from "./events/MemberEvent";
 
 export default interface ConnectionController {
-  close(): void;
+  close(error: string | null): void;
   sendEvent(event: MemberEvent): void;
 }
 

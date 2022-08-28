@@ -6,7 +6,7 @@ export class Listener<A> {
     this._get = get;
   }
 
-  readonly addListener = async (f: (a: A) => void) => {
+  readonly addListener = (f: (a: A) => void) => {
     this._listeners.add(f);
     f(this._get());
   };
@@ -28,4 +28,20 @@ export class Listener<A> {
       }
     });
   };
+
+  readonly waitFor = <B>(f: (a: A) => B | undefined): Promise<B> =>
+    new Promise((resolve, reject) => {
+      const g = (a: A) => {
+        try {
+          const b = f(a);
+          if (b !== undefined) {
+            this._listeners.delete(g);
+            resolve(b);
+          }
+        } catch (e) {
+          reject(e);
+        }
+      };
+      this._listeners.add(g);
+    });
 }

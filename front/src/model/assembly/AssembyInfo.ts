@@ -17,9 +17,11 @@ export namespace AsssemblyInfo {
       const id = match[1];
       const qs: Map<string, string> = new Map();
 
+      const kvre = /([^=]+)=(.*)/;
+
       for (const pair of match[2].split("&")) {
-        const kv = pair.split("=");
-        qs.set(kv[0], kv[1]);
+        const kv = pair.match(kvre);
+        if (kv) qs.set(kv[1], kv[2]);
       }
 
       const secret = qs.get("secret");

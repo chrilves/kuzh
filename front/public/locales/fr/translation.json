@@ -92,6 +92,7 @@
   "Reset": "Relancer",
   "results are": "ont répondu",
   "Share this assembly": "Partager cette assemblée",
+  "Sorry, the connection to the server is {{connectionStatus}}.": "Désolé, la connection vers le serveur est {{connectionStatus}}.",
   "the assembly name": "nom de l'assemblée",
   "The harvest is in progress": "La récolote est en cours",
   "The error is a ... function ???": "L'erreur est .... une fonction ??? Etrange ...",

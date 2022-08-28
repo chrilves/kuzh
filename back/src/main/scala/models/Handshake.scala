@@ -11,7 +11,7 @@ import chrilves.kuzh.back.*
 object Handshake:
   enum Out:
     case Challenge(challenge: Array[Byte], identityProofNeeded: Boolean)
-    case Error(reason: String, fatal: Boolean)
+    case Error(error: String, fatal: Boolean)
     case Established(state: State[Any])
 
   object Out:
@@ -20,15 +20,15 @@ object Handshake:
         h match
           case Challenge(challenge, identityProofNeeded) =>
             Json.obj(
-              "tag"       -> Json.fromString("challenge"),
-              "challenge" -> Json.fromString(Base64UrlEncoded.encode(challenge).asString),
-              "identity_proof_needed" -> Json.fromBoolean(identityProofNeeded)
+              "tag"                   -> "challenge".asJson,
+              "challenge"             -> Base64UrlEncoded.encode(challenge).asString.asJson,
+              "identity_proof_needed" -> identityProofNeeded.asJson
             )
-          case Error(reason, fatal) =>
+          case Error(error, fatal) =>
             Json.obj(
-              "tag"    -> Json.fromString("error"),
-              "reason" -> Json.fromString(reason),
-              "fatal"  -> Json.fromBoolean(fatal)
+              "tag"   -> "error".asJson,
+              "error" -> error.asJson,
+              "fatal" -> fatal.asJson
             )
           case Established(state) =>
             Json.obj("tag" -> "established".asJson, "state" -> state.asJson)

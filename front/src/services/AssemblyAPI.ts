@@ -100,9 +100,7 @@ export class RealAssemblyAPI implements AssemblyAPI {
   async create(assemblyName: string, nickname: string): Promise<Membership> {
     const assembly = await this.backAPI.createAssembly(assemblyName);
     const me = await Me.generate(nickname);
-    const membership = new Membership(assembly, me);
-    await this.storageAPI.storeLastMembership(membership);
-    return membership;
+    return new Membership(assembly, me);
   }
 
   async join(
@@ -132,8 +130,6 @@ export class RealAssemblyAPI implements AssemblyAPI {
         );
       }
     }
-
-    await this.storageAPI.storeLastMembership(membership);
     return membership;
   }
 

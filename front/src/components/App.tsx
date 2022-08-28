@@ -85,6 +85,7 @@ export default function App(props: {
 
   async function assembly(membership: Membership): Promise<Assembly> {
     const asm = new Assembly(
+      props.services.storageAPI,
       props.services.identityProofStoreFactory.identityProofStore(
         membership.assembly
       ),
@@ -96,7 +97,14 @@ export default function App(props: {
     props.refAppState.setAppState(
       AppState.seats(
         {
-          state: SeatState.assembly(asm),
+          state: SeatState.prepare(
+            Operation.join(
+              asm.membership.assembly.id,
+              asm.membership.assembly.name,
+              asm.membership.assembly.secret,
+              asm.membership.me.nickname
+            )
+          ),
           setState: props.refAppState.setHostState,
           exit: menu,
           reset: asm.restart,
@@ -107,7 +115,6 @@ export default function App(props: {
     asm.seatListeners.addListener(props.refAppState.setHostState);
     await asm.start();
     navigate(`/assembly/${membership.assembly.id}`);
-    props.services.storageAPI.storeNickname(membership.me.nickname);
     return asm;
   }
 
@@ -145,6 +152,7 @@ export default function App(props: {
           );
 
           asm = new Assembly(
+            new DummyStorageAPI(),
             identityProofStore,
             guestAssemblyAPI,
             membership,

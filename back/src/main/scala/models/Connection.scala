@@ -214,17 +214,20 @@ object Connection:
                       read[Handshake.In](str) {
                         case cp @ Handshake.In.Crententials(info, member) =>
                           assemblies
-                            .withAssemblyInfo(info) { asm =>
-                              for
-                                challenge           <- lib.Random.bytes(32)
-                                storedIdentityProof <- asm.identityProof(member)
-                                _ <- status.set(
-                                  Challenged(asm, member, challenge, storedIdentityProof)
-                                )
-                                _ <- sendHandshake(
-                                  Handshake.Out.Challenge(challenge, storedIdentityProof.isEmpty)
-                                )
-                              yield ()
+                            .withAssemblyInfo(info) {
+                              case Some(asm) =>
+                                for
+                                  challenge           <- lib.Random.bytes(32)
+                                  storedIdentityProof <- asm.identityProof(member)
+                                  _ <- status.set(
+                                    Challenged(asm, member, challenge, storedIdentityProof)
+                                  )
+                                  _ <- sendHandshake(
+                                    Handshake.Out.Challenge(challenge, storedIdentityProof.isEmpty)
+                                  )
+                                yield ()
+                              case None =>
+                                exitOnError("Access forbidden to this assembly.")
                             }
                             .handleError(e => exitOnError(s"$e"))
                         case h =>

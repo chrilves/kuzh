@@ -35,7 +35,7 @@ export default function Menu(
     setlastMembership(last);
   });
 
-  useEffect(fetchLast, [props.storageAPI, fetchLast]);
+  useEffect(fetchLast, [props.storageAPI]);
 
   const nick = ((x) => (x ? x : ""))(props.storageAPI.fetchNickname());
 
@@ -120,9 +120,9 @@ function Join(props: Nav & { nick: string }): JSX.Element {
 
   async function join() {
     const info = AsssemblyInfo.parseAssemblyURL(assemblyKey);
-    if (info !== null) {
+    if (info !== null)
       props.prepare(Operation.join(info.id, info.name, info.secret, nickname));
-    } else alert("URL d'assemblée invalide");
+    else alert("URL d'assemblée invalide");
   }
 
   function validInput(): boolean {
@@ -239,7 +239,7 @@ function Wizzard(
     if (postAction && (await fuse.break())) postAction();
   });
 
-  useEffect(performPostAction, [performPostAction]);
+  useEffect(performPostAction, [props.lastMembership]);
 
   let assemblyId: string;
   if (assemblyIdP) {

@@ -118,16 +118,18 @@ export class RealBackAPI implements BackAPI {
   ): Promise<ConnectionController> {
     const assemblyUrl = `${this.baseURL.replace("http", "ws")}/connect`;
     let status: ConnectionStatus = "handshake";
-    const socket = new WebSocket(assemblyUrl);
+    let socket = new WebSocket(assemblyUrl);
 
     const controller: ConnectionController = new (class
       implements ConnectionController
     {
-      close(): void {
+      close(error: string | null): void {
         if (status !== "terminated") {
           status = "terminated";
+          updateConnection(
+            error ? ConnectionEvent.error(error, true) : ConnectionEvent.closed
+          );
           socket.close();
-          updateConnection(ConnectionEvent.closed);
         }
       }
       sendEvent(event: MemberEvent): void {
@@ -143,7 +145,8 @@ export class RealBackAPI implements BackAPI {
     })();
 
     socket.onopen = (e: Event) => {
-      if (status === "handshake") {
+      if (status !== "terminated") {
+        updateConnection(ConnectionEvent.opened(controller));
         socket.send(
           JSONNormalizedStringifyD(
             Handshake.Out.credentials(
@@ -152,15 +155,19 @@ export class RealBackAPI implements BackAPI {
             )
           )
         );
-        updateConnection(ConnectionEvent.opened(controller));
-      } else {
-        console.log(`[OPEN][${status}] Received event ${JSON.stringify(e)}.`);
-        controller.close();
-      }
+      } else
+        console.log(
+          `Opening with event ${JSON.stringify(e)} a terminated connection!`
+        );
     };
 
     socket.onmessage = async (msg: MessageEvent) => {
       switch (status) {
+        case "established":
+          const event: AssemblyEvent = JSON.parse(msg.data);
+          updateAssembly(event);
+          break;
+
         case "handshake":
           const message: Handshake.In = JSON.parse(msg.data);
           switch (message.tag) {
@@ -173,33 +180,32 @@ export class RealBackAPI implements BackAPI {
               break;
 
             case "error":
+              if (message.fatal) controller.close(message.error);
               updateConnection(
                 ConnectionEvent.error(message.error, message.fatal)
               );
               break;
 
             case "established":
-              updateConnection(ConnectionEvent.established(message.state));
               status = "established";
+              updateConnection(ConnectionEvent.established(message.state));
               break;
           }
-          break;
-
-        case "established":
-          const event: AssemblyEvent = JSON.parse(msg.data);
-          updateAssembly(event);
           break;
 
         case "terminated":
           console.log(
             `Received ${JSON.stringify(msg)} from a terminated connection.`
           );
+          break;
       }
     };
 
     socket.onclose = (ce: CloseEvent) => {
-      if (status !== "terminated") updateConnection(ConnectionEvent.closed);
-      else
+      if (status !== "terminated") {
+        status = "terminated";
+        updateConnection(ConnectionEvent.closed);
+      } else
         console.log(
           `Closing with event ${JSON.stringify(ce)} a terminated connection!`
         );
@@ -207,8 +213,13 @@ export class RealBackAPI implements BackAPI {
 
     socket.onerror = (e: Event) => {
       if (status !== "terminated") {
-        updateConnection(ConnectionEvent.error(JSON.stringify(e), true));
-        controller.close();
+        status = "terminated";
+        updateConnection(
+          ConnectionEvent.error(
+            "Connection with the server closed on error.",
+            true
+          )
+        );
       } else
         console.log(`Error ${JSON.stringify(e)} from a terminated connection!`);
     };

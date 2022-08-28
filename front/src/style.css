@@ -33,12 +33,12 @@ ul {
 
 @media (orientation: portrait) {
   html {
-    font-size: 1.5vh;
+    font-size: 3vw;
   }
   article {
-    width: 98vw;
-    margin-left: 0;
-    margin-right: 0;
+    width: 95vw;
+    margin-left: auto;
+    margin-right: auto;
   }
 }
 
@@ -80,8 +80,8 @@ article {
 #title svg {
   width: 4rem;
   height: 4rem;
-  margin-left: 1vh;
-  margin-right: 1vh;
+  margin-left: 0.5rem;
+  margin-right: 0.5rem;
 }
 
 h2 {

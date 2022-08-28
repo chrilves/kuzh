@@ -51,10 +51,11 @@ def AssemblyAuth[F[_]: Monad](
             java.util.UUID.fromString(segments(1).decoded(StandardCharsets.UTF_8))
           )
         val (_, rest) = path.splitAt(2)
+        import AssemblyManagement.WithAssemblyResult
         request.headers.get[assembly.Info.Secret] match
           case Some(secret) =>
             OptionT(assembies.withAssembly(id, secret) {
-              case Some(asm) =>
+              case WithAssemblyResult.Assembly(asm) =>
                 f(AssemblyRequest[F](asm, request.withPathInfo(rest))).value
               case _ => Forbidden().map(Some(_))
             })

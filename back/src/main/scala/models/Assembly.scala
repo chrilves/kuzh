@@ -461,6 +461,14 @@ final class Assembly[F[_]] private (
   /////////////////////////////////////////////////
   //  Entry Points
 
+  def closeIfEmpty: F[Unit] =
+    stateMutex.permit.surround {
+      for
+        channels <- refChannels.get
+        _        <- Async[F].whenA(channels.isEmpty)(close)
+      yield ()
+    }
+
   def removeMember(member: Member.Fingerprint): F[Unit] =
     stateMutex.permit.surround {
       for

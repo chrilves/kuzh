@@ -61,16 +61,24 @@ export default function AssemblyPage(props: Props): JSX.Element {
 
   return (
     <div>
-      <StatusPanel
-        myFingerprint={props.assembly.membership.me.fingerprint}
-        status={assemblyState.status}
-        sendOpenAnswer={props.assembly.myOpenAnswer}
-        sendClosedAnswer={props.assembly.myClosedAnswer}
-        sendQuestion={props.assembly.myQuestion}
-        acceptHarvest={props.assembly.acceptHarvest}
-        changeReadiness={props.assembly.changeReadiness}
-        name={props.assembly.name}
-      />
+      {connectionStatus === "established" ? (
+        <StatusPanel
+          myFingerprint={props.assembly.membership.me.fingerprint}
+          status={assemblyState.status}
+          sendOpenAnswer={props.assembly.myOpenAnswer}
+          sendClosedAnswer={props.assembly.myClosedAnswer}
+          sendQuestion={props.assembly.myQuestion}
+          acceptHarvest={props.assembly.acceptHarvest}
+          changeReadiness={props.assembly.changeReadiness}
+          name={props.assembly.name}
+        />
+      ) : (
+        <p>
+          {t("Sorry, the connection to the server is {{connectionStatus}}.", {
+            connectionStatus: t(connectionStatus),
+          })}
+        </p>
+      )}
       <LastHarvestResult
         harvestResult={harvestResult}
         name={props.assembly.name}
@@ -81,23 +89,29 @@ export default function AssemblyPage(props: Props): JSX.Element {
           assemblyInfo={props.assembly.membership.assembly}
           status={connectionStatus}
         />
-        <NextQuestions questions={assemblyState.questions} />
+        {connectionStatus === "established" && (
+          <NextQuestions questions={assemblyState.questions} />
+        )}
         <AssemblySharing assembly={props.assembly.membership.assembly} />
-        <PresencePanel
-          present={assemblyState.present}
-          absent={assemblyState.absent}
-          name={props.assembly.name}
-        />
-        <AddGuest
-          addGuest={(n) =>
-            props.addGuest(
-              props.assembly.membership.assembly,
-              n,
-              props.assembly.identityProofStore
-            )
-          }
-          seatNickname={props.assembly.membership.me.nickname}
-        />
+        {connectionStatus === "established" && (
+          <PresencePanel
+            present={assemblyState.present}
+            absent={assemblyState.absent}
+            name={props.assembly.name}
+          />
+        )}
+        {connectionStatus === "established" && (
+          <AddGuest
+            addGuest={(n) =>
+              props.addGuest(
+                props.assembly.membership.assembly,
+                n,
+                props.assembly.identityProofStore
+              )
+            }
+            seatNickname={props.assembly.membership.me.nickname}
+          />
+        )}
       </section>
     </div>
   );

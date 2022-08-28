@@ -92,6 +92,7 @@
   "Reset": "Reset",
   "results are": "results are",
   "Share this assembly": "Share this assembly",
+  "Sorry, the connection to the server is {{connectionStatus}}.": "Sorry, the connection to the server is {{connectionStatus}}.",
   "the assembly name": "the assembly name",
   "The harvest is in progress": "The harvest is in progress",
   "The error is a ... function ???": "The error is a ... function ???",
