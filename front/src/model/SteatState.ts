@@ -81,14 +81,14 @@ export namespace SeatState {
     }
   }
 
-  export function removeListerner(st: SeatState): void {
+  export function removeListener(st: SeatState): void {
     const m = member(st);
     if (m.assembly) {
       console.log(
         `[${m.assembly.membership.me.nickname}] Removing all listeners.`
       );
       m.assembly.seatListeners.clearListeners();
-      m.assembly.connectionStatusListerner.clearListeners();
+      m.assembly.connectionStatusListener.clearListeners();
       m.assembly.stateListener().clearListeners();
       m.assembly.harvestResultListener().clearListeners();
     }

@@ -1,4 +1,4 @@
-import { Listener } from "../lib/Listener";
+import { PropagateListener } from "../lib/Listener";
 import { AppState } from "./AppState";
 import { GuestSeat, SeatState } from "./SteatState";
 
@@ -14,14 +14,16 @@ export class RefAppState {
 
   readonly setAppState = (st: AppState) => {
     this.appState = st;
-    this.listerners.propagate(st);
+    this.listeners.propagate(st);
   };
   readonly getAppState = () => this.appState;
 
   /////////////////////////////
   // Listeners
 
-  readonly listerners: Listener<AppState> = new Listener(this.getAppState);
+  readonly listeners: PropagateListener<AppState> = new PropagateListener(
+    this.getAppState
+  );
 
   ///////////////////////////////
   // Operations
@@ -117,7 +119,7 @@ export class RefAppState {
           const guests = Array.from(this.appState.guests);
           const st = guests[idx].seat.state;
           SeatState.stop(st);
-          SeatState.removeListerner(st);
+          SeatState.removeListener(st);
           guests.splice(idx, 1);
           this.setAppState(AppState.seats(this.appState.host, guests));
         }

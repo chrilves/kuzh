@@ -1,7 +1,7 @@
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { v4 as uuidv4 } from "uuid";
 import { AppState } from "../model/AppState";
 import Assembly from "../model/assembly/Assembly";
 import { AssemblyInfo } from "../model/assembly/AssembyInfo";
@@ -12,12 +12,11 @@ import { RefAppState } from "../model/RefAppState";
 import { SeatState } from "../model/SteatState";
 import { AssemblyAPI } from "../services/AssemblyAPI";
 import { IdentityProofStore } from "../services/IdentityProofStore";
+import Install from "../services/Install";
 import { Services } from "../services/Services";
 import { DummyStorageAPI } from "../services/StorageAPI";
-import { useTranslation } from "react-i18next";
 import Menu from "./Menu";
 import Seat from "./SeatPage";
-import Install from "../services/Install";
 
 export default function App(props: {
   services: Services;
@@ -28,8 +27,8 @@ export default function App(props: {
   const { t, i18n } = useTranslation();
 
   useEffect(() => {
-    props.refAppState.listerners.addListener(setAppState);
-    return () => props.refAppState.listerners.removeListener(setAppState);
+    props.refAppState.listeners.addListener(setAppState);
+    return () => props.refAppState.listeners.removeListener(setAppState);
   }, [props.refAppState]);
 
   ////////////////////
@@ -40,10 +39,10 @@ export default function App(props: {
     switch (props.refAppState.appState.tag) {
       case "seats":
         SeatState.stop(props.refAppState.appState.host.state);
-        SeatState.removeListerner(props.refAppState.appState.host.state);
+        SeatState.removeListener(props.refAppState.appState.host.state);
         for (const gs of props.refAppState.appState.guests) {
           SeatState.stop(gs.seat.state);
-          SeatState.removeListerner(gs.seat.state);
+          SeatState.removeListener(gs.seat.state);
         }
         break;
       default:
@@ -128,7 +127,7 @@ export default function App(props: {
     identityProofStore: IdentityProofStore
   ): Promise<void> {
     if (props.refAppState.appState.tag === "seats") {
-      const guestID = uuidv4();
+      const guestID = crypto.randomUUID();
 
       const operation = Operation.join(
         assemblyInfo.id,
@@ -267,8 +266,8 @@ function KuzhTitle(props: { install: Install }): JSX.Element {
   const [installable, setInstallable] = useState(props.install.installable());
 
   useEffect(() => {
-    props.install.listerners.addListener(setInstallable);
-    return () => props.install.listerners.removeListener(setInstallable);
+    props.install.listeners.addListener(setInstallable);
+    return () => props.install.listeners.removeListener(setInstallable);
   });
 
   const urlIntoClipboard = () =>

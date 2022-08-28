@@ -1,5 +1,5 @@
 import { Mutex } from "async-mutex";
-import { Listener } from "../../lib/Listener";
+import { Listener, PropagateListener } from "../../lib/Listener";
 import { IdentityProofStore } from "../../services/IdentityProofStore";
 import { Ballot } from "../Ballot";
 import { Fingerprint, Me } from "../Crypto";
@@ -70,9 +70,11 @@ export class AssemblyState {
     status: structuredClone(this._status),
   });
 
-  readonly listerner: Listener<State> = new Listener(this.state);
+  readonly listener: PropagateListener<State> = new PropagateListener(
+    this.state
+  );
   readonly harvestResultListener = (): Listener<HarvestResult | null> =>
-    this._harvestState.resultListerner;
+    this._harvestState.resultListener;
 
   private readonly resetStatus = (id: string, qs: Question[]) => {
     const question = qs.length > 0 ? qs[0] : null;
@@ -381,7 +383,7 @@ export class AssemblyState {
           case "error":
             this.fail(ev.error);
         }
-        this.listerner.propagate(this.state());
+        this.listener.propagate(this.state());
       })
     );
 

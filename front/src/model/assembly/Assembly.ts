@@ -1,5 +1,5 @@
-import { Mutex } from "async-mutex";
-import { Listener } from "../../lib/Listener";
+import { Listener, MListener, PropagateListener } from "../../lib/Listener";
+import MVar from "../../lib/MVar";
 import { AssemblyAPI } from "../../services/AssemblyAPI";
 import { IdentityProofStore } from "../../services/IdentityProofStore";
 import { StorageAPI } from "../../services/StorageAPI";
@@ -31,7 +31,7 @@ export default class Assembly {
   readonly membership: Membership;
 
   // Connection Handling
-  readonly seatListeners: Listener<SeatState>;
+  readonly seatListeners: PropagateListener<SeatState>;
 
   // Assembly Management
 
@@ -46,7 +46,7 @@ export default class Assembly {
     this.assemblyAPI = assemblyAPI;
     this.identityProofStore = identityProofStore;
     this.membership = membership;
-    this.seatListeners = new Listener(getSeatState);
+    this.seatListeners = new PropagateListener(getSeatState);
     this.assemblyState = new AssemblyState(
       identityProofStore,
       membership.me,
@@ -65,182 +65,168 @@ export default class Assembly {
     (await this.identityProofStore.fetch(member)).nickname.value;
 
   /////////////////////////////////
-  // Connection State Management
+  // Connection State
+
+  private runningStatus: MVar<RunningStatus> = new MVar<RunningStatus>(
+    "stopped"
+  );
+
+  private connectionStatus: MVar<ConnectionStatus> = new MVar<ConnectionStatus>(
+    "closed"
+  );
 
   private connectionController: ConnectionController | null = null;
 
-  readonly send = (event: MemberEvent) => {
-    if (this.connectionController) this.connectionController.sendEvent(event);
-    else this.log(`No connection controller to send ${JSON.stringify(event)}`);
-  };
-
-  private _connectionStatus: ConnectionStatus = "closed";
-  readonly connectionStatusListerner: Listener<ConnectionStatus> = new Listener(
-    () => this._connectionStatus
-  );
-
   private reconnectionStatus: ReconnectionStatus = "neverEstablished";
-  private reconnectionInProgress: boolean = false;
 
-  private readonly scheduleReconnect = (): void => {
-    if (!this.reconnectionInProgress) {
-      switch (this.reconnectionStatus) {
-        case "firstReconnectAttempt":
-          this.reconnectionInProgress = true;
-          this.reconnectionStatus = "reconnectionLoop";
-          queueMicrotask(this.reconnect);
-          break;
-        case "reconnectionLoop":
-          this.reconnectionInProgress = true;
-          setTimeout(this.reconnect, Parameters.reconnectDelay);
-          break;
-        case "neverEstablished":
-          this.log("Never established, giving up.");
-      }
-    } else this.log("Reconnection already in progress.");
-  };
+  // Connection State Management
 
-  private readonly unsafeConnect = async (): Promise<boolean> => {
-    if (this._connectionStatus === "closed") {
+  private unsafeDisconnect = (): void => {
+    const oldConnectionController = this.connectionController;
+    if (oldConnectionController) {
       this.log(
-        `Connecting assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
+        `Disconnecting assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
       );
-      try {
-        this.connectionController = await this.assemblyAPI.connect(
-          this.membership,
-          this.assemblyState.update,
-          this.updateConnection
-        );
-        return await this.connectionStatusListerner.waitFor(
-          (cs: ConnectionStatus) => {
-            switch (cs) {
-              case "established":
-                return true;
-              case "closed":
-                return false;
-              case "opened":
-                return undefined;
-            }
-          }
-        );
-      } catch (e) {
-        this.log(
-          `Connection failed to assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
-        );
-        this.scheduleReconnect();
-        throw e;
-      }
-    } else return false;
-  };
-
-  private unsafeDisconnect = async (): Promise<void> => {
-    if (this._connectionStatus !== "closed") {
-      if (this.connectionController) {
-        this.log(
-          `Disconnecting assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
-        );
-        this.connectionController.close(null);
-        this.connectionController = null;
-      }
-      this._connectionStatus = "closed";
-      this.connectionStatusListerner.propagate(this._connectionStatus);
+      this.connectionController = null;
+      oldConnectionController.close(null);
     }
   };
-
-  readonly reconnect = () =>
-    this.runningMutex.runExclusive(async () => {
-      this.reconnectionInProgress = false;
-      if (this._runningStatus === "started") {
-        this.unsafeDisconnect();
-        await this.unsafeConnect();
-      }
-    });
 
   readonly updateConnection = async (event: ConnectionEvent): Promise<void> => {
     switch (event.tag) {
       case "opened":
         this.log(`Connection opened.`);
-        this._connectionStatus = "opened";
         this.connectionController = event.connectionController;
-        this.connectionStatusListerner.propagate(this._connectionStatus);
+        this.connectionStatus.unsafeSet("opened");
         break;
       case "established":
         // Now that we know the connection is safe, we can store credentials
         if (this.reconnectionStatus === "neverEstablished") {
-          this.reconnectionStatus = "firstReconnectAttempt";
           this.storageAPI.storeLastMembership(this.membership);
           this.storageAPI.storeNickname(this.membership.me.nickname);
         }
-
+        this.reconnectionStatus = "firstReconnectAttempt";
         this.log(
-          `Connection established with state ${JSON.stringify(event.state)}`
+          `Connectionsrc/components/App.tsx:109:22 established with state ${JSON.stringify(
+            event.state
+          )}`
         );
-
         this.assemblyState.resetState(event.state);
-
-        this._connectionStatus = "established";
-        this.connectionStatusListerner.propagate(this._connectionStatus);
-
+        this.connectionStatus.unsafeSet("established");
         this.seatListeners.propagate(SeatState.assembly(this));
-        this.assemblyState.listerner.propagate(this.assemblyState.state());
+        this.assemblyState.listener.propagate(this.assemblyState.state());
         break;
       case "closed":
         this.log(`Connection closed.`);
-        this._connectionStatus = "closed";
         this.connectionController = null;
-        this.connectionStatusListerner.propagate(this._connectionStatus);
-        this.scheduleReconnect();
+        this.connectionStatus.unsafeSet("closed");
+        this.scheduleFixConnectionState();
         break;
       case "error":
         this.log(`Connection error ${event.error}.`);
-
-        this._connectionStatus = "closed";
         this.connectionController = null;
-        this.connectionStatusListerner.propagate(this._connectionStatus);
-
+        this.connectionStatus.unsafeSet("closed");
         this.seatListeners.propagate(
           SeatState.failure(event.error, this.membership.me.nickname, this)
         );
-        this.scheduleReconnect();
+        this.scheduleFixConnectionState();
+    }
+  };
+
+  private readonly unsafeConnect = async (): Promise<ConnectionStatus> => {
+    this.log(
+      `Connecting assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
+    );
+    try {
+      this.connectionController = await this.assemblyAPI.connect(
+        this.membership,
+        this.safeConnectionOrigin(this.assemblyState.update),
+        this.safeConnectionOrigin(this.updateConnection)
+      );
+      return await this.connectionStatusListener.waitFor(
+        (cs: ConnectionStatus) => Promise.resolve(cs)
+      );
+    } catch (e) {
+      this.log(
+        `Connection failed to assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
+      );
+      this.scheduleFixConnectionState();
+      throw e;
+    }
+  };
+
+  private readonly fixConnectionState = async (): Promise<void> =>
+    this.runningStatus.with(async (runningStatus: RunningStatus) =>
+      this.connectionStatus.modify(
+        async (connectionStatus: ConnectionStatus) => {
+          if (runningStatus === "started" && connectionStatus === "closed")
+            return Promise.resolve([await this.unsafeConnect(), undefined]);
+          else if (
+            runningStatus === "stopped" &&
+            connectionStatus !== "closed"
+          ) {
+            this.unsafeDisconnect();
+            return Promise.resolve(["closed", undefined]);
+          } else return Promise.resolve([connectionStatus, undefined]);
+        }
+      )
+    );
+
+  private readonly scheduleFixConnectionState = (): void => {
+    switch (this.reconnectionStatus) {
+      case "firstReconnectAttempt":
+        this.reconnectionStatus = "reconnectionLoop";
+        queueMicrotask(this.fixConnectionState);
+        break;
+      case "reconnectionLoop":
+        setTimeout(this.fixConnectionState, Parameters.reconnectDelay);
+        break;
+      case "neverEstablished":
+        console.log("Giving up reconnecting.");
+        break;
     }
   };
 
   /////////////////////////////////
   // Running State Management
 
-  private _runningStatus: RunningStatus = "stopped";
-
-  readonly runningStatus = (): RunningStatus => this._runningStatus;
-
-  private readonly runningMutex = new Mutex();
-
-  readonly start = (): Promise<void> =>
-    this.runningMutex.runExclusive(async () => {
-      if (this._runningStatus === "stopped") {
-        this.log(
-          `Starting assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
-        );
-        this.unsafeConnect();
-        this._runningStatus = "started";
-      }
-    });
-
-  readonly stop = (): Promise<void> =>
-    this.runningMutex.runExclusive(() => {
-      this.log(
-        `Stopping assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
-      );
+  readonly reconnect = async (): Promise<void> => {
+    await this.connectionStatus.setWith(async () => {
       this.unsafeDisconnect();
-      this._runningStatus = "stopped";
+      return Promise.resolve("closed");
     });
+    return this.fixConnectionState();
+  };
 
-  readonly restart = (): Promise<void> =>
-    this.runningMutex.runExclusive(async () => {
-      this.reconnectionInProgress = false;
-      this._runningStatus = "started";
-      this.unsafeDisconnect();
-      await this.unsafeConnect();
+  readonly restart = async (): Promise<void> => {
+    this.log(
+      `Restarting assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
+    );
+    await this.runningStatus.setWith(async () => {
+      await this.connectionStatus.setWith(async () => {
+        this.unsafeDisconnect();
+        return Promise.resolve("closed");
+      });
+      return Promise.resolve("started");
     });
+    return this.fixConnectionState();
+  };
+
+  readonly start = async (): Promise<void> => {
+    this.log(
+      `Starting assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
+    );
+    await this.runningStatus.set("started");
+    return this.fixConnectionState();
+  };
+
+  readonly stop = async (): Promise<void> => {
+    this.log(
+      `Stopping assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
+    );
+    await this.runningStatus.set("stopped");
+    return this.fixConnectionState();
+  };
 
   private readonly fail = (error: any): never => {
     this.stop();
@@ -251,11 +237,32 @@ export default class Assembly {
   };
 
   /////////////////////////////////
+  // Connection Helpers
+
+  readonly connectionStatusListener: MListener<ConnectionStatus> =
+    this.connectionStatus;
+
+  readonly send = (event: MemberEvent): void => {
+    if (this.connectionController) this.connectionController.sendEvent(event);
+    else this.log(`No connection controller to send ${JSON.stringify(event)}`);
+  };
+
+  private readonly safeConnectionOrigin =
+    <A>(f: (a: A) => void) =>
+    (connectionId: string, a: A) => {
+      if (
+        this.connectionController !== null &&
+        this.connectionController.id === connectionId
+      )
+        return f(a);
+    };
+
+  /////////////////////////////////
   // State Management
 
   private assemblyState: AssemblyState;
 
-  readonly stateListener = (): Listener<State> => this.assemblyState.listerner;
+  readonly stateListener = (): Listener<State> => this.assemblyState.listener;
 
   readonly harvestResultListener = (): Listener<HarvestResult | null> =>
     this.assemblyState.harvestResultListener();

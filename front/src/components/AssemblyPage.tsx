@@ -46,11 +46,11 @@ export default function AssemblyPage(props: Props): JSX.Element {
 
   useEffect(() => {
     props.assembly.stateListener().addListener(setAssemblyState);
-    props.assembly.connectionStatusListerner.addListener(setConnectionStatus);
+    props.assembly.connectionStatusListener.addListener(setConnectionStatus);
     props.assembly.harvestResultListener().addListener(setLastHarvestResult);
     return () => {
       props.assembly.stateListener().removeListener(setAssemblyState);
-      props.assembly.connectionStatusListerner.removeListener(
+      props.assembly.connectionStatusListener.removeListener(
         setConnectionStatus
       );
       props.assembly

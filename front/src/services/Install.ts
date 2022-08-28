@@ -1,5 +1,5 @@
 import { Mutex } from "async-mutex";
-import { Listener } from "../lib/Listener";
+import { Listener, PropagateListener } from "../lib/Listener";
 
 interface BeforeInstallPromptEvent extends Event {
   readonly userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
@@ -20,16 +20,19 @@ export default class Install {
     globalThis.deferredPrompt.state !== null &&
     globalThis.deferredPrompt.state !== undefined;
 
-  readonly listerners = new Listener<boolean>(this.installable);
+  private readonly _listeners: PropagateListener<boolean> =
+    new PropagateListener<boolean>(this.installable);
+
+  readonly listeners: Listener<boolean> = this._listeners;
 
   private readonly set = (v: BeforeInstallPromptEvent | null): void => {
     globalThis.deferredPrompt.state = v;
-    this.listerners.propagate(this.installable());
+    this._listeners.propagate(this.installable());
   };
 
   constructor() {
     globalThis.deferredPrompt.propagate = () =>
-      this.listerners.propagate(this.installable());
+      this._listeners.propagate(this.installable());
   }
 
   readonly install: () => Promise<void> = () =>

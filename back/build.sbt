@@ -1,7 +1,7 @@
-val Http4sVersion = "0.23.14"
+val Http4sVersion = "0.23.15"
 val CirceVersion = "0.14.2"
 val MunitVersion = "0.7.29"
-val LogbackVersion = "1.2.10"
+val LogbackVersion = "1.2.11"
 val MunitCatsEffectVersion = "1.0.7"
 val scala3Version = "3.1.2"
 
@@ -29,8 +29,8 @@ lazy val root = project
       "io.circe"         %% "circe-generic"       % CirceVersion,
       "io.circe"         %% "circe-parser"        % CirceVersion,
       //"io.circe"        %% "circe-literal"       % CirceVersion,
-      "com.nimbusds"     %  "nimbus-jose-jwt"     % "9.23",
-      "org.bouncycastle" %  "bcprov-jdk18on"      % "1.71",
+      "com.nimbusds"     %  "nimbus-jose-jwt"     % "9.24.3",
+      "org.bouncycastle" %  "bcprov-jdk18on"      % "1.71.1",
       "org.scalameta"    %% "munit"               % MunitVersion           % Test,
       "org.typelevel"    %% "munit-cats-effect-3" % MunitCatsEffectVersion % Test,
       "ch.qos.logback"   %  "logback-classic"     % LogbackVersion         % Runtime,

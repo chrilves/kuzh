@@ -9,7 +9,7 @@ import cats.effect.kernel.Ref
 import io.circe.*
 import io.circe.syntax.*
 import io.circe.parser.*
-import java.util.Base64
+import java.util.{Base64, UUID}
 import org.bouncycastle.util.encoders.Base64Encoder
 
 import chrilves.kuzh.back.*
@@ -29,12 +29,13 @@ final case class Connection[F[_]](
 object Connection:
 
   trait Handler[F[_]]:
+    val id: UUID
     def send(event: Assembly.Event): F[Unit]
     def close(): F[Unit]
 
   def connect[F[_]: Async](assemblies: AssemblyManagement[F]): F[Connection[F[_]]] =
     for
-      id         <- Async[F].delay(java.util.UUID.randomUUID())
+      connId     <- Async[F].delay(UUID.randomUUID())
       pingNumber <- Ref.of[F, Long](Long.MinValue)
       buffer     <- Ref.of[F, ByteVector](ByteVector.empty)
       status     <- Ref.of[F, Status[F]](Status.Initial[F]())
@@ -43,7 +44,7 @@ object Connection:
       import Status.*
 
       def conlog(color: String)(s: String): F[Unit] =
-        log(color)(s"{${id}} ${s}")
+        log(color)(s"{${connId}} ${s}")
 
       def sendMessage(json: Json): F[Unit] =
         status.get.flatMap {
@@ -223,8 +224,9 @@ object Connection:
                 read[Handshake.In](str) {
                   case cr: Handshake.In.ChallengeResponse =>
                     cr.check(member, storedIdentityProof, challenge) match
-                      case Some(id) =>
+                      case Some(idproof) =>
                         val handler = new Handler[F]:
+                          val id = connId
                           def send(message: Assembly.Event): F[Unit] =
                             sendMessage(message.asJson)
                           def close(): F[Unit] =
@@ -250,7 +252,7 @@ object Connection:
                               status.set(
                                 Status.Established[F](assembly, member)
                               ) *> sendHandshake(Handshake.Out.Established(st)),
-                            cr.identityProof.orElse(storedIdentityProof)
+                            Some(idproof)
                           )
                           .handleErrorWith(logAndClose(_))
                       case None =>
@@ -262,7 +264,7 @@ object Connection:
 
               case Established(assembly, member) =>
                 read[Member.Event](str) { mfm =>
-                  assembly.memberMessage(member, mfm)
+                  assembly.memberMessage(connId, member, mfm)
                 }
               case Terminated() =>
                 conlog(Console.YELLOW)(s"Ignoring message: ${str}")

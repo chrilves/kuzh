@@ -17,8 +17,8 @@ export interface AssemblyAPI {
   ): Promise<Membership>;
   connect(
     membership: Membership,
-    updateAssembly: (state: AssemblyEvent) => void,
-    updateConnection: (event: ConnectionEvent) => void
+    updateAssembly: (connectionId: string, event: AssemblyEvent) => void,
+    updateConnection: (connectionId: string, event: ConnectionEvent) => void
   ): Promise<ConnectionController>;
 }
 
@@ -76,8 +76,8 @@ export class MutexedAssemblyAPI implements AssemblyAPI {
 
   connect(
     membership: Membership,
-    updateAssembly: (state: AssemblyEvent) => void,
-    updateConnection: (event: ConnectionEvent) => void
+    updateAssembly: (connectionId: string, event: AssemblyEvent) => void,
+    updateConnection: (connectionId: string, event: ConnectionEvent) => void
   ): Promise<ConnectionController> {
     return this.mutex.runExclusive(() =>
       this.baseAPI.connect(membership, updateAssembly, updateConnection)
@@ -135,8 +135,8 @@ export class RealAssemblyAPI implements AssemblyAPI {
 
   async connect(
     membership: Membership,
-    updateAssembly: (state: AssemblyEvent) => void,
-    updateConnection: (event: ConnectionEvent) => void
+    updateAssembly: (connectionId: string, event: AssemblyEvent) => void,
+    updateConnection: (connectionId: string, event: ConnectionEvent) => void
   ): Promise<ConnectionController> {
     return this.backAPI.connect(membership, updateAssembly, updateConnection);
   }

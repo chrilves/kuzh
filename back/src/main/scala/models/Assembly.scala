@@ -95,11 +95,14 @@ final class Assembly[F[_]] private (
           status
     )
 
-  private def participants: F[Set[Fingerprint]] =
+  private inline def participants: F[Set[Fingerprint]] =
     refStatus.get.map(_.participants)
 
-  private def present: F[Set[Fingerprint]] =
+  private inline def present: F[Set[Fingerprint]] =
     refChannels.get.map(_.keySet)
+
+  private inline def connectionIdOf(member: Fingerprint): F[Option[UUID]] =
+    refChannels.get.map(_.get(member).map(_.id))
 
   private inline def getAbsent: F[immutable.Map[Fingerprint, Instant]] =
     refAbsent.get
@@ -184,6 +187,14 @@ final class Assembly[F[_]] private (
     refChannels.get.map(_.get(member)).flatMap {
       case Some(h) => f(h).map(Some(_))
       case None    => Async[F].pure(None)
+    }
+
+  inline def whenRegisteredConnection[A](member: Fingerprint, connectionId: UUID)(
+      f: Connection.Handler[F] => F[A]
+  ): F[Option[A]] =
+    refChannels.get.map(_.get(member)).flatMap {
+      case Some(h) if h.id === connectionId => f(h).map(Some(_))
+      case _                                => Async[F].pure(None)
     }
 
   inline def whenNotAbsent[A](member: Fingerprint)(f: => F[A]): F[Option[A]] =
@@ -500,55 +511,61 @@ final class Assembly[F[_]] private (
       yield ()
     }
 
-  def memberMessage(member: Member.Fingerprint, message: Member.Event): F[Unit] =
+  def memberMessage(
+      connectionId: UUID,
+      member: Member.Fingerprint,
+      message: Member.Event
+  ): F[Unit] =
     import Member.Event.*
     stateMutex.permit.surround {
-      message match
-        case Member.Event.Blocking(Member.Readiness.Ready) =>
-          for
-            b <- setReady(member)
-            _ <- Async[F].whenA(b)(
-              sendMessage(
-                Destination.All,
-                Assembly.Event.ready(member)
-              ) *> reduceStatus
-            )
-          yield ()
-        case Blocking(Member.Readiness.Blocking) =>
-          syncNonParticipants {
+      whenRegisteredConnection(member, connectionId) { _ =>
+        message match
+          case Member.Event.Blocking(Member.Readiness.Ready) =>
             for
-              b <- setBlocking(member)
+              b <- setReady(member)
               _ <- Async[F].whenA(b)(
                 sendMessage(
                   Destination.All,
-                  Assembly.Event.blocking(member)
+                  Assembly.Event.ready(member)
                 ) *> reduceStatus
               )
             yield ()
-          }
-        case Accept =>
-          for
-            b <- setAccept(member)
-            _ <- Async[F].whenA(b)(
-              sendMessage(
-                Destination.All,
-                Assembly.Event.accept(member)
-              ) *> reduceStatus
-            )
-          yield ()
-        case Invalid =>
-          canInvalide(member) { (_, _) =>
-            invalidate
-          }.void
-        case Harvesting(harvestEvent) =>
-          refStatus.get.flatMap {
-            case Status.Harvesting(h, Started(phase)) if h.participants.contains(member) =>
-              invalidateOnError(phaseEvent(h, phase, member, harvestEvent))
-            case st =>
-              logState(
-                s"Ignoring event ${harvestEvent} from ${member} in assembly ${info.name}:${info.id}"
+          case Blocking(Member.Readiness.Blocking) =>
+            syncNonParticipants {
+              for
+                b <- setBlocking(member)
+                _ <- Async[F].whenA(b)(
+                  sendMessage(
+                    Destination.All,
+                    Assembly.Event.blocking(member)
+                  ) *> reduceStatus
+                )
+              yield ()
+            }
+          case Accept =>
+            for
+              b <- setAccept(member)
+              _ <- Async[F].whenA(b)(
+                sendMessage(
+                  Destination.All,
+                  Assembly.Event.accept(member)
+                ) *> reduceStatus
               )
-          }
+            yield ()
+          case Invalid =>
+            canInvalide(member) { (_, _) =>
+              invalidate
+            }.void
+          case Harvesting(harvestEvent) =>
+            refStatus.get.flatMap {
+              case Status.Harvesting(h, Started(phase)) if h.participants.contains(member) =>
+                invalidateOnError(phaseEvent(h, phase, member, harvestEvent))
+              case st =>
+                logState(
+                  s"Ignoring event ${harvestEvent} from ${member} in assembly ${info.name}:${info.id}"
+                )
+            }
+      }.void
     }
 
   private def phaseEvent(

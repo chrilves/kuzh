@@ -7,7 +7,7 @@ import { MemberSignature } from "./Member";
 import { checkListEqual, isDistinct, isOrdered, sortJSON } from "../lib/Utils";
 import { Base64URL } from "../lib/Base64URL";
 import { HarvestResult } from "./HarvestResult";
-import { Listener } from "../lib/Listener";
+import { PropagateListener } from "../lib/Listener";
 import { Question } from "./Question";
 
 export type Proof = {
@@ -40,9 +40,8 @@ export class HarvestState {
   private _ballots: Ballot[] | null = null;
   result: HarvestResult | null = null;
 
-  readonly resultListerner: Listener<HarvestResult | null> = new Listener(
-    () => this.result
-  );
+  readonly resultListener: PropagateListener<HarvestResult | null> =
+    new PropagateListener(() => this.result);
 
   constructor(
     me: Me,
@@ -75,7 +74,7 @@ export class HarvestState {
     this._validations = null;
     this._ballots = null;
     this.result = null;
-    this.resultListerner.propagate(this.result);
+    this.resultListener.propagate(this.result);
   };
 
   readonly step = (): HarvestStep => {
@@ -431,7 +430,7 @@ export class HarvestState {
           answers
         );
     }
-    this.resultListerner.propagate(this.result);
+    this.resultListener.propagate(this.result);
     this._ballots = ballots;
     return this.result;
   };

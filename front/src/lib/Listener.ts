@@ -1,4 +1,18 @@
-export class Listener<A> {
+interface CommonListener<A> {
+  readonly removeListener: (f: (a: A) => void) => void;
+  readonly clearListeners: () => void;
+  readonly waitFor: <B>(f: (a: A) => B | undefined) => Promise<B>;
+}
+
+export interface Listener<A> extends CommonListener<A> {
+  readonly addListener: <B>(f: (a: A) => B) => B;
+}
+
+export interface MListener<A> extends CommonListener<A> {
+  readonly addListener: <B>(f: (a: A) => B) => Promise<B>;
+}
+
+export class PropagateListener<A> implements Listener<A> {
   private _listeners: Set<(a: A) => void> = new Set();
   private readonly _get: () => A;
 
@@ -6,9 +20,9 @@ export class Listener<A> {
     this._get = get;
   }
 
-  readonly addListener = (f: (a: A) => void) => {
+  readonly addListener = <B>(f: (a: A) => B): B => {
     this._listeners.add(f);
-    f(this._get());
+    return f(this._get());
   };
 
   readonly removeListener = (f: (a: A) => void) => {
