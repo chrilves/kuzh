@@ -18,7 +18,7 @@ import { State } from "./State";
 export declare function structuredClone(value: any): any;
 
 export type RunningStatus = "started" | "stopped";
-export type ConnectionStatus = "opened" | "established" | "closed";
+export type ConnectionStatus = "connecting" | "opened" | "established" | "closed";
 type ReconnectionStatus =
   | "neverEstablished"
   | "firstReconnectAttempt"
@@ -97,7 +97,7 @@ export default class Assembly {
       case "opened":
         this.log(`Connection opened.`);
         this.connectionController = event.connectionController;
-        this.connectionStatus.unsafeSet("opened");
+        this.connectionStatus.set("opened");
         break;
       case "established":
         // Now that we know the connection is safe, we can store credentials
@@ -112,20 +112,20 @@ export default class Assembly {
           )}`
         );
         this.assemblyState.resetState(event.state);
-        this.connectionStatus.unsafeSet("established");
+        this.connectionStatus.set("established");
         this.seatListeners.propagate(SeatState.assembly(this));
         this.assemblyState.listener.propagate(this.assemblyState.state());
         break;
       case "closed":
         this.log(`Connection closed.`);
         this.connectionController = null;
-        this.connectionStatus.unsafeSet("closed");
+        this.connectionStatus.set("closed");
         this.scheduleFixConnectionState();
         break;
       case "error":
         this.log(`Connection error ${event.error}.`);
         this.connectionController = null;
-        this.connectionStatus.unsafeSet("closed");
+        this.connectionStatus.set("closed");
         this.seatListeners.propagate(
           SeatState.failure(event.error, this.membership.me.nickname, this)
         );
@@ -143,9 +143,7 @@ export default class Assembly {
         this.safeConnectionOrigin(this.assemblyState.update),
         this.safeConnectionOrigin(this.updateConnection)
       );
-      return await this.connectionStatusListener.waitFor(
-        (cs: ConnectionStatus) => Promise.resolve(cs)
-      );
+      return Promise.resolve("connecting");
     } catch (e) {
       this.log(
         `Connection failed to assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
