@@ -6,6 +6,11 @@ namespace HarvestingEvent {
     readonly member: Fingerprint;
   };
 
+  export type Refused = {
+    readonly tag: "refused";
+    readonly member: Fingerprint;
+  };
+
   export type Invalid = {
     readonly tag: "invalid";
   };
@@ -13,4 +18,5 @@ namespace HarvestingEvent {
 
 export type HarvestingEvent =
   | HarvestingEvent.Accepted
+  | HarvestingEvent.Refused
   | HarvestingEvent.Invalid;

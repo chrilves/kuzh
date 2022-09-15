@@ -23,6 +23,14 @@ export namespace MemberEvent {
     tag: "accept",
   };
 
+  export type Refuse = {
+    readonly tag: "refuse";
+  };
+
+  export const refuse: Refuse = {
+    tag: "refuse",
+  };
+
   export type Invalid = {
     readonly tag: "invalid";
   };
@@ -114,5 +122,6 @@ export namespace MemberEvent {
 export type MemberEvent =
   | MemberEvent.Blocking
   | MemberEvent.Accept
+  | MemberEvent.Refuse
   | MemberEvent.Harvesting
   | MemberEvent.Invalid;

@@ -1,5 +1,6 @@
-import { Listener, MListener, PropagateListener } from "../../lib/Listener";
-import MVar from "../../lib/MVar";
+import { MGetSet, MVar, ObservableMVar } from "../../lib/MVar";
+import { Observable } from "../../lib/Observable";
+import { GetSet, ObservableVar } from "../../lib/Var";
 import { AssemblyAPI } from "../../services/AssemblyAPI";
 import { IdentityProofStore } from "../../services/IdentityProofStore";
 import { StorageAPI } from "../../services/StorageAPI";
@@ -12,13 +13,18 @@ import { Member } from "../Member";
 import { Parameters } from "../Parameters";
 import { Question } from "../Question";
 import { SeatState } from "../SteatState";
+import { UXConfig } from "../UXConfig";
 import { AssemblyState } from "./AssemblyState";
 import { State } from "./State";
 
 export declare function structuredClone(value: any): any;
 
 export type RunningStatus = "started" | "stopped";
-export type ConnectionStatus = "connecting" | "opened" | "established" | "closed";
+export type ConnectionStatus =
+  | "connecting"
+  | "opened"
+  | "established"
+  | "closed";
 type ReconnectionStatus =
   | "neverEstablished"
   | "firstReconnectAttempt"
@@ -31,28 +37,43 @@ export default class Assembly {
   readonly membership: Membership;
 
   // Connection Handling
-  readonly seatListeners: PropagateListener<SeatState>;
+  readonly seatListeners: ObservableVar<SeatState>;
 
-  // Assembly Management
+  // Config
+  readonly uxConfig: UXConfig;
 
   constructor(
     storageAPI: StorageAPI,
     identityProofStore: IdentityProofStore,
     assemblyAPI: AssemblyAPI,
     membership: Membership,
-    getSeatState: () => SeatState
+    seatState: GetSet<SeatState>
   ) {
     this.storageAPI = storageAPI;
+    this.uxConfig = UXConfig.fromStorageAPI(storageAPI);
     this.assemblyAPI = assemblyAPI;
     this.identityProofStore = identityProofStore;
     this.membership = membership;
-    this.seatListeners = new PropagateListener(getSeatState);
+    this.seatListeners = ObservableVar.fromGetSet(seatState);
     this.assemblyState = new AssemblyState(
       identityProofStore,
       membership.me,
       this.send,
-      this.fail
+      this.fail,
+      this.uxConfig.autoAccept.get,
+      this.uxConfig.disableBlocking.get
     );
+
+    // If we disable blocking while blocking, we are ready!
+    this.uxConfig.disableBlocking.addListener((v) => {
+      if (v && this.assemblyState.amIBlocking()) this.changeReadiness("ready");
+    });
+
+    // If we activate automatic accept while not accepted, we accept!
+    this.uxConfig.autoAccept.addListener((v) => {
+      if (v && this.assemblyState.canRefuse(this.membership.me.fingerprint))
+        this.acceptHarvest();
+    });
   }
 
   private readonly log = (s: string) => {
@@ -67,13 +88,12 @@ export default class Assembly {
   /////////////////////////////////
   // Connection State
 
-  private runningStatus: MVar<RunningStatus> = new MVar<RunningStatus>(
-    "stopped"
+  private runningStatus: MVar<RunningStatus> = MVar.fromMGetSet(
+    MGetSet.variable<RunningStatus>("stopped")
   );
 
-  private connectionStatus: MVar<ConnectionStatus> = new MVar<ConnectionStatus>(
-    "closed"
-  );
+  private connectionStatus: ObservableMVar<ConnectionStatus> =
+    ObservableMVar.fromMGetSet(MGetSet.variable<ConnectionStatus>("closed"));
 
   private connectionController: ConnectionController | null = null;
 
@@ -113,8 +133,7 @@ export default class Assembly {
         );
         this.assemblyState.resetState(event.state);
         this.connectionStatus.set("established");
-        this.seatListeners.propagate(SeatState.assembly(this));
-        this.assemblyState.listener.propagate(this.assemblyState.state());
+        this.seatListeners.set(SeatState.assembly(this));
         break;
       case "closed":
         this.log(`Connection closed.`);
@@ -126,7 +145,7 @@ export default class Assembly {
         this.log(`Connection error ${event.error}.`);
         this.connectionController = null;
         this.connectionStatus.set("closed");
-        this.seatListeners.propagate(
+        this.seatListeners.set(
           SeatState.failure(event.error, this.membership.me.nickname, this)
         );
         this.scheduleFixConnectionState();
@@ -158,14 +177,14 @@ export default class Assembly {
       this.connectionStatus.modify(
         async (connectionStatus: ConnectionStatus) => {
           if (runningStatus === "started" && connectionStatus === "closed")
-            return Promise.resolve([await this.unsafeConnect(), undefined]);
+            return Promise.resolve(await this.unsafeConnect());
           else if (
             runningStatus === "stopped" &&
             connectionStatus !== "closed"
           ) {
             this.unsafeDisconnect();
-            return Promise.resolve(["closed", undefined]);
-          } else return Promise.resolve([connectionStatus, undefined]);
+            return Promise.resolve("closed");
+          } else return Promise.resolve(connectionStatus);
         }
       )
     );
@@ -228,7 +247,7 @@ export default class Assembly {
 
   private readonly fail = (error: any): never => {
     this.stop();
-    this.seatListeners.propagate(
+    this.seatListeners.set(
       SeatState.failure(error, this.membership.me.nickname, this)
     );
     throw error;
@@ -237,7 +256,7 @@ export default class Assembly {
   /////////////////////////////////
   // Connection Helpers
 
-  readonly connectionStatusListener: MListener<ConnectionStatus> =
+  readonly connectionStatusListener: Observable<ConnectionStatus> =
     this.connectionStatus;
 
   readonly send = (event: MemberEvent): void => {
@@ -260,13 +279,17 @@ export default class Assembly {
 
   private assemblyState: AssemblyState;
 
-  readonly stateListener = (): Listener<State> => this.assemblyState.listener;
+  readonly stateObservable = (): Observable<State> =>
+    this.assemblyState.listenState;
 
-  readonly harvestResultListener = (): Listener<HarvestResult | null> =>
-    this.assemblyState.harvestResultListener();
+  readonly harvestResultListener = (): Observable<HarvestResult | null> =>
+    this.assemblyState.listenHarvestResult;
 
   /////////////////////////////////////////////////
   // Question Management
+
+  readonly acceptHarvest = () => this.send(MemberEvent.accept);
+  readonly refuseHarvest = () => this.send(MemberEvent.refuse);
 
   readonly myQuestion = (question: Question | null) =>
     this.assemblyState.myQuestion(question);
@@ -276,5 +299,4 @@ export default class Assembly {
     this.assemblyState.myOpenAnswer(answer);
   readonly changeReadiness = (r: Member.Blockingness) =>
     this.assemblyState.changeReadiness(r);
-  readonly acceptHarvest = () => this.send(MemberEvent.accept);
 }

@@ -118,6 +118,7 @@ object Member:
   enum Event:
     case Blocking(blockingness: Blockingness)
     case Accept
+    case Refuse
     case Harvesting(harvesting: HarvestingEvent)
     case Invalid
 
@@ -137,6 +138,8 @@ object Member:
             }
           case "accept" =>
             pure(Accept)
+          case "refuse" =>
+            pure(Refuse)
           case "invalid" =>
             pure(Invalid)
           case "harvesting" =>

@@ -7,8 +7,9 @@ import { MemberSignature } from "./Member";
 import { checkListEqual, isDistinct, isOrdered, sortJSON } from "../lib/Utils";
 import { Base64URL } from "../lib/Base64URL";
 import { HarvestResult } from "./HarvestResult";
-import { PropagateListener } from "../lib/Listener";
 import { Question } from "./Question";
+import { Observable } from "../lib/Observable";
+import { GetSet, ObservableVar } from "../lib/Var";
 
 export type Proof = {
   harvest: Harvest;
@@ -38,10 +39,9 @@ export class HarvestState {
   private _myValidation: string | null = null;
   private _validations: MemberSignature[] | null = null;
   private _ballots: Ballot[] | null = null;
-  result: HarvestResult | null = null;
-
-  readonly resultListener: PropagateListener<HarvestResult | null> =
-    new PropagateListener(() => this.result);
+  result: ObservableVar<HarvestResult | null> = ObservableVar.fromGetSet(
+    GetSet.variable<HarvestResult | null>(null)
+  );
 
   constructor(
     me: Me,
@@ -73,8 +73,7 @@ export class HarvestState {
     this._myValidation = null;
     this._validations = null;
     this._ballots = null;
-    this.result = null;
-    this.resultListener.propagate(this.result);
+    this.result.set(null);
   };
 
   readonly step = (): HarvestStep => {
@@ -378,6 +377,8 @@ export class HarvestState {
         )} are not the same!`
       );
 
+    let result: HarvestResult;
+
     switch (expectedType) {
       case "question":
         let questions = [];
@@ -386,10 +387,7 @@ export class HarvestState {
           if (ballot.tag === "question" && ballot.question !== null)
             questions.push(ballot.question);
 
-        this.result = HarvestResult.questions(
-          this._harvest.participants,
-          questions
-        );
+        result = HarvestResult.questions(this._harvest.participants, questions);
         break;
       case "closed_answer":
         if (this.question === null)
@@ -406,7 +404,7 @@ export class HarvestState {
             else no += 1;
         }
 
-        this.result = HarvestResult.closedAnswer(
+        result = HarvestResult.closedAnswer(
           this._harvest.participants,
           this.question.message,
           yes,
@@ -424,14 +422,14 @@ export class HarvestState {
         for (const ballot of ballots)
           if (ballot.tag === "open_answer") answers.push(ballot.answer);
 
-        this.result = HarvestResult.openAnswer(
+        result = HarvestResult.openAnswer(
           this._harvest.participants,
           this.question.message,
           answers
         );
     }
-    this.resultListener.propagate(this.result);
     this._ballots = ballots;
-    return this.result;
+    this.result.set(result);
+    return result;
   };
 }

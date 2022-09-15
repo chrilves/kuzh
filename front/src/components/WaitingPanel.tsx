@@ -7,6 +7,7 @@ import { Parameters } from "../model/Parameters";
 import { Question } from "../model/Question";
 import ReadinessPanel from "./ReadinessPanel";
 import { useTranslation } from "react-i18next";
+import { ObservableVar } from "../lib/Var";
 
 type Props = {
   myFingerprint: Fingerprint;
@@ -16,6 +17,8 @@ type Props = {
   sendQuestion(question: Question | null): void;
   changeReadiness(r: Member.Blockingness): void;
   name(member: Fingerprint): Promise<Name>;
+  autoConfirm: boolean;
+  disableBlocking: boolean;
 };
 
 function RenderKindedText(props: {
@@ -44,6 +47,8 @@ export default function WaitingPanel(props: Props): JSX.Element {
         sendQuestion={props.sendQuestion}
         myReadiness={myMemberReadiness?.readiness}
         changeReadiness={props.changeReadiness}
+        autoConfirm={props.autoConfirm}
+        disableBlocking={props.disableBlocking}
       />
     );
   else {
@@ -55,6 +60,8 @@ export default function WaitingPanel(props: Props): JSX.Element {
             sendClosedAnswer={props.sendClosedAnswer}
             myReadiness={myMemberReadiness?.readiness}
             changeReadiness={props.changeReadiness}
+            autoConfirm={props.autoConfirm}
+            disableBlocking={props.disableBlocking}
           />
         );
         break;
@@ -65,6 +72,8 @@ export default function WaitingPanel(props: Props): JSX.Element {
             sendOpenAnswer={props.sendOpenAnswer}
             myReadiness={myMemberReadiness?.readiness}
             changeReadiness={props.changeReadiness}
+            autoConfirm={props.autoConfirm}
+            disableBlocking={props.disableBlocking}
           />
         );
     }
@@ -110,18 +119,28 @@ namespace Phase {
   export function change<A>(
     oldPhase: Phase<A>,
     newPhase: Phase<A>,
-    f: (a: A) => void
-  ): boolean {
+    f: (a: A) => void,
+    autoConfirm: boolean
+  ): Phase<A> | null {
     if (
-      (oldPhase.tag === "reply" && newPhase.tag === "confirm") ||
+      (autoConfirm === false &&
+        oldPhase.tag === "reply" &&
+        newPhase.tag === "confirm") ||
       (oldPhase.tag === "confirm" && newPhase.tag === "reply")
     )
-      return true;
+      return newPhase;
     else {
-      if (oldPhase.tag === "confirm" && newPhase.tag === "confirmed") {
+      if (
+        autoConfirm === true &&
+        oldPhase.tag === "reply" &&
+        newPhase.tag === "confirm"
+      ) {
+        f(newPhase.answer);
+        return Phase.confirmed;
+      } else if (oldPhase.tag === "confirm" && newPhase.tag === "confirmed") {
         f(oldPhase.answer);
-        return true;
-      } else return false;
+        return newPhase;
+      } else return null;
     }
   }
 
@@ -140,6 +159,7 @@ namespace Phase {
 function Confirmed(props: {
   changeReadiness(r: Member.Blockingness): void;
   myBlockingness: Member.Blockingness;
+  disableBlocking: Boolean;
 }): JSX.Element {
   const [desired, setDesired] = useState<Member.Blockingness>(
     props.myBlockingness
@@ -153,15 +173,16 @@ function Confirmed(props: {
     other: Member.Blockingness
   ) {
     function flip() {
-      setDesired(other);
-      props.changeReadiness(other);
+      const real = props.disableBlocking ? "ready" : other;
+      setDesired(real);
+      props.changeReadiness(real);
     }
 
     return (
       <div>
         <h3>{title}</h3>
         <p>{msg}</p>
-        {desired === props.myBlockingness && (
+        {desired === props.myBlockingness && !props.disableBlocking && (
           <div>
             <button type="button" onClick={flip}>
               {buttonMsg}
@@ -184,7 +205,7 @@ function Confirmed(props: {
       return renderOk(
         t("Wait the start of the harvest."),
         t("Your choice is confirmed."),
-        t("I want block the harvest"),
+        t("I want to block the harvest"),
         "blocking"
       );
   }
@@ -272,6 +293,8 @@ type ClosedAnswerProps = {
   sendClosedAnswer(answer: boolean): void;
   myReadiness: Member.Readiness | undefined;
   changeReadiness(r: Member.Blockingness): void;
+  autoConfirm: boolean;
+  disableBlocking: boolean;
 };
 
 function ClosedAnswerPanel(props: ClosedAnswerProps): JSX.Element {
@@ -280,8 +303,13 @@ function ClosedAnswerPanel(props: ClosedAnswerProps): JSX.Element {
   );
 
   function changePhase(newPhase: Phase<boolean>) {
-    if (Phase.change(phase, newPhase, props.sendClosedAnswer))
-      setPhase(newPhase);
+    const realNewPhase = Phase.change(
+      phase,
+      newPhase,
+      props.sendClosedAnswer,
+      props.autoConfirm
+    );
+    if (realNewPhase !== null) setPhase(realNewPhase);
     else
       throw Error(
         `Wrong phase answer transition ${phase.tag} to ${newPhase.tag}!`
@@ -311,6 +339,7 @@ function ClosedAnswerPanel(props: ClosedAnswerProps): JSX.Element {
           <Confirmed
             changeReadiness={props.changeReadiness}
             myBlockingness={props.myReadiness}
+            disableBlocking={props.disableBlocking}
           />
         );
       else return <div />;
@@ -411,6 +440,8 @@ type OpenAnswerProps = {
   sendOpenAnswer(answer: string): void;
   myReadiness: Member.Readiness | undefined;
   changeReadiness(r: Member.Blockingness): void;
+  autoConfirm: boolean;
+  disableBlocking: boolean;
 };
 
 function OpenAnswerPanel(props: OpenAnswerProps): JSX.Element {
@@ -419,7 +450,13 @@ function OpenAnswerPanel(props: OpenAnswerProps): JSX.Element {
   );
 
   function changePhase(newPhase: Phase<string>) {
-    if (Phase.change(phase, newPhase, props.sendOpenAnswer)) setPhase(newPhase);
+    const realNewPhase = Phase.change(
+      phase,
+      newPhase,
+      props.sendOpenAnswer,
+      props.autoConfirm
+    );
+    if (realNewPhase !== null) setPhase(realNewPhase);
     else
       throw Error(
         `Wrong phase answer transition ${phase.tag} to ${newPhase.tag}!`
@@ -448,6 +485,7 @@ function OpenAnswerPanel(props: OpenAnswerProps): JSX.Element {
           <Confirmed
             changeReadiness={props.changeReadiness}
             myBlockingness={props.myReadiness}
+            disableBlocking={props.disableBlocking}
           />
         );
       else return <div />;
@@ -585,13 +623,21 @@ function QuestionPanel(props: {
   sendQuestion(question: Question | null): void;
   myReadiness: Member.Readiness | undefined;
   changeReadiness(r: Member.Blockingness): void;
+  autoConfirm: boolean;
+  disableBlocking: boolean;
 }): JSX.Element {
   const [phase, setPhase] = useState<Phase<Question | null>>(
     Phase.initial(props.myReadiness)
   );
 
   function changePhase(newPhase: Phase<Question | null>) {
-    if (Phase.change(phase, newPhase, props.sendQuestion)) setPhase(newPhase);
+    const realNewPhase = Phase.change(
+      phase,
+      newPhase,
+      props.sendQuestion,
+      props.autoConfirm
+    );
+    if (realNewPhase !== null) setPhase(realNewPhase);
     else
       throw Error(
         `Wrong phase answer transition ${phase.tag} to ${newPhase.tag}!`
@@ -614,6 +660,7 @@ function QuestionPanel(props: {
           <Confirmed
             changeReadiness={props.changeReadiness}
             myBlockingness={props.myReadiness}
+            disableBlocking={props.disableBlocking}
           />
         );
       else return <div />;

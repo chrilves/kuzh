@@ -1,5 +1,5 @@
 import { Mutex } from "async-mutex";
-import { Listener, PropagateListener } from "../../lib/Listener";
+import { Observable } from "../../lib/Observable";
 import { IdentityProofStore } from "../../services/IdentityProofStore";
 import { Ballot } from "../Ballot";
 import { Fingerprint, Me } from "../Crypto";
@@ -32,23 +32,42 @@ export class AssemblyState {
   private _status: Status = Status.waiting("", null, []);
   private send: (event: MemberEvent) => void;
   private fail: (error: any) => never;
+  private autoAccept: () => boolean;
+  private disableBlocking: () => boolean;
+
+  readonly listenState: Observable<State>;
+  readonly refreshState: () => void;
+
+  readonly listenHarvestResult: Observable<HarvestResult | null>;
 
   constructor(
     identityProofStore: IdentityProofStore,
     me: Me,
     send: (event: MemberEvent) => void,
-    fail: (error: any) => never
+    fail: (error: any) => never,
+    autoAccept: () => boolean,
+    disableBlocking: () => boolean
   ) {
     this.me = me;
     this.identityProofStore = identityProofStore;
     this.send = send;
     this.fail = fail;
+    this.autoAccept = autoAccept;
+    this.disableBlocking = disableBlocking;
+
+    const [listenState, refreshState] = Observable.refresh<State>(
+      (f: (a: State) => void) => f(this.state())
+    );
+    this.listenState = listenState;
+    this.refreshState = refreshState;
+
     this._harvestState = new HarvestState(
       this.me,
       this.identityProofStore,
       "",
       null
     );
+    this.listenHarvestResult = this._harvestState.result;
   }
 
   private readonly log = (s: string) => {
@@ -69,12 +88,6 @@ export class AssemblyState {
     ),
     status: structuredClone(this._status),
   });
-
-  readonly listener: PropagateListener<State> = new PropagateListener(
-    this.state
-  );
-  readonly harvestResultListener = (): Listener<HarvestResult | null> =>
-    this._harvestState.resultListener;
 
   private readonly resetStatus = (id: string, qs: Question[]) => {
     const question = qs.length > 0 ? qs[0] : null;
@@ -134,6 +147,7 @@ export class AssemblyState {
             harvest,
             Phase.proposed(structuredClone(participants))
           );
+          if (this.autoAccept()) this.send(MemberEvent.accept);
         }
         break;
       case "harvesting":
@@ -219,7 +233,7 @@ export class AssemblyState {
     }
   };
 
-  private readonly canRefuse = (member: Fingerprint): boolean => {
+  readonly canRefuse = (member: Fingerprint): boolean => {
     switch (this._status.tag) {
       case "harvesting":
         switch (this._status.phase.tag) {
@@ -249,6 +263,18 @@ export class AssemblyState {
       );
       if (idxRemaining !== -1)
         this._status.phase.remaining.splice(idxRemaining, 1);
+    }
+  };
+
+  private readonly memberRefuse = (member: Fingerprint) => {
+    if (
+      this._status.tag === "harvesting" &&
+      this._status.phase.tag === "proposed"
+    ) {
+      const idxRemaining = this._status.phase.remaining.findIndex(
+        (x) => x === member
+      );
+      if (idxRemaining !== -1) this.forcedWaiting(null);
     }
   };
 
@@ -292,9 +318,10 @@ export class AssemblyState {
                 this._questions = this._questions.slice(1, undefined);
                 break;
               case "new_questions":
-                if (this._harvestState.result)
+                const result = this._harvestState.result.get();
+                if (result)
                   HarvestResult.checkSameQuestions(
-                    this._harvestState.result,
+                    result,
                     publicEvent.questions
                   );
                 this.resetStatus(
@@ -318,6 +345,10 @@ export class AssemblyState {
             switch (harvestingEvent.tag) {
               case "accepted":
                 this.memberAccept(harvestingEvent.member);
+                this.reduceStatus();
+                break;
+              case "refused":
+                this.memberRefuse(harvestingEvent.member);
                 this.reduceStatus();
                 break;
               case "invalid":
@@ -383,7 +414,7 @@ export class AssemblyState {
           case "error":
             this.fail(ev.error);
         }
-        this.listener.propagate(this.state());
+        this.refreshState();
       })
     );
 
@@ -397,6 +428,7 @@ export class AssemblyState {
     this._status = st.status;
     if (st.status.tag === "waiting")
       this._harvestState.reset(st.status.id, st.status.question);
+    this.refreshState();
   };
 
   ///////////////////////////////////////
@@ -440,18 +472,30 @@ export class AssemblyState {
 
   readonly changeReadiness = (r: Member.Blockingness) =>
     this.failOnException(() => {
+      const real = this.disableBlocking() ? "ready" : r;
+
       switch (this._status.tag) {
         case "waiting":
           const mr = this._status.ready.find(
             (x) => x.member === this.me.fingerprint
           );
-          if (mr !== undefined && mr.readiness !== r)
+          if (mr !== undefined && mr.readiness !== real)
             this.send(MemberEvent.blocking(r));
           break;
         case "harvesting":
-          if (r === "blocking" && this.canRefuse(this.me.fingerprint))
+          if (real === "blocking" && this.canRefuse(this.me.fingerprint))
             this.send(MemberEvent.blocking("blocking"));
           else throw new Error("Trying to block when you can't");
       }
     });
+
+  readonly amIBlocking = (): boolean => {
+    if (this._status.tag === "waiting") {
+      const r = this._status.ready.find(
+        (x) => x.member === this.me.fingerprint
+      );
+      if (r) return r.readiness === "blocking";
+      else return false;
+    } else return false;
+  };
 }

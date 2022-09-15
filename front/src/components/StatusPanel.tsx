@@ -1,12 +1,12 @@
 import { Fingerprint, Name } from "../model/Crypto";
 import WaitingPanel from "./WaitingPanel";
-import ProposedPanel from "./ProposedPanel";
+import ProposedPanel, { Action, Phase as ProposedPhase } from "./ProposedPanel";
 import { Member } from "../model/Member";
 import { Status } from "../model/assembly/Status";
 import { Harvest } from "../model/assembly/Harvest";
 import { Question } from "../model/Question";
 import { useTranslation } from "react-i18next";
-import { t } from "i18next";
+import { GetSet } from "../lib/Var";
 
 type Props = {
   myFingerprint: Fingerprint;
@@ -15,8 +15,12 @@ type Props = {
   sendOpenAnswer(answer: string): void;
   sendQuestion(question: Question | null): void;
   acceptHarvest(): void;
+  refuseHarvest(): void;
   changeReadiness(r: Member.Blockingness): void;
   name: (member: Fingerprint) => Promise<Name>;
+  autoConfirm: boolean;
+  autoAccept: boolean;
+  disableBlocking: boolean;
 };
 
 export default function StatusPanel(props: Props): JSX.Element {
@@ -33,18 +37,43 @@ export default function StatusPanel(props: Props): JSX.Element {
           sendQuestion={props.sendQuestion}
           changeReadiness={props.changeReadiness}
           name={props.name}
+          autoConfirm={props.autoConfirm}
+          disableBlocking={props.disableBlocking}
         />
       );
     case "harvesting":
-      switch (props.status.phase.tag) {
+      const phase = props.status.phase;
+      switch (phase.tag) {
         case "proposed":
+          const proposedPhase =
+            phase.remaining.findIndex((x) => x === props.myFingerprint) === -1
+              ? "accepted"
+              : "proposed";
+
+          const act = (action: Action) => {
+            switch (action) {
+              case "accept":
+                props.acceptHarvest();
+                break;
+              case "refuse":
+                props.refuseHarvest();
+                break;
+              case "block":
+                if (props.autoAccept) props.refuseHarvest();
+                else props.changeReadiness("blocking");
+                break;
+            }
+          };
+
           return (
             <ProposedPanel
               harvest={props.status.harvest}
-              remaining={props.status.phase.remaining}
+              remaining={phase.remaining}
               name={props.name}
-              acceptHarvest={props.acceptHarvest}
-              changeReadiness={props.changeReadiness}
+              phase={proposedPhase}
+              act={act}
+              autoAccept={props.autoAccept}
+              disableBlocking={props.disableBlocking}
             />
           );
         case "started":

@@ -42,6 +42,7 @@ object Harvest:
 
   enum Event:
     case Accepted(member: Member.Fingerprint)
+    case Refused(member: Member.Fingerprint)
     case Invalid
 
   object Event:
@@ -51,6 +52,11 @@ object Harvest:
           case Accepted(member) =>
             Json.obj(
               "tag"    -> "accepted".asJson,
+              "member" -> member.asJson
+            )
+          case Refused(member) =>
+            Json.obj(
+              "tag"    -> "refused".asJson,
               "member" -> member.asJson
             )
           case Invalid =>

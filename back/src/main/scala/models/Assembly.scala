@@ -165,10 +165,10 @@ final class Assembly[F[_]] private (
         Async[F].pure(())
     }
 
-  private def syncNonParticipants[A](f: F[A]): F[A] =
+  private def syncNonParticipants[A](f: Set[Fingerprint] => F[A]): F[A] =
     for
       p     <- participants
-      a     <- f
+      a     <- f(p)
       after <- refStatus.get
       _ <-
         if p.nonEmpty && after.isWaiting
@@ -301,31 +301,33 @@ final class Assembly[F[_]] private (
         Async[F].pure(false)
     }
 
+  private def forcedWaiting(harvest: Harvest, member: Option[Fingerprint]): F[Unit] =
+    present
+      .flatMap { p =>
+        refStatus.set {
+          Waiting(
+            harvest.id,
+            harvest.question,
+            p.toList.map { m =>
+              m -> (
+                if (Some(m): Option[Fingerprint]) === member
+                then Member.Readiness.Blocking
+                else if harvest.participants.contains(m)
+                then Member.Readiness.Ready
+                else Member.Readiness.Answering
+              )
+            }.toMap
+          )
+        }
+      }
+
   private def setBlocking(member: Fingerprint): F[Boolean] =
     refStatus.get.flatMap {
       case Waiting(i, q, r)
           if r.contains(member) && r.get(member) =!= Some(Member.Readiness.Blocking) =>
         refStatus.set(Waiting(i, q, r + (member -> Member.Readiness.Blocking))).map(_ => true)
       case Harvesting(h, Proposed(r)) if h.participants.contains(member) && r.contains(member) =>
-        present
-          .flatMap { p =>
-            refStatus.set {
-              Waiting(
-                h.id,
-                h.question,
-                p.toList.map { m =>
-                  m -> (
-                    if m === member
-                    then Member.Readiness.Blocking
-                    else if h.participants.contains(m)
-                    then Member.Readiness.Ready
-                    else Member.Readiness.Answering
-                  )
-                }.toMap
-              )
-            }
-          }
-          .map(_ => true)
+        forcedWaiting(h, Some(member)).map(_ => true)
       case _ =>
         Async[F].pure(false)
     }
@@ -334,6 +336,14 @@ final class Assembly[F[_]] private (
     refStatus.get.flatMap {
       case Harvesting(h, Proposed(r)) if h.participants.contains(member) && r.contains(member) =>
         refStatus.set(Harvesting(h, Proposed(r - member))).map(_ => true)
+      case _ =>
+        Async[F].pure(false)
+    }
+
+  private def setRefuse(member: Fingerprint): F[Boolean] =
+    refStatus.get.flatMap {
+      case Harvesting(h, Proposed(r)) if h.participants.contains(member) && r.contains(member) =>
+        forcedWaiting(h, None).map(_ => true)
       case _ =>
         Async[F].pure(false)
     }
@@ -358,7 +368,7 @@ final class Assembly[F[_]] private (
   //  State - 2 - Full Change + Reduction - No Entry Point
 
   private def softRemoveMember(member: Fingerprint): F[Option[Instant]] =
-    syncNonParticipants {
+    syncNonParticipants { _ =>
       for
         i <- setAbsent(member)
         _ <- whenSome(i) { x =>
@@ -399,11 +409,11 @@ final class Assembly[F[_]] private (
   def invalidate: F[Boolean] =
     refStatus.get.flatMap {
       case Harvesting(_, Started(_)) =>
-        syncNonParticipants {
+        syncNonParticipants { p =>
           for
             _ <- forcedWaiting
             _ <- sendMessage(
-              Destination.All,
+              Destination.Selected(p),
               Assembly.Event.invalid
             )
             _ <- reduceStatus
@@ -531,7 +541,7 @@ final class Assembly[F[_]] private (
               )
             yield ()
           case Blocking(Member.Readiness.Blocking) =>
-            syncNonParticipants {
+            syncNonParticipants { _ =>
               for
                 b <- setBlocking(member)
                 _ <- Async[F].whenA(b)(
@@ -546,12 +556,26 @@ final class Assembly[F[_]] private (
             for
               b <- setAccept(member)
               _ <- Async[F].whenA(b)(
-                sendMessage(
-                  Destination.All,
-                  Assembly.Event.accept(member)
+                participants.flatMap(p =>
+                  sendMessage(
+                    Destination.Selected(p),
+                    Assembly.Event.accept(member)
+                  )
                 ) *> reduceStatus
               )
             yield ()
+          case Refuse =>
+            syncNonParticipants { p =>
+              for
+                b <- setRefuse(member)
+                _ <- Async[F].whenA(b)(
+                  sendMessage(
+                    Destination.Selected(p),
+                    Assembly.Event.refuse(member)
+                  ) *> reduceStatus
+                )
+              yield ()
+            }
           case Invalid =>
             canInvalide(member) { (_, _) =>
               invalidate
@@ -711,6 +735,9 @@ object Assembly:
 
     inline def accept(member: Fingerprint) =
       Event.Harvesting(Harvest.Event.Accepted(member))
+
+    inline def refuse(member: Fingerprint) =
+      Event.Harvesting(Harvest.Event.Refused(member))
 
     inline def invalid =
       Event.Harvesting(Harvest.Event.Invalid)

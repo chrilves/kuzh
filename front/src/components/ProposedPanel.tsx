@@ -1,78 +1,100 @@
-import { useState } from "react";
 import { Fingerprint, Name } from "../model/Crypto";
 import MemberList from "./MemberList";
 import { Member } from "../model/Member";
 import { Harvest } from "../model/assembly/Harvest";
 import { useTranslation } from "react-i18next";
+import { GetSet } from "../lib/Var";
+import { useState } from "react";
 
 type Props = {
   harvest: Harvest;
   remaining: Fingerprint[];
-  acceptHarvest(): void;
-  changeReadiness(r: Member.Blockingness): void;
   name(member: Fingerprint): Promise<Name>;
+  phase: Phase;
+  act: (action: Action) => void;
+  autoAccept: Boolean;
+  disableBlocking: boolean;
 };
 
-type Phase = "proposed" | "accepted";
+export type Phase = "proposed" | "accepted";
+export type Action = "accept" | "refuse" | "block";
 
 export default function ProposedPanel(props: Props): JSX.Element {
-  const [phase, setPhase] = useState<Phase>("proposed");
+  const [desiredPhase, setDesiredPhase] = useState<Phase>(
+    props.autoAccept ? "accepted" : props.phase
+  );
   const { t } = useTranslation();
 
-  function goToAccepted() {
-    props.acceptHarvest();
-    setPhase("accepted");
-  }
+  const act = (action: Action) => {
+    props.act(action);
+    setDesiredPhase(action === "accept" ? "accepted" : "proposed");
+  };
 
   let page: JSX.Element;
 
-  switch (phase) {
-    case "proposed":
-      page = (
-        <div>
-          <h3>{t("Do you accept this harvest ?")}</h3>
-          <p>
-            {t(
-              "Consent matters! The harvest won't start until everyone accepts it. Nobody is allowed to join the harvest any more, not until someone refuses it to go back!"
-            )}
-          </p>
+  if (desiredPhase !== props.phase)
+    page = <p>{t("Waiting server acknowledgement")}</p>;
+  else
+    switch (props.phase) {
+      case "proposed":
+        page = (
           <div>
-            <button
-              className="yes-no-button"
-              type="button"
-              onClick={goToAccepted}
-            >
-              {t("I accept this harvest")}
-            </button>
-            <button
-              className="yes-no-button"
-              type="button"
-              onClick={() => props.changeReadiness("blocking")}
-            >
-              {t("I refuse this harvest !")}
-            </button>
+            <h3>{t("Do you accept this harvest ?")}</h3>
+            <p>
+              {t(
+                "Consent matters! The harvest won't start until everyone accepts it. Nobody is allowed to join the harvest any more, not until someone refuses it to go back!"
+              )}
+            </p>
+            <div>
+              <button
+                className={
+                  props.disableBlocking ? "yes-no-button" : "third-button"
+                }
+                type="button"
+                onClick={() => act("accept")}
+              >
+                {t("I accept it.")}
+              </button>
+              <button
+                className={
+                  props.disableBlocking ? "yes-no-button" : "third-button"
+                }
+                type="button"
+                onClick={() => act("refuse")}
+              >
+                {t("I refuse it!")}
+              </button>
+              {!props.disableBlocking && (
+                <button
+                  className="third-button"
+                  type="button"
+                  onClick={() => act("block")}
+                >
+                  {t("I block it!")}
+                </button>
+              )}
+            </div>
+            <MemberList
+              title={t("Participants in this harvest")}
+              members={props.harvest.participants}
+              name={props.name}
+            />
           </div>
-          <MemberList
-            title={t("Participants in this harvest")}
-            members={props.harvest.participants}
-            name={props.name}
-          />
-        </div>
-      );
-      break;
-    case "accepted":
-      page = (
-        <div>
-          <h3>{t("Waiting others")}</h3>
-          <p>
-            {t(
-              "You have accepted to start the harvest. You need to wait until everyone accepts the harvest or one refuses it."
-            )}
-          </p>
-        </div>
-      );
-      break;
-  }
+        );
+        break;
+      case "accepted":
+        page = (
+          <div>
+            <h3>{t("Waiting others")}</h3>
+            <p>
+              {t(
+                "You need to wait until everyone accepts the harvest or one refuses it."
+              )}
+            </p>
+          </div>
+        );
+        break;
+    }
 
   return (
     <section>

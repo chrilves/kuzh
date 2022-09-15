@@ -1,4 +1,5 @@
 import { JSONNormalizedStringifyD } from "../lib/JSONNormalizedStringify";
+import { GetSet } from "../lib/Var";
 import { AssemblyInfo } from "../model/assembly/AssembyInfo";
 import { IdentityProof, Membership } from "../model/Crypto";
 
@@ -14,10 +15,19 @@ export interface StorageAPI {
 
   fetchNickname(): string | null;
   storeNickname(nickname: string): void;
+
+  autoConfirm: GetSet<boolean>;
+  autoAccept: GetSet<boolean>;
+  disableBlocking: GetSet<boolean>;
 }
 
-const localStorageMembershipKey = "LAST_MEMBERSHIP";
-const localStorageNicknameKey = "LAST_NICKNAME";
+const localStoragePrefix = "kuzh.cc/";
+
+const localStorageMembershipKey = `${localStoragePrefix}last-membership`;
+const localStorageNicknameKey = `${localStoragePrefix}nickname`;
+const localStorageAutoConfirmKey = `${localStoragePrefix}auto-confirm`;
+const localStorageAutoValidateKey = `${localStoragePrefix}auto-validate`;
+const localStorageEnableBlockingKey = `${localStoragePrefix}enable-blocking`;
 
 export class LocalStorageAPI implements StorageAPI {
   fetchLastMembership(): Promise<Membership | null> {
@@ -36,7 +46,7 @@ export class LocalStorageAPI implements StorageAPI {
   }
 
   private localStorageIdentityProofsKey(assemblyInfo: AssemblyInfo): string {
-    return `IDENITY_PROFS_${assemblyInfo.id}`;
+    return `${localStoragePrefix}assembly/${assemblyInfo.id}/identity-proofs`;
   }
 
   readonly fetchIdentityProofs = async (
@@ -74,6 +84,31 @@ export class LocalStorageAPI implements StorageAPI {
   readonly storeNickname = (nickname: string): void => {
     window.localStorage.setItem(localStorageNicknameKey, nickname);
   };
+
+  private readonly booleanProperty = (name: string, dft: boolean) =>
+    GetSet.cache(
+      GetSet.getterSetter<boolean>(
+        () => {
+          const value = window.localStorage.getItem(name);
+          return value === null ? dft : JSON.parse(value);
+        },
+        (newValue: boolean) =>
+          window.localStorage.setItem(name, JSON.stringify(newValue))
+      )
+    );
+
+  readonly autoConfirm: GetSet<boolean> = this.booleanProperty(
+    localStorageAutoConfirmKey,
+    true
+  );
+  readonly autoAccept: GetSet<boolean> = this.booleanProperty(
+    localStorageAutoValidateKey,
+    true
+  );
+  readonly disableBlocking: GetSet<boolean> = this.booleanProperty(
+    localStorageEnableBlockingKey,
+    true
+  );
 }
 
 export class DummyStorageAPI implements StorageAPI {
@@ -110,4 +145,8 @@ export class DummyStorageAPI implements StorageAPI {
   readonly storeNickname = (nickname: string): void => {
     this.nickname = nickname;
   };
+
+  readonly autoConfirm: GetSet<boolean> = GetSet.variable(true);
+  readonly autoAccept: GetSet<boolean> = GetSet.variable(true);
+  readonly disableBlocking: GetSet<boolean> = GetSet.variable(true);
 }

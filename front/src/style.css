@@ -138,6 +138,10 @@ button {
   width: 50%;
 }
 
+.third-button {
+  width: 33%;
+}
+
 .the-answer {
   font-style: italic;
 }

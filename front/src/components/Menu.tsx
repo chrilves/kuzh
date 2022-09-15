@@ -118,7 +118,7 @@ function Join(props: Nav & { nick: string }): JSX.Element {
   const [nickname, setNickname] = useState<string>(props.nick);
   const { t } = useTranslation();
 
-  async function join() {
+  function join() {
     const info = AsssemblyInfo.parseAssemblyURL(assemblyKey);
     if (info !== null)
       props.prepare(Operation.join(info.id, info.name, info.secret, nickname));

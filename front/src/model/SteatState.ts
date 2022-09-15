@@ -89,7 +89,7 @@ export namespace SeatState {
       );
       m.assembly.seatListeners.clearListeners();
       m.assembly.connectionStatusListener.clearListeners();
-      m.assembly.stateListener().clearListeners();
+      m.assembly.stateObservable().clearListeners();
       m.assembly.harvestResultListener().clearListeners();
     }
   }

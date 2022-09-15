@@ -1,102 +1,149 @@
 import { Mutex } from "async-mutex";
-import { MListener } from "./Listener";
+import { Iso } from "./Iso";
+import { Observable } from "./Observable";
 
-export interface Var<A> {
-  get(): A;
-  set(newValue: A): A;
+export interface MGetSet<A> {
+  get(): Promise<A>;
+  set(a: A): Promise<void>;
 }
 
-export default class MVar<A> implements MListener<A> {
-  private readonly mutex = new Mutex();
-  private _listeners: Set<(a: A) => void> = new Set();
-  private value: A;
+export namespace MGetSet {
+  export function variable<A>(initial: A): MGetSet<A> {
+    return new (class implements MGetSet<A> {
+      private value: A = initial;
 
-  constructor(value: A) {
-    this.value = value;
+      readonly get = () => Promise.resolve(this.value);
+      readonly set = (a: A): Promise<void> => {
+        this.value = a;
+        return Promise.resolve();
+      };
+    })();
   }
 
-  ////////////////////////
-  // UNSAFE
+  export function getterSetter<A>(
+    _get: () => Promise<A>,
+    _set: (a: A) => Promise<void>
+  ): MGetSet<A> {
+    return {
+      get: _get,
+      set: _set,
+    };
+  }
 
-  readonly unsafeGet = (): A => this.value;
+  export function cache<A>(gs: MGetSet<A>): MGetSet<A> {
+    return new (class implements MGetSet<A> {
+      private value: A | null = null;
 
-  readonly unsafeSet = (newValue: A): Promise<A> => {
-    const oldValue = this.value;
-    this.value = newValue;
-    this.propagate();
-    return Promise.resolve(oldValue);
-  };
+      readonly get = async () => {
+        if (this.value === null) {
+          this.value = await gs.get();
+          return Promise.resolve(this.value);
+        } else return Promise.resolve(this.value);
+      };
 
-  ////////////////////////7
-  // SAFE
+      readonly set = (a: A): Promise<void> => {
+        this.value = a;
+        return gs.set(a);
+      };
+    })();
+  }
+}
 
-  readonly get = async (): Promise<A> =>
-    this.mutex.runExclusive(() => this.value);
+export abstract class MVar<A> {
+  private readonly mutex = new Mutex();
 
-  readonly with = async <B>(f: (a: A) => Promise<B>): Promise<B> =>
-    this.mutex.runExclusive(() => f(this.value));
+  abstract unsafeGet(): Promise<A>;
+  abstract unsafeSet(newValue: A): Promise<void>;
 
-  readonly set = async (newValue: A): Promise<A> =>
+  readonly get = (): Promise<A> =>
+    this.mutex.runExclusive(() => this.unsafeGet());
+  readonly set = (newValue: A): Promise<void> =>
     this.mutex.runExclusive(() => this.unsafeSet(newValue));
 
-  readonly setWith = async (f: () => Promise<A>): Promise<A> =>
-    this.mutex.runExclusive(async () => this.unsafeSet(await f()));
+  readonly with = async <B>(f: (a: A) => Promise<B>): Promise<B> =>
+    f(await this.get());
 
-  readonly setIfEq = async (oldValue: A, newValue: A): Promise<boolean> =>
-    this.mutex.runExclusive(() => {
-      if (this.value === oldValue) {
-        this.unsafeSet(newValue);
-        return true;
-      } else return false;
+  readonly setWith = async (f: () => Promise<A>): Promise<void> =>
+    this.set(await f());
+
+  readonly setIfEq = (oldValue: A, newValue: A): Promise<boolean> =>
+    this.mutex.runExclusive(async () => {
+      if ((await this.unsafeGet()) === oldValue) {
+        await this.unsafeSet(newValue);
+        return Promise.resolve(true);
+      } else return Promise.resolve(false);
     });
 
-  readonly modify = async <B>(f: (a: A) => Promise<[A, B]>): Promise<B> =>
+  readonly modify = (f: (a: A) => Promise<A>): Promise<void> =>
     this.mutex.runExclusive(async () => {
-      const [newValue, ret] = await f(this.value);
-      this.unsafeSet(newValue);
+      const newValue = await f(await this.unsafeGet());
+      await this.unsafeSet(newValue);
+    });
+
+  readonly modifyWith = <B>(f: (a: A) => Promise<[A, B]>): Promise<B> =>
+    this.mutex.runExclusive(async () => {
+      const [newValue, ret] = await f(await this.unsafeGet());
+      await this.unsafeSet(newValue);
       return Promise.resolve(ret);
     });
 
-  ////////////////////////
-  // Listener
-
-  readonly addListener = async <B>(f: (a: A) => B): Promise<B> => {
-    this._listeners.add(f);
-    return Promise.resolve(f(await this.get()));
+  readonly iso = <B>(isoab: Iso<A, B>): MVar<B> => {
+    const base = this;
+    return new (class extends MVar<B> {
+      readonly unsafeGet = async (): Promise<B> => isoab.to(await base.get());
+      readonly unsafeSet = async (b: B): Promise<void> =>
+        base.set(isoab.from(b));
+    })();
   };
 
-  readonly removeListener = (f: (a: A) => void) => {
-    this._listeners.delete(f);
+  static readonly fromMGetSet = <A>(gs: MGetSet<A>): MVar<A> =>
+    new (class extends MVar<A> {
+      readonly unsafeGet = gs.get;
+      readonly unsafeSet = gs.set;
+    })();
+}
+
+export abstract class ObservableMVar<A>
+  extends MVar<A>
+  implements Observable<A>
+{
+  private _observable: Observable<A>;
+  private propagate: (a: A) => void;
+
+  readonly addListener;
+  readonly removeListener;
+  readonly clearListeners;
+  readonly waitFor;
+  readonly map;
+
+  constructor() {
+    super();
+    const [_observable, propagate] = Observable.create(
+      async (f: (a: A) => void) => f(await this.get())
+    );
+    this._observable = _observable;
+    this.propagate = propagate;
+
+    this.addListener = this._observable.addListener;
+    this.removeListener = this._observable.removeListener;
+    this.clearListeners = this._observable.clearListeners;
+    this.waitFor = this._observable.waitFor;
+    this.map = this._observable.map;
+  }
+
+  protected abstract unobservedUnsafeSet(a: A): Promise<void>;
+
+  readonly unsafeSet = async (a: A): Promise<void> => {
+    await this.unobservedUnsafeSet(a);
+    this.propagate(a);
   };
 
-  readonly clearListeners = () => {
-    this._listeners = new Set();
-  };
+  readonly variable = (): MVar<A> => this;
+  readonly observable = (): Observable<A> => this;
 
-  private readonly propagate = () =>
-    this._listeners.forEach((f) => {
-      try {
-        f(this.value);
-      } catch (e) {
-        console.log(
-          `Propagate error ${e} on value ${JSON.stringify(this.value)}`
-        );
-      }
-    });
-
-  readonly waitFor = <B>(f: (a: A) => B | undefined): Promise<B> =>
-    new Promise((resolve, reject) => {
-      const g = (a: A) => {
-        try {
-          const b = f(a);
-          if (b !== undefined) {
-            this._listeners.delete(g);
-            resolve(b);
-          }
-        } catch (e) {
-          reject(e);
-        }
-      };
-      this._listeners.add(g);
-    });
+  static readonly fromMGetSet = <A>(gs: MGetSet<A>): ObservableMVar<A> =>
+    new (class extends ObservableMVar<A> {
+      readonly unsafeGet = gs.get;
+      readonly unobservedUnsafeSet = gs.set;
+    })();
 }

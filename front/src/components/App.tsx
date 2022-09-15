@@ -22,13 +22,13 @@ export default function App(props: {
   services: Services;
   refAppState: RefAppState;
 }): JSX.Element {
-  const [_, setAppState] = useState<AppState>(props.refAppState.appState);
+  const [_, setAppState] = useState<AppState>(props.refAppState.appState.get());
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
 
   useEffect(() => {
-    props.refAppState.listeners.addListener(setAppState);
-    return () => props.refAppState.listeners.removeListener(setAppState);
+    props.refAppState.appState.addListener(setAppState);
+    return () => props.refAppState.appState.removeListener(setAppState);
   }, [props.refAppState]);
 
   ////////////////////
@@ -36,11 +36,12 @@ export default function App(props: {
   ////////////////////
 
   function menu() {
-    switch (props.refAppState.appState.tag) {
+    const st = props.refAppState.appState.get();
+    switch (st.tag) {
       case "seats":
-        SeatState.stop(props.refAppState.appState.host.state);
-        SeatState.removeListener(props.refAppState.appState.host.state);
-        for (const gs of props.refAppState.appState.guests) {
+        SeatState.stop(st.host.state);
+        SeatState.removeListener(st.host.state);
+        for (const gs of st.guests) {
           SeatState.stop(gs.seat.state);
           SeatState.removeListener(gs.seat.state);
         }
@@ -48,7 +49,7 @@ export default function App(props: {
       default:
     }
     navigate("/");
-    props.refAppState.setAppState(AppState.menu);
+    props.refAppState.appState.set(AppState.menu);
   }
 
   /////////////////////
@@ -56,7 +57,7 @@ export default function App(props: {
   /////////////////////
 
   async function prepare(operation: Operation): Promise<void> {
-    props.refAppState.setAppState(
+    props.refAppState.appState.set(
       AppState.seats(
         {
           state: SeatState.prepare(operation),
@@ -83,6 +84,29 @@ export default function App(props: {
   }
 
   async function assembly(membership: Membership): Promise<Assembly> {
+    const temporaryState = SeatState.prepare(
+      Operation.join(
+        membership.assembly.id,
+        membership.assembly.name,
+        membership.assembly.secret,
+        membership.me.nickname
+      )
+    );
+
+    props.refAppState.appState.set(
+      AppState.seats(
+        {
+          state: temporaryState,
+          setState: props.refAppState.setHostState,
+          exit: menu,
+          reset: async () => {
+            await assembly(membership);
+          },
+        },
+        props.refAppState.guests()
+      )
+    );
+
     const asm = new Assembly(
       props.services.storageAPI,
       props.services.identityProofStoreFactory.identityProofStore(
@@ -90,20 +114,13 @@ export default function App(props: {
       ),
       props.services.assemblyAPI,
       membership,
-      props.refAppState.getHostState
+      props.refAppState.hostState
     );
 
-    props.refAppState.setAppState(
+    props.refAppState.appState.set(
       AppState.seats(
         {
-          state: SeatState.prepare(
-            Operation.join(
-              asm.membership.assembly.id,
-              asm.membership.assembly.name,
-              asm.membership.assembly.secret,
-              asm.membership.me.nickname
-            )
-          ),
+          state: temporaryState,
           setState: props.refAppState.setHostState,
           exit: menu,
           reset: asm.restart,
@@ -126,7 +143,8 @@ export default function App(props: {
     nickname: string,
     identityProofStore: IdentityProofStore
   ): Promise<void> {
-    if (props.refAppState.appState.tag === "seats") {
+    const st = props.refAppState.appState.get();
+    if (st.tag === "seats") {
       const guestID = crypto.randomUUID();
 
       const operation = Operation.join(
@@ -145,7 +163,8 @@ export default function App(props: {
       let asm: Assembly | null = null;
 
       const connect = async () => {
-        if (props.refAppState.appState.tag === "seats") {
+        const st = props.refAppState.appState.get();
+        if (st.tag === "seats") {
           let membership: Membership = await AssemblyAPI.fold(guestAssemblyAPI)(
             operation
           );
@@ -155,14 +174,12 @@ export default function App(props: {
             identityProofStore,
             guestAssemblyAPI,
             membership,
-            () => props.refAppState.getGuestState(guestID)
+            props.refAppState.guestState(guestID)
           );
 
-          const idx = props.refAppState.appState.guests.findIndex(
-            (gs) => gs.guestID === guestID
-          );
+          const idx = st.guests.findIndex((gs) => gs.guestID === guestID);
           if (idx !== -1) {
-            const newGuests = Array.from(props.refAppState.appState.guests);
+            const newGuests = Array.from(st.guests);
             const gs = newGuests[idx];
             newGuests[idx] = {
               guestID: guestID,
@@ -176,16 +193,14 @@ export default function App(props: {
 
             asm.seatListeners.addListener(gs.seat.setState);
 
-            props.refAppState.setAppState(
-              AppState.seats(props.refAppState.appState.host, newGuests)
-            );
+            props.refAppState.appState.set(AppState.seats(st.host, newGuests));
           }
 
           return asm.start();
         } else throw new Error(t("ERROR_CONNECT_GUEST_NO_SEAT_MODE"));
       };
 
-      const newGuests = Array.from(props.refAppState.appState.guests);
+      const newGuests = Array.from(st.guests);
 
       newGuests.push({
         guestID: guestID,
@@ -196,9 +211,7 @@ export default function App(props: {
           exit: () => props.refAppState.deleteGuest(guestID),
         },
       });
-      props.refAppState.setAppState(
-        AppState.seats(props.refAppState.appState.host, newGuests)
-      );
+      props.refAppState.appState.set(AppState.seats(st.host, newGuests));
 
       try {
         await connect();
@@ -217,7 +230,8 @@ export default function App(props: {
 
   let page: JSX.Element;
 
-  switch (props.refAppState.appState.tag) {
+  const st = props.refAppState.appState.get();
+  switch (st.tag) {
     case "menu":
       page = (
         <Menu
@@ -232,13 +246,13 @@ export default function App(props: {
         <main className="seats">
           <Seat
             key="host"
-            state={props.refAppState.appState.host.state}
+            state={st.host.state}
             setState={props.refAppState.setHostState}
             exit={menu}
-            reset={props.refAppState.appState.host.reset}
+            reset={st.host.reset}
             addGuest={addGuest}
           />
-          {props.refAppState.appState.guests.map((g) => (
+          {st.guests.map((g) => (
             <Seat
               key={g.guestID}
               state={g.seat.state}
@@ -266,8 +280,8 @@ function KuzhTitle(props: { install: Install }): JSX.Element {
   const [installable, setInstallable] = useState(props.install.installable());
 
   useEffect(() => {
-    props.install.listeners.addListener(setInstallable);
-    return () => props.install.listeners.removeListener(setInstallable);
+    props.install.listenInstall.addListener(setInstallable);
+    return () => props.install.listenInstall.removeListener(setInstallable);
   });
 
   const urlIntoClipboard = () =>

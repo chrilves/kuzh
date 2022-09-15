@@ -1,48 +1,35 @@
-import { PropagateListener } from "../lib/Listener";
+import { GetSet, ObservableVar } from "../lib/Var";
 import { AppState } from "./AppState";
 import { GuestSeat, SeatState } from "./SteatState";
 
 export class RefAppState {
-  appState: AppState;
+  readonly appState: ObservableVar<AppState>;
 
   constructor(appState: AppState) {
-    this.appState = appState;
+    this.appState = ObservableVar.fromGetSet(GetSet.variable(appState));
   }
-
-  /////////////////////////////
-  // State
-
-  readonly setAppState = (st: AppState) => {
-    this.appState = st;
-    this.listeners.propagate(st);
-  };
-  readonly getAppState = () => this.appState;
-
-  /////////////////////////////
-  // Listeners
-
-  readonly listeners: PropagateListener<AppState> = new PropagateListener(
-    this.getAppState
-  );
 
   ///////////////////////////////
   // Operations
 
   readonly getHostState = (): SeatState => {
-    switch (this.appState.tag) {
+    const st = this.appState.get();
+    switch (st.tag) {
       case "seats":
-        return this.appState.host.state;
+        return st.host.state;
       default:
         throw new Error("Trying to get guest state without guests ...");
     }
   };
 
   readonly setHostState = (state: SeatState): void => {
+    // State Debugging
     //console.log(`Setting Host state to ${JSON.stringify(state)}`);
-    switch (this.appState.tag) {
+    const st = this.appState.get();
+    switch (st.tag) {
       case "seats":
-        const host = this.appState.host;
-        this.setAppState(
+        const host = st.host;
+        this.appState.set(
           AppState.seats(
             {
               state: state,
@@ -50,7 +37,7 @@ export class RefAppState {
               exit: host.exit,
               reset: host.reset,
             },
-            this.appState.guests
+            st.guests
           )
         );
         break;
@@ -61,10 +48,16 @@ export class RefAppState {
     }
   };
 
+  readonly hostState = GetSet.getterSetter<SeatState>(
+    this.getHostState,
+    this.setHostState
+  );
+
   readonly getGuestState = (guestID: string): SeatState => {
-    switch (this.appState.tag) {
+    const st = this.appState.get();
+    switch (st.tag) {
       case "seats":
-        const item = this.appState.guests.find((x) => x.guestID === guestID);
+        const item = st.guests.find((x) => x.guestID === guestID);
         if (item) return item.seat.state;
         else throw new Error("Guest not found.");
       default:
@@ -73,14 +66,14 @@ export class RefAppState {
   };
 
   readonly setGuestState = (guestID: string, state: SeatState): void => {
+    // State Debugging
     //console.log(`Setting guest ${guestID} state to ${JSON.stringify(state)}`);
-    switch (this.appState.tag) {
+    const st = this.appState.get();
+    switch (st.tag) {
       case "seats":
-        const idx = this.appState.guests.findIndex(
-          (gs) => gs.guestID === guestID
-        );
+        const idx = st.guests.findIndex((gs) => gs.guestID === guestID);
         if (idx !== -1) {
-          const guests = Array.from(this.appState.guests);
+          const guests = Array.from(st.guests);
           const gs = guests[idx];
           guests[idx] = {
             guestID: gs.guestID,
@@ -91,7 +84,7 @@ export class RefAppState {
               reset: gs.seat.reset,
             },
           };
-          this.setAppState(AppState.seats(this.appState.host, guests));
+          this.appState.set(AppState.seats(st.host, guests));
         } else
           throw new Error(
             `Unknown guest ${guestID}. Trying to set state ${JSON.stringify(
@@ -108,20 +101,25 @@ export class RefAppState {
     }
   };
 
+  readonly guestState = (guestID: string) =>
+    GetSet.getterSetter<SeatState>(
+      () => this.getGuestState(guestID),
+      (state: SeatState) => this.setGuestState(guestID, state)
+    );
+
   readonly deleteGuest = (guestID: string): void => {
     console.log(`Deletion of guest ${guestID}`);
-    switch (this.appState.tag) {
+    const st = this.appState.get();
+    switch (st.tag) {
       case "seats":
-        const idx = this.appState.guests.findIndex(
-          (gs) => gs.guestID === guestID
-        );
+        const idx = st.guests.findIndex((gs) => gs.guestID === guestID);
         if (idx !== -1) {
-          const guests = Array.from(this.appState.guests);
-          const st = guests[idx].seat.state;
-          SeatState.stop(st);
-          SeatState.removeListener(st);
+          const guests = Array.from(st.guests);
+          const stg = guests[idx].seat.state;
+          SeatState.stop(stg);
+          SeatState.removeListener(stg);
           guests.splice(idx, 1);
-          this.setAppState(AppState.seats(this.appState.host, guests));
+          this.appState.set(AppState.seats(st.host, guests));
         }
         break;
       default:
@@ -138,9 +136,10 @@ export class RefAppState {
   };
 
   readonly guests = (): GuestSeat[] => {
-    switch (this.appState.tag) {
+    const st = this.appState.get();
+    switch (st.tag) {
       case "seats":
-        return this.appState.guests;
+        return st.guests;
       case "menu":
         return [];
     }
