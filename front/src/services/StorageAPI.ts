@@ -1,3 +1,4 @@
+import { Base64URL } from "../lib/Base64URL";
 import { JSONNormalizedStringifyD } from "../lib/JSONNormalizedStringify";
 import { GetSet } from "../lib/Var";
 import { AssemblyInfo } from "../model/assembly/AssembyInfo";
@@ -12,6 +13,9 @@ export interface StorageAPI {
     assemblyInfo: AssemblyInfo,
     identityProofs: IdentityProof[]
   ): Promise<void>;
+
+  fetchBallot(assemblyInfo: AssemblyInfo): Uint8Array | null;
+  storeBallot(assemblyInfo: AssemblyInfo, ballot: Uint8Array | null): void;
 
   clearPrivateData(): void;
 
@@ -59,6 +63,10 @@ export class LocalStorageAPI implements StorageAPI {
     return `${localStorageAssemblyPrefix}${assemblyInfo.id}/identity-proofs`;
   }
 
+  private localStorageBallotKey(assemblyInfo: AssemblyInfo): string {
+    return `${localStorageAssemblyPrefix}${assemblyInfo.id}/ballot`;
+  }
+
   readonly fetchIdentityProofs = async (
     assemblyInfo: AssemblyInfo
   ): Promise<IdentityProof[]> => {
@@ -86,6 +94,33 @@ export class LocalStorageAPI implements StorageAPI {
       this.localStorageIdentityProofsKey(assemblyInfo),
       value
     );
+  };
+
+  readonly fetchBallot = (assemblyInfo: AssemblyInfo): Uint8Array | null => {
+    try {
+      const ballot = window.localStorage.getItem(
+        this.localStorageBallotKey(assemblyInfo)
+      );
+      if (ballot === null) return null;
+      else return Base64URL.getInstance().decode(ballot);
+    } catch (e) {
+      console.log(`Error while fetching ballot: ${JSON.stringify(e)}`);
+      window.localStorage.removeItem(this.localStorageBallotKey(assemblyInfo));
+      return null;
+    }
+  };
+
+  readonly storeBallot = (
+    assemblyInfo: AssemblyInfo,
+    ballot: Uint8Array | null
+  ): void => {
+    if (ballot === null)
+      window.localStorage.removeItem(this.localStorageBallotKey(assemblyInfo));
+    else
+      window.localStorage.setItem(
+        this.localStorageBallotKey(assemblyInfo),
+        Base64URL.getInstance().encode(ballot)
+      );
   };
 
   readonly clearPrivateData = (): void => {
@@ -137,6 +172,7 @@ export class LocalStorageAPI implements StorageAPI {
 export class DummyStorageAPI implements StorageAPI {
   private membership: Membership | null = null;
   private identityProofs: Map<string, IdentityProof[]> = new Map();
+  private ballots: Map<string, Uint8Array> = new Map();
   private nickname: string | null = null;
 
   readonly fetchLastMembership = async (): Promise<Membership | null> =>
@@ -163,7 +199,22 @@ export class DummyStorageAPI implements StorageAPI {
     this.identityProofs.set(assemblyInfo.id, identityProofs);
   };
 
+  readonly fetchBallot = (assemblyInfo: AssemblyInfo): Uint8Array | null => {
+    const ballot = this.ballots.get(assemblyInfo.id);
+    if (ballot === undefined) return null;
+    return ballot;
+  };
+
+  readonly storeBallot = (
+    assemblyInfo: AssemblyInfo,
+    ballot: Uint8Array | null
+  ): void => {
+    if (ballot === null) this.ballots.delete(assemblyInfo.id);
+    else this.ballots.set(assemblyInfo.id, ballot);
+  };
+
   readonly clearPrivateData = (): void => {
+    this.ballots.clear();
     this.identityProofs.clear();
     this.membership = null;
   };

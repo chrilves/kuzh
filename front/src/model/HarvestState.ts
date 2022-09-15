@@ -1,19 +1,25 @@
+import { Base64URL } from "../lib/Base64URL";
 import { JSONNormalizedStringifyD } from "../lib/JSONNormalizedStringify";
+import { MGetSet } from "../lib/MVar";
+import { checkListEqual, isDistinct, isOrdered, sortJSON } from "../lib/Utils";
+import { GetSet, ObservableVar } from "../lib/Var";
 import { IdentityProofStore } from "../services/IdentityProofStore";
+import { Harvest } from "./assembly/Harvest";
 import { Ballot } from "./Ballot";
 import { CryptoUtils, Fingerprint, Me, Signature } from "./Crypto";
-import { Harvest } from "./assembly/Harvest";
-import { MemberSignature } from "./Member";
-import { checkListEqual, isDistinct, isOrdered, sortJSON } from "../lib/Utils";
-import { Base64URL } from "../lib/Base64URL";
 import { HarvestResult } from "./HarvestResult";
+import { MemberSignature } from "./Member";
 import { Question } from "./Question";
-import { Observable } from "../lib/Observable";
-import { GetSet, ObservableVar } from "../lib/Var";
 
 export type Proof = {
   harvest: Harvest;
   hashes: string[];
+};
+
+export type StoredBallot = {
+  id: string;
+  question: Question | null;
+  ballot: Ballot;
 };
 
 export type HarvestStep =
@@ -28,8 +34,14 @@ export type HarvestStep =
 export class HarvestState {
   private readonly me: Me;
   private readonly identityProofStore: IdentityProofStore;
+  private readonly preBallotStore: (
+    id: string,
+    question: Question | null
+  ) => MGetSet<StoredBallot | null>;
   private id: string;
   private question: Question | null;
+
+  private readonly ballotStore: MGetSet<Ballot | null>;
 
   private _ballot: Ballot | null = null;
   private _harvest: Harvest | null = null;
@@ -46,23 +58,57 @@ export class HarvestState {
   constructor(
     me: Me,
     identityProofStore: IdentityProofStore,
+    preBallotStore: (
+      id: string,
+      question: Question | null
+    ) => MGetSet<StoredBallot | null>,
     id: string,
     question: Question | null
   ) {
     this.me = me;
     this.identityProofStore = identityProofStore;
+    this.preBallotStore = preBallotStore;
     this.id = id;
     this.question = question;
+
+    this.ballotStore = MGetSet.getterSetter<Ballot | null>(
+      async () => {
+        try {
+          const sb = await this.preBallotStore(this.id, this.question).get();
+          if (sb !== null && sb.id === this.id && sb.question === this.question)
+            return sb.ballot;
+          else return null;
+        } catch (e) {
+          console.log(`Ballot store error: ${JSON.stringify(e)}`);
+          return null;
+        }
+      },
+      async (b: Ballot | null) => {
+        if (b === null)
+          await this.preBallotStore(this.id, this.question).set(null);
+        else
+          await this.preBallotStore(this.id, this.question).set({
+            id: this.id,
+            question: this.question,
+            ballot: b,
+          });
+      }
+    );
   }
 
   private readonly log = (s: string) =>
     console.log(`[${this.me.nickname}] ${s}`);
 
-  readonly reset = (id: string, question: Question | null) => {
-    this._ballot = null;
+  readonly reset = async (
+    id: string,
+    question: Question | null
+  ): Promise<boolean> => {
     this.id = id;
     this.question = question;
     this.resetHarvest();
+    const b = await this.ballotStore.get();
+    this._ballot = b;
+    return b !== null;
   };
 
   readonly resetHarvest = () => {
@@ -90,6 +136,7 @@ export class HarvestState {
     if (this._ballot !== null) throw new Error("Ballot already set!");
 
     this._ballot = ballot;
+    this.ballotStore.set(ballot);
   };
 
   readonly setHarvest = (harvest: Harvest) => {

@@ -46,6 +46,68 @@ export namespace CryptoUtils {
     arr.forEach((b) => (s += uint6ToB64[b & 0x3f]));
     return s;
   }
+
+  export async function generateSymetricKey(
+    privateKey: CryptoKey,
+    salt: any
+  ): Promise<{ alg: string; key: CryptoKey; iv: Uint8Array }> {
+    const json = {
+      key: await Serial.exportCryptoKey(privateKey),
+      salt,
+    };
+
+    const jsonBytes = new Uint8Array(
+      new TextEncoder().encode(JSONNormalizedStringifyD(json))
+    );
+
+    const hash = new Uint8Array(
+      await window.crypto.subtle.digest("SHA-384", jsonBytes)
+    );
+
+    const aesKey = await window.crypto.subtle.importKey(
+      "raw",
+      hash.slice(0, 256 / 8),
+      "AES-CBC",
+      true,
+      ["encrypt", "decrypt"]
+    );
+
+    return {
+      alg: "AES-CBC",
+      key: aesKey,
+      iv: hash.slice(256 / 8),
+    };
+  }
+
+  export async function symetricEncrypt(
+    privateKey: CryptoKey,
+    salt: any,
+    data: Uint8Array
+  ): Promise<Uint8Array> {
+    const material = await generateSymetricKey(privateKey, salt);
+    return new Uint8Array(
+      await window.crypto.subtle.encrypt(
+        { name: material.alg, iv: material.iv },
+        material.key,
+        data
+      )
+    );
+  }
+
+  export async function symetricDecrypt(
+    privateKey: CryptoKey,
+    salt: any,
+    data: Uint8Array
+  ): Promise<Uint8Array> {
+    const material = await generateSymetricKey(privateKey, salt);
+    return new Uint8Array(
+      await window.crypto.subtle.decrypt(
+        { name: material.alg, iv: material.iv },
+        material.key,
+        data
+      )
+    );
+  }
 }
 
 export namespace Serial {

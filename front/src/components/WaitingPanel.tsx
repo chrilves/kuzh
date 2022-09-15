@@ -1,4 +1,4 @@
-import { ChangeEvent, useState } from "react";
+import { ChangeEvent, useEffect, useState } from "react";
 import { JSONNormalizedStringifyD } from "../lib/JSONNormalizedStringify";
 import { Status } from "../model/assembly/Status";
 import { Fingerprint, Name } from "../model/Crypto";
@@ -302,6 +302,14 @@ function ClosedAnswerPanel(props: ClosedAnswerProps): JSX.Element {
     Phase.initial(props.myReadiness)
   );
 
+  useEffect(() => {
+    if (
+      (props.myReadiness === "blocking" || props.myReadiness === "ready") &&
+      phase !== Phase.confirmed
+    )
+      setPhase(Phase.confirmed);
+  }, [props.myReadiness]);
+
   function changePhase(newPhase: Phase<boolean>) {
     const realNewPhase = Phase.change(
       phase,
@@ -448,6 +456,14 @@ function OpenAnswerPanel(props: OpenAnswerProps): JSX.Element {
   const [phase, setPhase] = useState<Phase<string>>(
     Phase.initial(props.myReadiness)
   );
+
+  useEffect(() => {
+    if (
+      (props.myReadiness === "blocking" || props.myReadiness === "ready") &&
+      phase !== Phase.confirmed
+    )
+      setPhase(Phase.confirmed);
+  }, [props.myReadiness]);
 
   function changePhase(newPhase: Phase<string>) {
     const realNewPhase = Phase.change(
@@ -629,6 +645,14 @@ function QuestionPanel(props: {
   const [phase, setPhase] = useState<Phase<Question | null>>(
     Phase.initial(props.myReadiness)
   );
+
+  useEffect(() => {
+    if (
+      (props.myReadiness === "blocking" || props.myReadiness === "ready") &&
+      phase !== Phase.confirmed
+    )
+      setPhase(Phase.confirmed);
+  }, [props.myReadiness]);
 
   function changePhase(newPhase: Phase<Question | null>) {
     const realNewPhase = Phase.change(

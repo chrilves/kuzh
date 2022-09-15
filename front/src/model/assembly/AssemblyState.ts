@@ -1,4 +1,5 @@
 import { Mutex } from "async-mutex";
+import { MGetSet } from "../../lib/MVar";
 import { Observable } from "../../lib/Observable";
 import { IdentityProofStore } from "../../services/IdentityProofStore";
 import { Ballot } from "../Ballot";
@@ -9,7 +10,7 @@ import { MemberEvent } from "../events/MemberEvent";
 import { ProtocolEvent } from "../events/ProtocolEvent";
 import { PublicEvent } from "../events/PublicEvent";
 import { HarvestResult } from "../HarvestResult";
-import { HarvestState } from "../HarvestState";
+import { HarvestState, StoredBallot } from "../HarvestState";
 import { Member, MemberAbsent, MemberReadiness } from "../Member";
 import { Parameters } from "../Parameters";
 import { Question } from "../Question";
@@ -46,7 +47,11 @@ export class AssemblyState {
     send: (event: MemberEvent) => void,
     fail: (error: any) => never,
     autoAccept: () => boolean,
-    disableBlocking: () => boolean
+    disableBlocking: () => boolean,
+    preBallotStore: (
+      id: string,
+      question: Question | null
+    ) => MGetSet<StoredBallot | null>
   ) {
     this.me = me;
     this.identityProofStore = identityProofStore;
@@ -64,6 +69,7 @@ export class AssemblyState {
     this._harvestState = new HarvestState(
       this.me,
       this.identityProofStore,
+      preBallotStore,
       "",
       null
     );
@@ -89,9 +95,16 @@ export class AssemblyState {
     status: structuredClone(this._status),
   });
 
+  private resetHarvest = async (
+    id: string,
+    question: Question | null
+  ): Promise<void> => {
+    if (await this._harvestState.reset(id, question))
+      this.send(MemberEvent.blocking("ready"));
+  };
+
   private readonly resetStatus = (id: string, qs: Question[]) => {
     const question = qs.length > 0 ? qs[0] : null;
-    this._harvestState.reset(id, question);
     this._status = Status.waiting(
       id,
       question,
@@ -102,6 +115,7 @@ export class AssemblyState {
         })
       )
     );
+    this.resetHarvest(id, question);
   };
 
   private readonly forcedWaiting = (member: Fingerprint | null) => {
@@ -308,7 +322,7 @@ export class AssemblyState {
           case "status":
             this._status = ev.status;
             if (ev.status.tag === "waiting")
-              this._harvestState.reset(ev.status.id, ev.status.question);
+              this.resetHarvest(ev.status.id, ev.status.question);
             break;
           case "public":
             const publicEvent: PublicEvent = ev.public;
@@ -427,7 +441,7 @@ export class AssemblyState {
     });
     this._status = st.status;
     if (st.status.tag === "waiting")
-      this._harvestState.reset(st.status.id, st.status.question);
+      this.resetHarvest(st.status.id, st.status.question);
     this.refreshState();
   };
 

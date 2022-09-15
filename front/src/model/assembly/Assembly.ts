@@ -1,3 +1,4 @@
+import { JSONNormalizedStringifyD } from "../../lib/JSONNormalizedStringify";
 import { MGetSet, MVar, ObservableMVar } from "../../lib/MVar";
 import { Observable } from "../../lib/Observable";
 import { GetSet, ObservableVar } from "../../lib/Var";
@@ -5,10 +6,11 @@ import { AssemblyAPI } from "../../services/AssemblyAPI";
 import { IdentityProofStore } from "../../services/IdentityProofStore";
 import { StorageAPI } from "../../services/StorageAPI";
 import ConnectionController from "../ConnectionController";
-import { Fingerprint, Membership, Name } from "../Crypto";
+import { CryptoUtils, Fingerprint, Membership, Name } from "../Crypto";
 import { ConnectionEvent } from "../events/ConnectionEvent";
 import { MemberEvent } from "../events/MemberEvent";
 import { HarvestResult } from "../HarvestResult";
+import { StoredBallot } from "../HarvestState";
 import { Member } from "../Member";
 import { Parameters } from "../Parameters";
 import { Question } from "../Question";
@@ -55,13 +57,54 @@ export default class Assembly {
     this.identityProofStore = identityProofStore;
     this.membership = membership;
     this.seatListeners = ObservableVar.fromGetSet(seatState);
+
+    const getPreballot = async (
+      id: string,
+      question: Question | null
+    ): Promise<StoredBallot | null> => {
+      const encBallot = storageAPI.fetchBallot(membership.assembly);
+      if (encBallot === null) return null;
+      else {
+        const decBallot = await CryptoUtils.symetricDecrypt(
+          membership.me.signPair.private,
+          { id, question },
+          encBallot
+        );
+        return JSON.parse(new TextDecoder().decode(decBallot));
+      }
+    };
+
+    const setPreballot = async (
+      id: string,
+      question: Question | null,
+      storedBallot: StoredBallot | null
+    ): Promise<void> => {
+      let encBallot: Uint8Array | null;
+      if (storedBallot === null) encBallot = null;
+      else {
+        const serialStoredBallot = JSONNormalizedStringifyD(storedBallot);
+        const binStoredBallot = new TextEncoder().encode(serialStoredBallot);
+        encBallot = await CryptoUtils.symetricEncrypt(
+          membership.me.signPair.private,
+          { id, question },
+          binStoredBallot
+        );
+      }
+      storageAPI.storeBallot(membership.assembly, encBallot);
+    };
+
     this.assemblyState = new AssemblyState(
       identityProofStore,
       membership.me,
       this.send,
       this.fail,
       this.uxConfig.autoAccept.get,
-      this.uxConfig.disableBlocking.get
+      this.uxConfig.disableBlocking.get,
+      (id: string, question: Question | null) =>
+        MGetSet.getterSetter(
+          () => getPreballot(id, question),
+          (ballot) => setPreballot(id, question, ballot)
+        )
     );
 
     // If we disable blocking while blocking, we are ready!
@@ -122,7 +165,6 @@ export default class Assembly {
       case "established":
         // Now that we know the connection is safe, we can store credentials
         if (this.reconnectionStatus === "neverEstablished") {
-          this.storageAPI.clearPrivateData();
           this.storageAPI.storeLastMembership(this.membership);
           this.storageAPI.storeNickname(this.membership.me.nickname);
         }
