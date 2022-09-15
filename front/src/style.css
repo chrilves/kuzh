@@ -134,7 +134,21 @@ button {
   font-size: 1rem;
 }
 
-.yes-no-button {
+.menu-wizard {
+  margin-top: 2%;
+  margin-bottom: 2%;
+}
+
+.input-line {
+  display: flex;
+}
+
+.single-button {
+  width: 100%;
+}
+
+.yes-no-button,
+.half {
   width: 50%;
 }
 

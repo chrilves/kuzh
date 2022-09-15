@@ -6,9 +6,10 @@ export function Nickname(props: {
 }): JSX.Element {
   const { t } = useTranslation();
   return (
-    <div>
-      <label>{t("Choose a nickname")} : </label>
+    <div className="input-line">
+      <label className="yes-no-button">{t("Choose a nickname")} : </label>
       <input
+        className="yes-no-button"
         type="text"
         name="nickname"
         placeholder={t("your nickname")}

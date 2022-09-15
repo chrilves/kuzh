@@ -42,6 +42,7 @@ export class LocalStorageAPI implements StorageAPI {
         return null;
       }
     } catch (e) {
+      window.localStorage.removeItem(localStorageMembershipKey);
       console.log(`Error while fetching last membership: ${JSON.stringify(e)}`);
       return null;
     }

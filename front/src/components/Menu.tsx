@@ -151,11 +151,10 @@ function Join(props: Nav & { nick: string }): JSX.Element {
           "To join an existing assembly, type here the assembly link, choose a nickname and have fun!"
         )}
       </p>
-      <div>
-        <label>
-          {t('Full link (the one containing "?secret=") of the assembly')} :{" "}
-        </label>
+      <div className="input-line">
+        <label className="half">{t("Full link of the assembly")} : </label>
         <input
+          className="half"
           type="text"
           name="assembly_key"
           placeholder={t("assembly url")}
@@ -166,6 +165,7 @@ function Join(props: Nav & { nick: string }): JSX.Element {
       <Nickname nickname={nickname} setNickname={setNickname} />
       <button
         type="button"
+        className="single-button"
         onClick={
           validInput()
             ? join
@@ -202,9 +202,10 @@ function Create(props: Nav & { nick: string }): JSX.Element {
           'Give a name to your new assembly, any one, yes "my assembly" is a good fit! Choose a nickname and have fun!'
         )}
       </p>
-      <div>
-        <label>{t("Give a name to your assembly")} : </label>
+      <div className="input-line">
+        <label className="half">{t("Give your assembly a name")} : </label>
         <input
+          className="half"
           type="text"
           name="assemblyName"
           placeholder={t("the assembly name")}
@@ -215,6 +216,7 @@ function Create(props: Nav & { nick: string }): JSX.Element {
       <Nickname nickname={nickname} setNickname={setNickname} />
       <button
         type="button"
+        className="single-button"
         onClick={
           validInput()
             ? create
@@ -293,21 +295,21 @@ function Wizzard(
   return (
     <main>
       <article>
-        <button type="button" onClick={() => navigate("/")}>
-          {t("Menu")}
-        </button>
+        <div className="menu-wizard">
+          <button type="button" onClick={() => navigate("/")}>
+            {t("Menu")}
+          </button>
+        </div>
         {!secretQS && (
-          <div>
-            <label>
-              {t(
-                'Type here the full link (URL) of the assemblée (the one containing "?secret=")'
-              )}
-              :{" "}
+          <div className="input-line">
+            <label className="half">
+              {t("Full link (URL) of the assembly")}:{" "}
             </label>
             <input
+              className="half"
               type="text"
-              name="secret"
-              placeholder="secret"
+              name="URL"
+              placeholder="URL"
               value={secret}
               onChange={(e) => setSecret(e.target.value)}
             />
@@ -316,7 +318,7 @@ function Wizzard(
         <Nickname nickname={nickname} setNickname={setNickname} />
         {validInput() ? (
           <div>
-            <button type="button" onClick={join}>
+            <button type="button" className="single-button" onClick={join}>
               {t("Join the assembly")}
             </button>
           </div>
