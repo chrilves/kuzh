@@ -122,14 +122,13 @@ export default class Assembly {
       case "established":
         // Now that we know the connection is safe, we can store credentials
         if (this.reconnectionStatus === "neverEstablished") {
+          this.storageAPI.clearPrivateData();
           this.storageAPI.storeLastMembership(this.membership);
           this.storageAPI.storeNickname(this.membership.me.nickname);
         }
         this.reconnectionStatus = "firstReconnectAttempt";
         this.log(
-          `Connection established with state ${JSON.stringify(
-            event.state
-          )}`
+          `Connection established with state ${JSON.stringify(event.state)}`
         );
         this.assemblyState.resetState(event.state);
         this.connectionStatus.set("established");

@@ -13,6 +13,8 @@ export interface StorageAPI {
     identityProofs: IdentityProof[]
   ): Promise<void>;
 
+  clearPrivateData(): void;
+
   fetchNickname(): string | null;
   storeNickname(nickname: string): void;
 
@@ -22,6 +24,7 @@ export interface StorageAPI {
 }
 
 const localStoragePrefix = "kuzh.cc/";
+const localStorageAssemblyPrefix = `${localStoragePrefix}assembly/`;
 
 const localStorageMembershipKey = `${localStoragePrefix}last-membership`;
 const localStorageNicknameKey = `${localStoragePrefix}nickname`;
@@ -52,7 +55,7 @@ export class LocalStorageAPI implements StorageAPI {
   }
 
   private localStorageIdentityProofsKey(assemblyInfo: AssemblyInfo): string {
-    return `${localStoragePrefix}assembly/${assemblyInfo.id}/identity-proofs`;
+    return `${localStorageAssemblyPrefix}${assemblyInfo.id}/identity-proofs`;
   }
 
   readonly fetchIdentityProofs = async (
@@ -82,6 +85,19 @@ export class LocalStorageAPI implements StorageAPI {
       this.localStorageIdentityProofsKey(assemblyInfo),
       value
     );
+  };
+
+  readonly clearPrivateData = (): void => {
+    const toRemoveKeys: Set<string> = new Set();
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (
+        (key !== null && key.startsWith(localStorageAssemblyPrefix)) ||
+        key === localStorageMembershipKey
+      )
+        toRemoveKeys.add(key);
+    }
+    toRemoveKeys.forEach((k) => window.localStorage.removeItem(k));
   };
 
   readonly fetchNickname = (): string | null =>
@@ -144,6 +160,11 @@ export class DummyStorageAPI implements StorageAPI {
     identityProofs: IdentityProof[]
   ): Promise<void> => {
     this.identityProofs.set(assemblyInfo.id, identityProofs);
+  };
+
+  readonly clearPrivateData = (): void => {
+    this.identityProofs.clear();
+    this.membership = null;
   };
 
   readonly fetchNickname = (): string | null => this.nickname;

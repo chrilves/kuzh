@@ -63,8 +63,11 @@ export namespace Serial {
       "jwk",
       key,
       {
-        name: (usages.length === 0 || usages[0] === "deriveBits") ? CryptoConfig.dhAlgorithm : CryptoConfig.singingAlgorithm,
-        namedCurve: CryptoConfig.namedCurve
+        name:
+          usages.length === 0 || usages[0] === "deriveBits"
+            ? CryptoConfig.dhAlgorithm
+            : CryptoConfig.singingAlgorithm,
+        namedCurve: CryptoConfig.namedCurve,
       },
       true,
       usages
@@ -139,12 +142,15 @@ export class Me {
     const subtle = window.crypto.subtle;
 
     const signKeyPair = await subtle.generateKey(
-      {name: CryptoConfig.singingAlgorithm, namedCurve: CryptoConfig.namedCurve},
+      {
+        name: CryptoConfig.singingAlgorithm,
+        namedCurve: CryptoConfig.namedCurve,
+      },
       true,
       ["sign", "verify"]
     );
     const dhKeyPair = await subtle.generateKey(
-      {name: CryptoConfig.dhAlgorithm, namedCurve: CryptoConfig.namedCurve},
+      { name: CryptoConfig.dhAlgorithm, namedCurve: CryptoConfig.namedCurve },
       true,
       ["deriveBits"]
     );
@@ -192,7 +198,7 @@ export class Me {
       message.slice(0, CryptoConfig.dhKeySize),
       {
         name: CryptoConfig.dhAlgorithm,
-        namedCurve: CryptoConfig.namedCurve
+        namedCurve: CryptoConfig.namedCurve,
       },
       true,
       []
@@ -200,7 +206,7 @@ export class Me {
     const sharedSecret = await window.crypto.subtle.deriveBits(
       {
         name: CryptoConfig.dhAlgorithm,
-        public: dhPubKey
+        public: dhPubKey,
       },
       this.dhPair.private,
       8 * (CryptoConfig.aesKeyBytes + CryptoConfig.aesIvBytes)
@@ -214,22 +220,23 @@ export class Me {
       ["encrypt", "decrypt"]
     );
 
-
-    return new Uint8Array(await window.crypto.subtle.decrypt(
-      {
-        name: CryptoConfig.aesKeyGenParams.name,
-        iv: sharedSecret.slice(CryptoConfig.aesKeyBytes)
-      },
-      aesKey,
-      message.slice(CryptoConfig.dhKeySize)
-    ));
+    return new Uint8Array(
+      await window.crypto.subtle.decrypt(
+        {
+          name: CryptoConfig.aesKeyGenParams.name,
+          iv: sharedSecret.slice(CryptoConfig.aesKeyBytes),
+        },
+        aesKey,
+        message.slice(CryptoConfig.dhKeySize)
+      )
+    );
   };
 
   readonly sign = (message: BufferSource): Promise<ArrayBuffer> =>
     window.crypto.subtle.sign(
       {
         name: CryptoConfig.singingAlgorithm,
-        hash: CryptoConfig.hash
+        hash: CryptoConfig.hash,
       },
       this.signPair.private,
       message
@@ -245,9 +252,7 @@ export class Me {
 
   readonly toJson = async (): Promise<Serial.Me> => {
     const serialSign = await this.signPair.map_async(Serial.serializeCryptoKey);
-    const serialDH = await this.dhPair.map_async(
-      Serial.serializeCryptoKey
-    );
+    const serialDH = await this.dhPair.map_async(Serial.serializeCryptoKey);
 
     return {
       signPair: serialSign,
@@ -375,7 +380,7 @@ export class IdentityProof {
     window.crypto.subtle.verify(
       {
         name: CryptoConfig.singingAlgorithm,
-        hash: CryptoConfig.hash
+        hash: CryptoConfig.hash,
       },
       this.verify,
       Base64URL.getInstance().decode(sig),
@@ -386,7 +391,7 @@ export class IdentityProof {
     const dhEphemeral = await window.crypto.subtle.generateKey(
       {
         name: CryptoConfig.dhAlgorithm,
-        namedCurve: CryptoConfig.namedCurve
+        namedCurve: CryptoConfig.namedCurve,
       },
       true,
       ["deriveBits"]
@@ -395,7 +400,7 @@ export class IdentityProof {
     const sharedSecret = await window.crypto.subtle.deriveBits(
       {
         name: CryptoConfig.dhAlgorithm,
-        public: this.dhPublic.value
+        public: this.dhPublic.value,
       },
       dhEphemeral.privateKey,
       8 * (CryptoConfig.aesKeyBytes + CryptoConfig.aesIvBytes)
@@ -409,20 +414,26 @@ export class IdentityProof {
       ["encrypt", "decrypt"]
     );
 
-    const cypher = new Uint8Array(await window.crypto.subtle.encrypt(
-      {
-        name: CryptoConfig.aesKeyGenParams.name,
-        iv: sharedSecret.slice(CryptoConfig.aesKeyBytes)
-      },
-      aesKey,
-      message
-    ));
+    const cypher = new Uint8Array(
+      await window.crypto.subtle.encrypt(
+        {
+          name: CryptoConfig.aesKeyGenParams.name,
+          iv: sharedSecret.slice(CryptoConfig.aesKeyBytes),
+        },
+        aesKey,
+        message
+      )
+    );
 
-    const dhPubRaw = new Uint8Array(await window.crypto.subtle.exportKey("raw", dhEphemeral.publicKey));
+    const dhPubRaw = new Uint8Array(
+      await window.crypto.subtle.exportKey("raw", dhEphemeral.publicKey)
+    );
 
     if (dhPubRaw.byteLength !== CryptoConfig.dhKeySize)
-      throw new Error(`DH Pub size of ${dhPubRaw.byteLength} instead of ${CryptoConfig.dhKeySize}`);
-    
+      throw new Error(
+        `DH Pub size of ${dhPubRaw.byteLength} instead of ${CryptoConfig.dhKeySize}`
+      );
+
     const enc = new Uint8Array(dhPubRaw.byteLength + cypher.byteLength);
     enc.set(dhPubRaw, 0);
     enc.set(cypher, dhPubRaw.byteLength);

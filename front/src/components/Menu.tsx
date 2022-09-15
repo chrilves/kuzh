@@ -39,6 +39,11 @@ export default function Menu(
 
   const nick = ((x) => (x ? x : ""))(props.storageAPI.fetchNickname());
 
+  const clear = () => {
+    props.storageAPI.clearPrivateData();
+    setlastMembership(null);
+  };
+
   return lastMembership === undefined ? (
     <div />
   ) : (
@@ -63,6 +68,7 @@ export default function Menu(
                   lastMembership={lastMembership}
                   prepare={props.prepare}
                   assembly={props.assembly}
+                  clear={clear}
                 />
               )}
               <Create
@@ -96,7 +102,7 @@ export default function Menu(
 }
 
 function LastAssembly(
-  props: Nav & { lastMembership: Membership }
+  props: Nav & { lastMembership: Membership; clear(): void }
 ): JSX.Element {
   const { t } = useTranslation();
   return (
@@ -104,10 +110,14 @@ function LastAssembly(
       <h2>{t("Going back to the last assembly")}</h2>
       <MembershipPanel membership={props.lastMembership} />
       <button
+        className="yes-no-button"
         type="button"
         onClick={() => props.assembly(props.lastMembership)}
       >
-        {t("Going back to your last assembly")}
+        {t("Go back!")}
+      </button>
+      <button className="yes-no-button" type="button" onClick={props.clear}>
+        {t("Clear private data.")}
       </button>
     </section>
   );

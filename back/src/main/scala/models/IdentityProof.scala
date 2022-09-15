@@ -26,7 +26,7 @@ final case class IdentityProof(
         try {
           (verify[Member.DHPK](dhPublic), verify[Member.Name](nickname))
         } catch {
-          case e : Throwable =>
+          case e: Throwable =>
             e.printStackTrace()
             throw e
         }
@@ -46,7 +46,7 @@ object IdentityProof:
       Json.obj(
         "verify"      -> ip.verify.asJson,
         "fingerprint" -> ip.fingerprint.asJson,
-        "dhPublic"     -> ip.dhPublic.asJson,
+        "dhPublic"    -> ip.dhPublic.asJson,
         "nickname"    -> ip.nickname.asJson
       )
 

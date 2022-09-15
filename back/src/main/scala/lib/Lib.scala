@@ -71,9 +71,11 @@ object JWKInstances:
         case Left(e) => throw e
         case Right(j) =>
           val merged =
-            j.deepMerge(Json.obj(
-              "ext" -> true.asJson
-            ))
+            j.deepMerge(
+              Json.obj(
+                "ext" -> true.asJson
+              )
+            )
           merged.hcursor.downField("alg").delete.top.getOrElse(merged)
       }
 
