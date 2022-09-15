@@ -282,7 +282,7 @@ export class AssemblyState {
     f: () => Promise<A>
   ): Promise<A> => {
     try {
-      return f();
+      return await f();
     } catch (e) {
       this.forcedWaiting(null);
       this.fail(e);

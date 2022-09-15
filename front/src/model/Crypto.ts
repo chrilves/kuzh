@@ -2,38 +2,23 @@ import { Base64URL } from "../lib/Base64URL";
 import { JSONNormalizedStringifyD } from "../lib/JSONNormalizedStringify";
 import { Pair, PairNS } from "../lib/Pair";
 import { AssemblyInfo } from "./assembly/AssembyInfo";
-import { Parameters } from "./Parameters";
 
 namespace CryptoConfig {
   export const hash = "SHA-256";
-  export const maxClearBlockSize = 446;
-  export const encryptedBlockSize = 512;
 
-  export const aesAlgo = {
+  export const aesKeyGenParams: AesKeyGenParams = {
     name: "AES-CBC",
     length: 256,
   };
+  export const aesKeyBytes = aesKeyGenParams.length / 8;
+  export const aesIvBytes = 16;
 
-  export const aesIvSize = 16;
+  export const dhAlgorithm = "ECDH";
+  export const singingAlgorithm = "ECDSA";
+  export const namedCurve = "P-384";
+  export const dhKeySize = 97;
 
-  export const encryptAlg = "RSA-OAEP-256";
-
-  export const encryptionAlgorithm = "RSA-OAEP";
-  export const singingAlgorithm = "RSA-PSS";
-
-  export const rsaPssParams: RsaPssParams = {
-    name: "RSA-PSS",
-    saltLength: 32,
-  };
-
-  export function getAlgorithm(encrypt: Boolean): RsaHashedKeyGenParams {
-    return {
-      name: encrypt ? "RSA-OAEP" : "RSA-PSS",
-      modulusLength: 4096,
-      publicExponent: new Uint8Array([1, 0, 1]),
-      hash: CryptoConfig.hash,
-    };
-  }
+  export const alg = "ES384";
 }
 
 export type SerializedKey = string;
@@ -67,22 +52,22 @@ export namespace Serial {
   export async function exportCryptoKey(key: CryptoKey): Promise<JsonWebKey> {
     const jwk = await window.crypto.subtle.exportKey("jwk", key);
     jwk.ext = true;
+    jwk.alg = undefined;
     return jwk;
   }
 
   export function importCryptoKey(key: JsonWebKey): Promise<CryptoKey> {
+    const usages = (key.key_ops ? key.key_ops : []) as KeyUsage[];
+
     return window.crypto.subtle.importKey(
       "jwk",
       key,
       {
-        name:
-          key.alg === CryptoConfig.encryptAlg
-            ? CryptoConfig.encryptionAlgorithm
-            : CryptoConfig.singingAlgorithm,
-        hash: CryptoConfig.hash,
+        name: (usages.length === 0 || usages[0] === "deriveBits") ? CryptoConfig.dhAlgorithm : CryptoConfig.singingAlgorithm,
+        namedCurve: CryptoConfig.namedCurve
       },
       true,
-      (key.key_ops ? key.key_ops : []) as KeyUsage[]
+      usages
     );
   }
 
@@ -108,7 +93,7 @@ export namespace Serial {
 
   export type Me = {
     readonly signPair: PairNS.Json<SerializedKey>;
-    readonly encryptPair: PairNS.Json<SerializedKey>;
+    readonly dhPair: PairNS.Json<SerializedKey>;
     readonly nickname: Name;
   };
 
@@ -120,7 +105,7 @@ export namespace Serial {
   export type IdentityProof = {
     readonly verify: JsonWebKey;
     readonly fingerprint: Fingerprint;
-    readonly encrypt: Signed<JsonWebKey>;
+    readonly dhPublic: Signed<JsonWebKey>;
     readonly nickname: Signed<string>;
   };
 }
@@ -129,18 +114,18 @@ export type Fingerprint = string;
 
 export class Me {
   readonly signPair: Pair<CryptoKey>;
-  readonly encryptPair: Pair<CryptoKey>;
+  readonly dhPair: Pair<CryptoKey>;
   readonly nickname: Name;
   readonly fingerprint: Fingerprint;
 
   private constructor(
     sgn: Pair<CryptoKey>,
-    enc: Pair<CryptoKey>,
+    dh: Pair<CryptoKey>,
     nick: string,
     fingerprint: Name
   ) {
     this.signPair = sgn;
-    this.encryptPair = enc;
+    this.dhPair = dh;
     this.nickname = nick;
     this.fingerprint = fingerprint;
   }
@@ -154,28 +139,28 @@ export class Me {
     const subtle = window.crypto.subtle;
 
     const signKeyPair = await subtle.generateKey(
-      CryptoConfig.getAlgorithm(false),
+      {name: CryptoConfig.singingAlgorithm, namedCurve: CryptoConfig.namedCurve},
       true,
       ["sign", "verify"]
     );
-    const encryptKeyPair = await subtle.generateKey(
-      CryptoConfig.getAlgorithm(true),
+    const dhKeyPair = await subtle.generateKey(
+      {name: CryptoConfig.dhAlgorithm, namedCurve: CryptoConfig.namedCurve},
       true,
-      ["encrypt", "decrypt"]
+      ["deriveBits"]
     );
 
-    let decryptKey: CryptoKey;
-    if (encryptKeyPair.privateKey) {
-      decryptKey = encryptKeyPair.privateKey;
+    let dhPrivateKey: CryptoKey;
+    if (dhKeyPair.privateKey) {
+      dhPrivateKey = dhKeyPair.privateKey;
     } else {
-      throw new Error("Null decrypt public key.");
+      throw new Error("Null dh private key.");
     }
 
-    let encryptKey: CryptoKey;
-    if (encryptKeyPair.publicKey) {
-      encryptKey = encryptKeyPair.publicKey;
+    let dhPublicKey: CryptoKey;
+    if (dhKeyPair.publicKey) {
+      dhPublicKey = dhKeyPair.publicKey;
     } else {
-      throw new Error("Null encrypt private key.");
+      throw new Error("Null dh public key.");
     }
 
     let signKey: CryptoKey;
@@ -194,7 +179,7 @@ export class Me {
 
     const me = await Me.make(
       new Pair(signKey, verifyKey),
-      new Pair(decryptKey, encryptKey),
+      new Pair(dhPrivateKey, dhPublicKey),
       nickname
     );
 
@@ -202,60 +187,50 @@ export class Me {
   }
 
   readonly decrypt = async (message: Uint8Array): Promise<Uint8Array> => {
-    if (message.byteLength > CryptoConfig.encryptedBlockSize) {
-      const first = message.slice(0, CryptoConfig.encryptedBlockSize);
-      const fstClr = new Uint8Array(
-        await window.crypto.subtle.decrypt(
-          CryptoConfig.encryptionAlgorithm,
-          this.encryptPair.private,
-          first
-        )
-      );
+    const dhPubKey = await window.crypto.subtle.importKey(
+      "raw",
+      message.slice(0, CryptoConfig.dhKeySize),
+      {
+        name: CryptoConfig.dhAlgorithm,
+        namedCurve: CryptoConfig.namedCurve
+      },
+      true,
+      []
+    );
+    const sharedSecret = await window.crypto.subtle.deriveBits(
+      {
+        name: CryptoConfig.dhAlgorithm,
+        public: dhPubKey
+      },
+      this.dhPair.private,
+      8 * (CryptoConfig.aesKeyBytes + CryptoConfig.aesIvBytes)
+    );
 
-      const aesArr = fstClr.slice(0, CryptoConfig.aesAlgo.length / 8);
-      const aesKey = await window.crypto.subtle.importKey(
-        "raw",
-        aesArr,
-        CryptoConfig.aesAlgo,
-        false,
-        ["encrypt", "decrypt"]
-      );
+    const aesKey = await window.crypto.subtle.importKey(
+      "raw",
+      sharedSecret.slice(0, CryptoConfig.aesKeyBytes),
+      CryptoConfig.aesKeyGenParams.name,
+      true,
+      ["encrypt", "decrypt"]
+    );
 
-      const iv = fstClr.slice(
-        aesArr.byteLength,
-        aesArr.byteLength + CryptoConfig.aesIvSize
-      );
-      const headClr = fstClr.slice(aesArr.byteLength + CryptoConfig.aesIvSize);
 
-      const tail = message.slice(CryptoConfig.encryptedBlockSize);
-      const tailClr = new Uint8Array(
-        await window.crypto.subtle.decrypt(
-          { name: CryptoConfig.aesAlgo.name, iv: iv },
-          aesKey,
-          tail
-        )
-      );
-
-      const clear = new Uint8Array(headClr.byteLength + tailClr.byteLength);
-      clear.set(headClr, 0);
-      clear.set(tailClr, headClr.byteLength);
-
-      return clear;
-    } else {
-      const clear = new Uint8Array(
-        await window.crypto.subtle.decrypt(
-          CryptoConfig.encryptionAlgorithm,
-          this.encryptPair.private,
-          message
-        )
-      );
-      return clear.slice(Parameters.saltSize);
-    }
+    return new Uint8Array(await window.crypto.subtle.decrypt(
+      {
+        name: CryptoConfig.aesKeyGenParams.name,
+        iv: sharedSecret.slice(CryptoConfig.aesKeyBytes)
+      },
+      aesKey,
+      message.slice(CryptoConfig.dhKeySize)
+    ));
   };
 
   readonly sign = (message: BufferSource): Promise<ArrayBuffer> =>
     window.crypto.subtle.sign(
-      CryptoConfig.rsaPssParams,
+      {
+        name: CryptoConfig.singingAlgorithm,
+        hash: CryptoConfig.hash
+      },
       this.signPair.private,
       message
     );
@@ -270,13 +245,13 @@ export class Me {
 
   readonly toJson = async (): Promise<Serial.Me> => {
     const serialSign = await this.signPair.map_async(Serial.serializeCryptoKey);
-    const serialEncrypt = await this.encryptPair.map_async(
+    const serialDH = await this.dhPair.map_async(
       Serial.serializeCryptoKey
     );
 
     return {
       signPair: serialSign,
-      encryptPair: serialEncrypt,
+      dhPair: serialDH,
       nickname: this.nickname,
     };
   };
@@ -285,10 +260,10 @@ export class Me {
     const sign = await Pair.fromJson(p.signPair).map_async(
       Serial.deSerializeCryptoKey
     );
-    const encrypt = await Pair.fromJson(p.encryptPair).map_async(
+    const dh = await Pair.fromJson(p.dhPair).map_async(
       Serial.deSerializeCryptoKey
     );
-    const me = Me.make(sign, encrypt, p.nickname);
+    const me = Me.make(sign, dh, p.nickname);
     return me;
   }
 }
@@ -301,18 +276,18 @@ export type Signed<A> = {
 export class IdentityProof {
   readonly verify: CryptoKey;
   readonly fingerprint: Fingerprint;
-  readonly encrypt: Signed<CryptoKey>;
+  readonly dhPublic: Signed<CryptoKey>;
   readonly nickname: Signed<string>;
 
   private constructor(
     verify: CryptoKey,
     fingerprint: Fingerprint,
-    encrypt: Signed<CryptoKey>,
+    dhPublic: Signed<CryptoKey>,
     nickname: Signed<string>
   ) {
     this.verify = verify;
     this.fingerprint = fingerprint;
-    this.encrypt = encrypt;
+    this.dhPublic = dhPublic;
     this.nickname = nickname;
   }
 
@@ -325,8 +300,8 @@ export class IdentityProof {
       );
 
     const te = new TextEncoder();
-    const encryptKey = await Serial.serializeCryptoKey(me.encryptPair.public);
-    const encryptSig = await me.signB64(te.encode(encryptKey));
+    const dhKey = await Serial.serializeCryptoKey(me.dhPair.public);
+    const dhSig = await me.signB64(te.encode(dhKey));
 
     const nicknameSig = await me.signB64(te.encode(me.nickname));
 
@@ -334,8 +309,8 @@ export class IdentityProof {
       me.signPair.public,
       fingerprint,
       {
-        value: me.encryptPair.public,
-        signature: encryptSig,
+        value: me.dhPair.public,
+        signature: dhSig,
       },
       {
         value: me.nickname,
@@ -365,17 +340,17 @@ export class IdentityProof {
     }
 
     const serializedEncryptKey: string = await Serial.serializeCryptoKey(
-      this.encrypt.value
+      this.dhPublic.value
     );
 
     const encryptOK = this.verifySignature(
-      this.encrypt.signature,
+      this.dhPublic.signature,
       serializedEncryptKey
     );
 
     if (!encryptOK) {
       throw new Error(
-        `[KO] Encrypt signature ${this.encrypt.signature} verification failed.`
+        `[KO] DH public key signature ${this.dhPublic.signature} verification failed.`
       );
     }
 
@@ -398,88 +373,73 @@ export class IdentityProof {
     message: string
   ): Promise<boolean> =>
     window.crypto.subtle.verify(
-      CryptoConfig.rsaPssParams,
+      {
+        name: CryptoConfig.singingAlgorithm,
+        hash: CryptoConfig.hash
+      },
       this.verify,
       Base64URL.getInstance().decode(sig),
       new TextEncoder().encode(message)
     );
 
   readonly encryptIt = async (message: Uint8Array): Promise<Uint8Array> => {
-    if (
-      message.byteLength <=
-      CryptoConfig.maxClearBlockSize - Parameters.saltSize
-    ) {
-      const salt = window.crypto.getRandomValues(
-        new Uint8Array(Parameters.saltSize)
-      );
-      const clear = new Uint8Array(salt.byteLength + message.byteLength);
-      clear.set(salt, 0);
-      clear.set(message, salt.length);
-      const enc = new Uint8Array(
-        await window.crypto.subtle.encrypt(
-          CryptoConfig.encryptionAlgorithm,
-          this.encrypt.value,
-          clear
-        )
-      );
-      return enc;
-    } else {
-      const aesKey = await window.crypto.subtle.generateKey(
-        CryptoConfig.aesAlgo,
-        true,
-        ["encrypt", "decrypt"]
-      );
+    const dhEphemeral = await window.crypto.subtle.generateKey(
+      {
+        name: CryptoConfig.dhAlgorithm,
+        namedCurve: CryptoConfig.namedCurve
+      },
+      true,
+      ["deriveBits"]
+    );
 
-      const aesArr = new Uint8Array(
-        await window.crypto.subtle.exportKey("raw", aesKey)
-      );
-      const iv = window.crypto.getRandomValues(
-        new Uint8Array(CryptoConfig.aesIvSize)
-      );
-      const splitPos =
-        CryptoConfig.maxClearBlockSize - aesArr.byteLength - iv.byteLength;
-      const head = message.slice(0, splitPos);
+    const sharedSecret = await window.crypto.subtle.deriveBits(
+      {
+        name: CryptoConfig.dhAlgorithm,
+        public: this.dhPublic.value
+      },
+      dhEphemeral.privateKey,
+      8 * (CryptoConfig.aesKeyBytes + CryptoConfig.aesIvBytes)
+    );
 
-      const first = new Uint8Array(CryptoConfig.maxClearBlockSize);
-      first.set(aesArr, 0);
-      first.set(iv, aesArr.byteLength);
-      first.set(head, aesArr.byteLength + iv.byteLength);
+    const aesKey = await window.crypto.subtle.importKey(
+      "raw",
+      sharedSecret.slice(0, CryptoConfig.aesKeyBytes),
+      CryptoConfig.aesKeyGenParams.name,
+      true,
+      ["encrypt", "decrypt"]
+    );
 
-      const encFirst = new Uint8Array(
-        await window.crypto.subtle.encrypt(
-          CryptoConfig.encryptionAlgorithm,
-          this.encrypt.value,
-          first
-        )
-      );
+    const cypher = new Uint8Array(await window.crypto.subtle.encrypt(
+      {
+        name: CryptoConfig.aesKeyGenParams.name,
+        iv: sharedSecret.slice(CryptoConfig.aesKeyBytes)
+      },
+      aesKey,
+      message
+    ));
 
-      const tail = message.slice(splitPos);
-      const encTail = new Uint8Array(
-        await window.crypto.subtle.encrypt(
-          { name: CryptoConfig.aesAlgo.name, iv: iv },
-          aesKey,
-          tail
-        )
-      );
+    const dhPubRaw = new Uint8Array(await window.crypto.subtle.exportKey("raw", dhEphemeral.publicKey));
 
-      const enc = new Uint8Array(encFirst.byteLength + encTail.byteLength);
-      enc.set(encFirst, 0);
-      enc.set(encTail, encFirst.byteLength);
+    if (dhPubRaw.byteLength !== CryptoConfig.dhKeySize)
+      throw new Error(`DH Pub size of ${dhPubRaw.byteLength} instead of ${CryptoConfig.dhKeySize}`);
+    
+    const enc = new Uint8Array(dhPubRaw.byteLength + cypher.byteLength);
+    enc.set(dhPubRaw, 0);
+    enc.set(cypher, dhPubRaw.byteLength);
 
-      return enc;
-    }
+    return enc;
   };
 
   readonly toJson = async (): Promise<Serial.IdentityProof> => {
     const verify = await Serial.exportCryptoKey(this.verify);
-    const encrypt = await Serial.exportCryptoKey(this.encrypt.value);
+    const encrypt = await Serial.exportCryptoKey(this.dhPublic.value);
 
     return {
       verify: verify,
       fingerprint: this.fingerprint,
-      encrypt: {
+      dhPublic: {
         value: encrypt,
-        signature: this.encrypt.signature,
+        signature: this.dhPublic.signature,
       },
       nickname: this.nickname,
     };
@@ -487,13 +447,13 @@ export class IdentityProof {
 
   static async fromJson(p: Serial.IdentityProof): Promise<IdentityProof> {
     const verify = await Serial.importCryptoKey(p.verify);
-    const encrypt = await Serial.importCryptoKey(p.encrypt.value);
+    const dhPublic = await Serial.importCryptoKey(p.dhPublic.value);
     const ip = new IdentityProof(
       verify,
       p.fingerprint,
       {
-        value: encrypt,
-        signature: p.encrypt.signature,
+        value: dhPublic,
+        signature: p.dhPublic.signature,
       },
       p.nickname
     );

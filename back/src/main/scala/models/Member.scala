@@ -11,13 +11,13 @@ import java.time.Instant
 import scala.collection.*
 import cats.instances.StringInstances
 import com.nimbusds.jose.jwk.JWK
-import java.security.interfaces.RSAPublicKey
+import java.security.interfaces.ECPublicKey
 import io.circe.Decoder.Result
 
 object Member:
   opaque type Name        = String
   opaque type VerifyPK    = JWK
-  opaque type EncryptPK   = JWK
+  opaque type DHPK        = JWK
   opaque type Fingerprint = String
 
   object Name:
@@ -38,21 +38,21 @@ object Member:
       inline def fingerprint: Fingerprint =
         JWKInstances.fingerprint(publicKey)
 
-      inline def toRSAPublicKey: RSAPublicKey =
-        JWKInstances.toRSAPublicKey(publicKey)
+      inline def toECPublicKey: ECPublicKey =
+        JWKInstances.toECPublicKey(publicKey)
 
-  object EncryptPK:
-    inline given decoderEncryptPK: Decoder[EncryptPK]   = JWKInstances.decoderJWK
-    inline given encoderEncryptPK: Encoder[EncryptPK]   = JWKInstances.encoderJWK
-    inline given eqEncryptPK: Eq[EncryptPK]             = JWKInstances.eqJWK
-    inline given signableEncryptPK: Signable[EncryptPK] = JWKInstances.signableJWK
+  object DHPK:
+    inline given decoderEncryptPK: Decoder[DHPK]   = JWKInstances.decoderJWK
+    inline given encoderEncryptPK: Encoder[DHPK]   = JWKInstances.encoderJWK
+    inline given eqEncryptPK: Eq[DHPK]             = JWKInstances.eqJWK
+    inline given signableEncryptPK: Signable[DHPK] = JWKInstances.signableJWK
 
-    extension (publicKey: EncryptPK)
+    extension (publicKey: DHPK)
       inline def fingerprint: Fingerprint =
         JWKInstances.fingerprint(publicKey)
 
-      inline def toRSAPublicKey: RSAPublicKey =
-        JWKInstances.toRSAPublicKey(publicKey)
+      inline def toECPublicKey: ECPublicKey =
+        JWKInstances.toECPublicKey(publicKey)
 
   object Fingerprint:
     inline given decoder: Decoder[Fingerprint]   = StringInstances.decoder

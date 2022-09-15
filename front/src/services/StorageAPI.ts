@@ -30,14 +30,20 @@ const localStorageAutoValidateKey = `${localStoragePrefix}auto-validate`;
 const localStorageEnableBlockingKey = `${localStoragePrefix}enable-blocking`;
 
 export class LocalStorageAPI implements StorageAPI {
-  fetchLastMembership(): Promise<Membership | null> {
+  async fetchLastMembership(): Promise<Membership | null> {
     let asm = window.localStorage.getItem(localStorageMembershipKey);
-    if (asm) {
-      return Membership.fromJson(JSON.parse(asm));
-    } else {
-      return Promise.resolve(null);
+    try {
+      if (asm) {
+        return await Membership.fromJson(JSON.parse(asm));
+      } else {
+        return null;
+      }
+    } catch (e) {
+      console.log(`Error while fetching last membership: ${JSON.stringify(e)}`);
+      return null;
     }
   }
+
   async storeLastMembership(membership: Membership): Promise<void> {
     return window.localStorage.setItem(
       localStorageMembershipKey,

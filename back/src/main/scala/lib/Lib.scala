@@ -3,12 +3,8 @@ package chrilves.kuzh.back.lib
 import java.security.MessageDigest
 import java.util.Base64
 import java.nio.charset.StandardCharsets
-import java.security.interfaces.RSAPublicKey
 import cats.effect.Resource
-import org.bouncycastle.jce.provider.BouncyCastleProvider
 import java.security.Signature
-import java.security.spec.PSSParameterSpec
-import java.security.spec.MGF1ParameterSpec
 import cats.Functor
 import io.circe.*
 import io.circe.syntax._
@@ -21,6 +17,7 @@ import chrilves.kuzh.back.models.Member.Fingerprint
 import scala.annotation.tailrec
 import cats.syntax.all.*
 import java.time.Instant
+import java.security.interfaces.ECPublicKey
 
 object StringInstances:
   inline def encoder: Encoder[String]   = summon[Encoder[String]]
@@ -73,7 +70,11 @@ object JWKInstances:
       io.circe.parser.parse(a.toJSONString()) match {
         case Left(e) => throw e
         case Right(j) =>
-          j.deepMerge(Json.obj("ext" -> Json.fromBoolean(true)))
+          val merged =
+            j.deepMerge(Json.obj(
+              "ext" -> true.asJson
+            ))
+          merged.hcursor.downField("alg").delete.top.getOrElse(merged)
       }
 
   inline given signableJWK: Signable[JWK] =
@@ -91,8 +92,8 @@ object JWKInstances:
         Base64UrlEncoded.hashB64(encoderJWK(publicKey).noSpacesSortKeys).asString
       )
 
-    inline def toRSAPublicKey: RSAPublicKey =
-      publicKey.toRSAKey.toRSAPublicKey
+    inline def toECPublicKey: ECPublicKey =
+      publicKey.toECKey().toECPublicKey(bouncycastle)
 
 object Random:
   def bytes[F[_]: Sync](n: Int): F[Array[Byte]] =

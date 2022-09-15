@@ -3,12 +3,10 @@ package chrilves.kuzh.back.lib.crypto
 import java.security.MessageDigest
 import java.util.Base64
 import java.nio.charset.StandardCharsets
-import java.security.interfaces.RSAPublicKey
+import java.security.interfaces.ECPublicKey
 import cats.effect.Resource
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import java.security.Signature
-import java.security.spec.PSSParameterSpec
-import java.security.spec.MGF1ParameterSpec
 import cats.Functor
 import io.circe.*
 import io.circe.syntax._
@@ -118,10 +116,11 @@ object Signable:
 
 type VerifyFun = [A] => (Signable[A]) ?=> (Signed[A]) => Boolean
 
-def withVerify[A](key: RSAPublicKey)(f: VerifyFun => A): A =
-  val bc        = new BouncyCastleProvider()
-  val signature = java.security.Signature.getInstance("SHA256withRSA/PSS", bc)
-  signature.setParameter(new PSSParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, 32, 1))
+lazy val bouncycastle = new BouncyCastleProvider()
+
+def withVerify[A](key: ECPublicKey)(f: VerifyFun => A): A =
+  // The "SHA256withPLAIN-ECDSA" is needed to tell BC to use Web Crypto signature format
+  val signature = java.security.Signature.getInstance("SHA256withPLAIN-ECDSA", bouncycastle)
   signature.initVerify(key)
   val decoder = Base64.getUrlDecoder()
 

@@ -127,7 +127,7 @@ export default class Assembly {
         }
         this.reconnectionStatus = "firstReconnectAttempt";
         this.log(
-          `Connectionsrc/components/App.tsx:109:22 established with state ${JSON.stringify(
+          `Connection established with state ${JSON.stringify(
             event.state
           )}`
         );

@@ -445,7 +445,7 @@ final class Assembly[F[_]] private (
     identityProofStore.fetch(member).flatMap {
       case Some(ip) =>
         Async[F].delay {
-          withVerify[Boolean](ip.verify.toRSAPublicKey) { f =>
+          withVerify[Boolean](ip.verify.toECPublicKey) { f =>
             given Signable[HarvestProtocol.Proof] =
               Signable.fromEncoder[HarvestProtocol.Proof]
             f[HarvestProtocol.Proof](

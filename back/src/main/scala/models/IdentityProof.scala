@@ -15,29 +15,38 @@ import io.circe.HCursor
 final case class IdentityProof(
     verify: Member.VerifyPK,
     fingerprint: Member.Fingerprint,
-    encrypt: Signed[Member.EncryptPK],
+    dhPublic: Signed[Member.DHPK],
     nickname: Signed[Member.Name]
 ) {
 
   def isValid: Boolean =
-    val (encryptOk, nicknameOk) =
-      lib.crypto.withVerify(verify.toRSAPublicKey) { (verify) =>
-        (verify[Member.EncryptPK](encrypt), verify[Member.Name](nickname))
+
+    val (dhOk, nicknameOk) =
+      lib.crypto.withVerify(verify.toECPublicKey) { (verify) =>
+        try {
+          (verify[Member.DHPK](dhPublic), verify[Member.Name](nickname))
+        } catch {
+          case e : Throwable =>
+            e.printStackTrace()
+            throw e
+        }
       }
-    (fingerprint === Member.VerifyPK.fingerprint(verify)) && encryptOk && nicknameOk
+
+    val fingerprintOk = fingerprint === Member.VerifyPK.fingerprint(verify)
+    fingerprintOk && dhOk && nicknameOk
 }
 
 object IdentityProof:
   given identityProofEq: Eq[IdentityProof] with
     def eqv(x: IdentityProof, y: IdentityProof): Boolean =
-      x.verify === y.verify && x.fingerprint === y.fingerprint && x.encrypt === y.encrypt && x.nickname === y.nickname
+      x.verify === y.verify && x.fingerprint === y.fingerprint && x.dhPublic === y.dhPublic && x.nickname === y.nickname
 
   given identityProofEncoder: Encoder[IdentityProof] with
     final def apply(ip: IdentityProof): Json =
       Json.obj(
         "verify"      -> ip.verify.asJson,
         "fingerprint" -> ip.fingerprint.asJson,
-        "encrypt"     -> ip.encrypt.asJson,
+        "dhPublic"     -> ip.dhPublic.asJson,
         "nickname"    -> ip.nickname.asJson
       )
 
@@ -46,18 +55,6 @@ object IdentityProof:
       for
         verify      <- c.downField("verify").as[Member.VerifyPK]
         fingerprint <- c.downField("fingerprint").as[Member.Fingerprint]
-        encrypt     <- c.downField("encrypt").as[Signed[Member.EncryptPK]]
+        encrypt     <- c.downField("dhPublic").as[Signed[Member.DHPK]]
         nickname    <- c.downField("nickname").as[Signed[Member.Name]]
       yield IdentityProof(verify, fingerprint, encrypt, nickname)
-
-final case class Secret[A](parcel: A, random: String)
-
-object Secret:
-  type Hash = String
-
-  given secretEncoder[A: Encoder]: Encoder[Secret[A]] with
-    final def apply(s: Secret[A]): Json =
-      Json.obj(
-        "parcel" -> s.parcel.asJson,
-        "random" -> Json.fromString(s.random)
-      )

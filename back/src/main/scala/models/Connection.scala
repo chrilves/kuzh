@@ -203,7 +203,7 @@ object Connection:
                       .withAssemblyInfo(info) {
                         case Some(asm) =>
                           for
-                            challenge           <- lib.Random.bytes(32)
+                            challenge           <- lib.Random.bytes(64)
                             storedIdentityProof <- asm.identityProof(member)
                             _ <- status.set(
                               Challenged(asm, member, challenge, storedIdentityProof)

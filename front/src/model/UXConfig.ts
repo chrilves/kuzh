@@ -9,12 +9,6 @@ export interface UXConfig {
 
 export namespace UXConfig {
   export function fromStorageAPI(storageAPI: StorageAPI): UXConfig {
-    console.log(`AUTO1: ${JSON.stringify(storageAPI.autoConfirm)}`);
-    console.log(
-      `AUTO2: ${JSON.stringify(
-        ObservableVar.fromGetSet(storageAPI.autoConfirm).observable
-      )}`
-    );
     return {
       autoConfirm: ObservableVar.fromGetSet(storageAPI.autoConfirm),
       autoAccept: ObservableVar.fromGetSet(storageAPI.autoAccept),
