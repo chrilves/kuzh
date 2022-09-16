@@ -37,8 +37,8 @@ export default class Install {
     globalThis.deferredPrompt.propagate = refresInstall;
   }
 
-  readonly install: () => Promise<void> = () =>
-    this.mutex.runExclusive(async () => {
+  readonly install: () => Promise<void> = async () =>
+    await this.mutex.runExclusive(async () => {
       if (
         globalThis.deferredPrompt.state !== null &&
         globalThis.deferredPrompt.state !== undefined

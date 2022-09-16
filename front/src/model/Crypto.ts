@@ -118,10 +118,10 @@ export namespace Serial {
     return jwk;
   }
 
-  export function importCryptoKey(key: JsonWebKey): Promise<CryptoKey> {
+  export async function importCryptoKey(key: JsonWebKey): Promise<CryptoKey> {
     const usages = (key.key_ops ? key.key_ops : []) as KeyUsage[];
 
-    return window.crypto.subtle.importKey(
+    return await window.crypto.subtle.importKey(
       "jwk",
       key,
       {
@@ -142,8 +142,10 @@ export namespace Serial {
     return JSONNormalizedStringifyD(await exportCryptoKey(key));
   }
 
-  export function deSerializeCryptoKey(key: SerializedKey): Promise<CryptoKey> {
-    return importCryptoKey(JSON.parse(key));
+  export async function deSerializeCryptoKey(
+    key: SerializedKey
+  ): Promise<CryptoKey> {
+    return await importCryptoKey(JSON.parse(key));
   }
 
   export async function fingerprint(key: CryptoKey): Promise<Fingerprint> {

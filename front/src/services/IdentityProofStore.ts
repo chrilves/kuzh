@@ -48,7 +48,7 @@ export class BackCachingIdentityProofStore implements IdentityProofStore {
       this.mutexes.set(member, memberMutex);
     }
 
-    return memberMutex.runExclusive(async () => {
+    return await memberMutex.runExclusive(async () => {
       let id = this.store.get(member);
       if (id) return id;
       else {

@@ -76,7 +76,7 @@ export class AssemblyState {
     this.listenHarvestResult = this._harvestState.result;
   }
 
-  private readonly log = (s: string) => {
+  private readonly log = (s: string): void => {
     console.log(`[${this.me.nickname}] ${s}`);
   };
 
@@ -103,7 +103,7 @@ export class AssemblyState {
       this.send(MemberEvent.blocking("ready"));
   };
 
-  private readonly resetStatus = (id: string, qs: Question[]) => {
+  private readonly resetStatus = async (id: string, qs: Question[]) => {
     const question = qs.length > 0 ? qs[0] : null;
     this._status = Status.waiting(
       id,
@@ -115,7 +115,7 @@ export class AssemblyState {
         })
       )
     );
-    this.resetHarvest(id, question);
+    return await this.resetHarvest(id, question);
   };
 
   private readonly forcedWaiting = (member: Fingerprint | null) => {
@@ -315,21 +315,22 @@ export class AssemblyState {
   //////////////////////////////////////////
   // Status Management
 
-  readonly update = (ev: AssemblyEvent) =>
-    this.mutex.runExclusive(() =>
+  readonly update = async (ev: AssemblyEvent) =>
+    await this.mutex.runExclusive(() =>
       this.failOnExceptionP(async () => {
         switch (ev.tag) {
           case "status":
             this._status = ev.status;
             if (ev.status.tag === "waiting")
-              this.resetHarvest(ev.status.id, ev.status.question);
+              await this.resetHarvest(ev.status.id, ev.status.question);
             break;
           case "public":
             const publicEvent: PublicEvent = ev.public;
             switch (publicEvent.tag) {
               case "question_done":
-                this.resetStatus(publicEvent.id, this._questions.slice(0, 1));
+                const newQuestion = this._questions.slice(0, 1);
                 this._questions = this._questions.slice(1, undefined);
+                await this.resetStatus(publicEvent.id, newQuestion);
                 break;
               case "new_questions":
                 const result = this._harvestState.result.get();
@@ -338,11 +339,11 @@ export class AssemblyState {
                     result,
                     publicEvent.questions
                   );
-                this.resetStatus(
+                this._questions = publicEvent.questions.slice(1, undefined);
+                await this.resetStatus(
                   publicEvent.id,
                   publicEvent.questions.slice(0, 1)
                 );
-                this._questions = publicEvent.questions.slice(1, undefined);
                 break;
               case "member_presence":
                 this.memberPresence(publicEvent.member, publicEvent.presence);

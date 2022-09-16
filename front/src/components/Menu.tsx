@@ -15,10 +15,11 @@ import { StorageAPI } from "../services/StorageAPI";
 import MembershipPanel from "./MembershipPanel";
 import { Nickname } from "./Nickname";
 import { useTranslation } from "react-i18next";
+import Assembly from "../model/assembly/Assembly";
 
 interface Nav {
-  prepare(operation: Operation): void;
-  assembly(membership: Membership): void;
+  prepare(operation: Operation): Promise<void>;
+  assembly(membership: Membership): Promise<Assembly>;
 }
 
 export default function Menu(
@@ -108,7 +109,7 @@ function LastAssembly(
       <button
         className="yes-no-button"
         type="button"
-        onClick={() => props.assembly(props.lastMembership)}
+        onClick={async () => await props.assembly(props.lastMembership)}
       >
         {t("Go back!")}
       </button>
@@ -247,8 +248,7 @@ function Wizzard(
     fuse.break().then((b) => {
       if (postAction && b) postAction();
     });
-  }
-  , [fuse, postAction, props.lastMembership]);
+  }, [fuse, postAction, props.lastMembership]);
 
   let assemblyId: string;
   if (assemblyIdP) {
@@ -259,8 +259,8 @@ function Wizzard(
 
   if (props.lastMembership && props.lastMembership.assembly.id === assemblyId) {
     const Membership = props.lastMembership;
-    postAction = () => {
-      props.assembly(Membership);
+    postAction = async () => {
+      await props.assembly(Membership);
     };
     return <div />;
   }

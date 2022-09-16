@@ -170,7 +170,7 @@ function Confirmed(props: {
     msg: string,
     buttonMsg: string,
     other: Member.Blockingness
-  ) {
+  ): JSX.Element {
     function flip() {
       const real = props.disableBlocking ? "ready" : other;
       setDesired(real);

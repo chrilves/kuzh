@@ -53,7 +53,7 @@ export class RealBackAPI implements BackAPI {
 
     const request: Request = new Request(`${this.baseURL}/assembly`);
     const response: Response = await fetch(request, init);
-    return response.json();
+    return await response.json();
   }
 
   async assemblyName(id: string, secret: string): Promise<string> {
@@ -71,7 +71,7 @@ export class RealBackAPI implements BackAPI {
 
     const request: Request = new Request(`${this.baseURL}/assembly/${id}/name`);
     const response: Response = await fetch(request, init);
-    return response.json();
+    return await response.json();
   }
 
   async identityProof(

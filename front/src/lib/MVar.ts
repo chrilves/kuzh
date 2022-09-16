@@ -34,16 +34,16 @@ export namespace MGetSet {
     return new (class implements MGetSet<A> {
       private value: A | null = null;
 
-      readonly get = async () => {
+      readonly get = async (): Promise<A> => {
         if (this.value === null) {
           this.value = await gs.get();
-          return Promise.resolve(this.value);
-        } else return Promise.resolve(this.value);
+          return this.value;
+        } else return this.value;
       };
 
-      readonly set = (a: A): Promise<void> => {
+      readonly set = async (a: A): Promise<void> => {
         this.value = a;
-        return gs.set(a);
+        return await gs.set(a);
       };
     })();
   }
@@ -55,36 +55,36 @@ export abstract class MVar<A> {
   abstract unsafeGet(): Promise<A>;
   abstract unsafeSet(newValue: A): Promise<void>;
 
-  readonly get = (): Promise<A> =>
-    this.mutex.runExclusive(() => this.unsafeGet());
-  readonly set = (newValue: A): Promise<void> =>
-    this.mutex.runExclusive(() => this.unsafeSet(newValue));
+  readonly get = async (): Promise<A> =>
+    await this.mutex.runExclusive(() => this.unsafeGet());
+  readonly set = async (newValue: A): Promise<void> =>
+    await this.mutex.runExclusive(() => this.unsafeSet(newValue));
 
   readonly with = async <B>(f: (a: A) => Promise<B>): Promise<B> =>
-    f(await this.get());
+    await f(await this.get());
 
   readonly setWith = async (f: () => Promise<A>): Promise<void> =>
-    this.set(await f());
+    await this.set(await f());
 
-  readonly setIfEq = (oldValue: A, newValue: A): Promise<boolean> =>
-    this.mutex.runExclusive(async () => {
+  readonly setIfEq = async (oldValue: A, newValue: A): Promise<boolean> =>
+    await this.mutex.runExclusive(async (): Promise<boolean> => {
       if ((await this.unsafeGet()) === oldValue) {
         await this.unsafeSet(newValue);
-        return Promise.resolve(true);
-      } else return Promise.resolve(false);
+        return true;
+      } else return false;
     });
 
-  readonly modify = (f: (a: A) => Promise<A>): Promise<void> =>
-    this.mutex.runExclusive(async () => {
+  readonly modify = async (f: (a: A) => Promise<A>): Promise<void> =>
+    await this.mutex.runExclusive(async () => {
       const newValue = await f(await this.unsafeGet());
       await this.unsafeSet(newValue);
     });
 
-  readonly modifyWith = <B>(f: (a: A) => Promise<[A, B]>): Promise<B> =>
-    this.mutex.runExclusive(async () => {
+  readonly modifyWith = async <B>(f: (a: A) => Promise<[A, B]>): Promise<B> =>
+    await this.mutex.runExclusive(async (): Promise<B> => {
       const [newValue, ret] = await f(await this.unsafeGet());
       await this.unsafeSet(newValue);
-      return Promise.resolve(ret);
+      return ret;
     });
 
   readonly iso = <B>(isoab: Iso<A, B>): MVar<B> => {
@@ -92,7 +92,7 @@ export abstract class MVar<A> {
     return new (class extends MVar<B> {
       readonly unsafeGet = async (): Promise<B> => isoab.to(await base.get());
       readonly unsafeSet = async (b: B): Promise<void> =>
-        base.set(isoab.from(b));
+        await base.set(isoab.from(b));
     })();
   };
 

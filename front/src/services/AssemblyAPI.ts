@@ -33,14 +33,17 @@ export namespace AssemblyAPI {
     return async function (operation: Operation) {
       switch (operation.tag) {
         case "join":
-          return assemblyAPI.join(
+          return await assemblyAPI.join(
             operation.id,
             operation.name,
             operation.secret,
             operation.nickname
           );
         case "create":
-          return assemblyAPI.create(operation.assemblyName, operation.nickname);
+          return await assemblyAPI.create(
+            operation.assemblyName,
+            operation.nickname
+          );
       }
     };
   }
@@ -57,29 +60,29 @@ export class MutexedAssemblyAPI implements AssemblyAPI {
     this.join = this.join.bind(this);
   }
 
-  create(assemblyName: string, nickname: string): Promise<Membership> {
-    return this.mutex.runExclusive(() =>
+  async create(assemblyName: string, nickname: string): Promise<Membership> {
+    return await this.mutex.runExclusive(() =>
       this.baseAPI.create(assemblyName, nickname)
     );
   }
 
-  join(
+  async join(
     id: string,
     name: string | null,
     secret: string,
     nickname: string
   ): Promise<Membership> {
-    return this.mutex.runExclusive(() =>
+    return await this.mutex.runExclusive(() =>
       this.baseAPI.join(id, name, secret, nickname)
     );
   }
 
-  connect(
+  async connect(
     membership: Membership,
     updateAssembly: (connectionId: string, event: AssemblyEvent) => void,
     updateConnection: (connectionId: string, event: ConnectionEvent) => void
   ): Promise<ConnectionController> {
-    return this.mutex.runExclusive(() =>
+    return await this.mutex.runExclusive(() =>
       this.baseAPI.connect(membership, updateAssembly, updateConnection)
     );
   }
@@ -138,7 +141,11 @@ export class RealAssemblyAPI implements AssemblyAPI {
     updateAssembly: (connectionId: string, event: AssemblyEvent) => void,
     updateConnection: (connectionId: string, event: ConnectionEvent) => void
   ): Promise<ConnectionController> {
-    return this.backAPI.connect(membership, updateAssembly, updateConnection);
+    return await this.backAPI.connect(
+      membership,
+      updateAssembly,
+      updateConnection
+    );
   }
 }
 

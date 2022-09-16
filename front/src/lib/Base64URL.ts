@@ -11,7 +11,7 @@ export class Base64URL {
     this.decode = this.decode.bind(this);
   }
 
-  static getInstance() {
+  static getInstance(): Base64URL {
     if (!this.instance) {
       this.instance = new Base64URL();
     }

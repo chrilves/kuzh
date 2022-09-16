@@ -111,7 +111,7 @@ export class HarvestState {
     return b !== null;
   };
 
-  readonly resetHarvest = () => {
+  readonly resetHarvest = (): void => {
     this._harvest = null;
     this._myHash = null;
     this._hashes = null;
@@ -132,14 +132,14 @@ export class HarvestState {
     return "finished";
   };
 
-  readonly setBallot = (ballot: Ballot) => {
+  readonly setBallot = async (ballot: Ballot): Promise<void> => {
     if (this._ballot !== null) throw new Error("Ballot already set!");
 
     this._ballot = ballot;
-    this.ballotStore.set(ballot);
+    return await this.ballotStore.set(ballot);
   };
 
-  readonly setHarvest = (harvest: Harvest) => {
+  readonly setHarvest = (harvest: Harvest): void => {
     if (this._ballot === null)
       throw new Error("Trying to set harvest with no ballot!");
 

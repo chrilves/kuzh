@@ -203,7 +203,7 @@ export default class Assembly {
         this.safeConnectionOrigin(this.assemblyState.update),
         this.safeConnectionOrigin(this.updateConnection)
       );
-      return Promise.resolve("connecting");
+      return "connecting";
     } catch (e) {
       this.log(
         `Connection failed to assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
@@ -218,14 +218,14 @@ export default class Assembly {
       this.connectionStatus.modify(
         async (connectionStatus: ConnectionStatus) => {
           if (runningStatus === "started" && connectionStatus === "closed")
-            return Promise.resolve(await this.unsafeConnect());
+            return await this.unsafeConnect();
           else if (
             runningStatus === "stopped" &&
             connectionStatus !== "closed"
           ) {
             this.unsafeDisconnect();
-            return Promise.resolve("closed");
-          } else return Promise.resolve(connectionStatus);
+            return "closed";
+          } else return connectionStatus;
         }
       )
     );
@@ -251,9 +251,9 @@ export default class Assembly {
   readonly reconnect = async (): Promise<void> => {
     await this.connectionStatus.setWith(async () => {
       this.unsafeDisconnect();
-      return Promise.resolve("closed");
+      return "closed";
     });
-    return this.fixConnectionState();
+    return await this.fixConnectionState();
   };
 
   readonly restart = async (): Promise<void> => {
@@ -263,11 +263,11 @@ export default class Assembly {
     await this.runningStatus.setWith(async () => {
       await this.connectionStatus.setWith(async () => {
         this.unsafeDisconnect();
-        return Promise.resolve("closed");
+        return "closed";
       });
-      return Promise.resolve("started");
+      return "started";
     });
-    return this.fixConnectionState();
+    return await this.fixConnectionState();
   };
 
   readonly start = async (): Promise<void> => {
@@ -275,7 +275,7 @@ export default class Assembly {
       `Starting assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
     );
     await this.runningStatus.set("started");
-    return this.fixConnectionState();
+    return await this.fixConnectionState();
   };
 
   readonly stop = async (): Promise<void> => {
@@ -283,7 +283,7 @@ export default class Assembly {
       `Stopping assembly ${this.membership.assembly.name}:${this.membership.assembly.id} for member ${this.membership.me.nickname}:${this.membership.me.fingerprint}`
     );
     await this.runningStatus.set("stopped");
-    return this.fixConnectionState();
+    return await this.fixConnectionState();
   };
 
   private readonly fail = (error: any): never => {
@@ -329,15 +329,15 @@ export default class Assembly {
   /////////////////////////////////////////////////
   // Question Management
 
-  readonly acceptHarvest = () => this.send(MemberEvent.accept);
-  readonly refuseHarvest = () => this.send(MemberEvent.refuse);
+  readonly acceptHarvest = (): void => this.send(MemberEvent.accept);
+  readonly refuseHarvest = (): void => this.send(MemberEvent.refuse);
 
-  readonly myQuestion = (question: Question | null) =>
+  readonly myQuestion = (question: Question | null): void =>
     this.assemblyState.myQuestion(question);
-  readonly myClosedAnswer = (answer: boolean) =>
+  readonly myClosedAnswer = (answer: boolean): void =>
     this.assemblyState.myClosedAnswer(answer);
-  readonly myOpenAnswer = (answer: string) =>
+  readonly myOpenAnswer = (answer: string): void =>
     this.assemblyState.myOpenAnswer(answer);
-  readonly changeReadiness = (r: Member.Blockingness) =>
+  readonly changeReadiness = (r: Member.Blockingness): void =>
     this.assemblyState.changeReadiness(r);
 }

@@ -22,7 +22,9 @@ export default function App(props: {
   services: Services;
   refAppState: RefAppState;
 }): JSX.Element {
-  const [appState, setAppState] = useState<AppState>(props.refAppState.appState.get());
+  const [appState, setAppState] = useState<AppState>(
+    props.refAppState.appState.get()
+  );
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -63,7 +65,7 @@ export default function App(props: {
           state: SeatState.prepare(operation),
           setState: props.refAppState.setHostState,
           exit: menu,
-          reset: () => prepare(operation),
+          reset: async () => await prepare(operation),
         },
         props.refAppState.guests()
       )
@@ -162,7 +164,7 @@ export default function App(props: {
 
       let asm: Assembly | null = null;
 
-      const connect = async () => {
+      const connect = async (): Promise<void> => {
         const st = props.refAppState.appState.get();
         if (st.tag === "seats") {
           let membership: Membership = await AssemblyAPI.fold(guestAssemblyAPI)(
@@ -196,7 +198,7 @@ export default function App(props: {
             props.refAppState.appState.set(AppState.seats(st.host, newGuests));
           }
 
-          return asm.start();
+          return await asm.start();
         } else throw new Error(t("ERROR_CONNECT_GUEST_NO_SEAT_MODE"));
       };
 

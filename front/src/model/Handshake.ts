@@ -67,9 +67,12 @@ export namespace Handshake {
     membership: Membership,
     challenge: In.Challenge
   ): Promise<Out.ChallengeResponse> {
-    const signature = await membership.me.signB64(
+    const hash = await window.crypto.subtle.digest(
+      "SHA-256",
       Base64URL.getInstance().decode(challenge.challenge)
     );
+
+    const signature = await membership.me.signB64(hash);
     let identityProof: Serial.IdentityProof | null;
 
     if (challenge.identity_proof_needed) {

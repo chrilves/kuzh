@@ -54,7 +54,7 @@ object Handshake:
         then
           storedIdentityProof.orElse(cr.identityProof).flatMap { id =>
             withVerify[Option[IdentityProof]](id.verify.toECPublicKey) { f =>
-              if f[Array[Byte]](Signed(challenge, cr.signature))
+              if f[Array[Byte]](Signed(lib.crypto.hash256(challenge), cr.signature))
               then Some(id)
               else None
             }

@@ -27,10 +27,8 @@ object Base64UrlEncoded:
     inline def asString: String =
       b
 
-  def hash(msg: String): Array[Byte] =
-    val md = MessageDigest.getInstance("SHA-256")
-    md.update(msg.getBytes(StandardCharsets.UTF_8))
-    md.digest()
+  inline def hash(msg: String): Array[Byte] =
+    hash256(msg.getBytes(StandardCharsets.UTF_8))
 
   inline def hashB64(msg: String): Base64UrlEncoded =
     Base64UrlEncoded.encode(hash(msg))
@@ -117,6 +115,11 @@ object Signable:
 type VerifyFun = [A] => (Signable[A]) ?=> (Signed[A]) => Boolean
 
 lazy val bouncycastle = new BouncyCastleProvider()
+
+def hash256(arr: Array[Byte]): Array[Byte] =
+  val md = MessageDigest.getInstance("SHA-256")
+  md.update(arr)
+  md.digest()
 
 def withVerify[A](key: ECPublicKey)(f: VerifyFun => A): A =
   // The "SHA256withPLAIN-ECDSA" is needed to tell BC to use Web Crypto signature format
