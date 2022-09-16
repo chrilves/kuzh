@@ -22,9 +22,9 @@ export default function App(props: {
   services: Services;
   refAppState: RefAppState;
 }): JSX.Element {
-  const [_, setAppState] = useState<AppState>(props.refAppState.appState.get());
+  const [appState, setAppState] = useState<AppState>(props.refAppState.appState.get());
   const navigate = useNavigate();
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
 
   useEffect(() => {
     props.refAppState.appState.addListener(setAppState);
@@ -36,7 +36,7 @@ export default function App(props: {
   ////////////////////
 
   function menu() {
-    const st = props.refAppState.appState.get();
+    const st = appState;
     switch (st.tag) {
       case "seats":
         SeatState.stop(st.host.state);
@@ -230,8 +230,7 @@ export default function App(props: {
 
   let page: JSX.Element;
 
-  const st = props.refAppState.appState.get();
-  switch (st.tag) {
+  switch (appState.tag) {
     case "menu":
       page = (
         <Menu
@@ -246,13 +245,13 @@ export default function App(props: {
         <main className="seats">
           <Seat
             key="host"
-            state={st.host.state}
+            state={appState.host.state}
             setState={props.refAppState.setHostState}
             exit={menu}
-            reset={st.host.reset}
+            reset={appState.host.reset}
             addGuest={addGuest}
           />
-          {st.guests.map((g) => (
+          {appState.guests.map((g) => (
             <Seat
               key={g.guestID}
               state={g.seat.state}
@@ -282,7 +281,7 @@ function KuzhTitle(props: { install: Install }): JSX.Element {
   useEffect(() => {
     props.install.listenInstall.addListener(setInstallable);
     return () => props.install.listenInstall.removeListener(setInstallable);
-  });
+  }, [props.install.listenInstall]);
 
   const urlIntoClipboard = () =>
     navigator.clipboard.writeText(Parameters.kuzhURL);
@@ -308,7 +307,7 @@ function KuzhTitle(props: { install: Install }): JSX.Element {
         </span>
       </h1>
       {t("Anonymous Questions and Answers")}, {t("in")}{" "}
-      <a href={Parameters.sourceURL} target="_blank">
+      <a href={Parameters.sourceURL} target="_blank" rel="noreferrer">
         {t("free software")}
       </a>
       !

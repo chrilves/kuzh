@@ -1,12 +1,11 @@
-import { Fingerprint, Name } from "../model/Crypto";
-import WaitingPanel from "./WaitingPanel";
-import ProposedPanel, { Action, Phase as ProposedPhase } from "./ProposedPanel";
-import { Member } from "../model/Member";
-import { Status } from "../model/assembly/Status";
-import { Harvest } from "../model/assembly/Harvest";
-import { Question } from "../model/Question";
 import { useTranslation } from "react-i18next";
-import { GetSet } from "../lib/Var";
+import { Harvest } from "../model/assembly/Harvest";
+import { Status } from "../model/assembly/Status";
+import { Fingerprint, Name } from "../model/Crypto";
+import { Member } from "../model/Member";
+import { Question } from "../model/Question";
+import ProposedPanel, { Action } from "./ProposedPanel";
+import WaitingPanel from "./WaitingPanel";
 
 type Props = {
   myFingerprint: Fingerprint;
@@ -24,8 +23,6 @@ type Props = {
 };
 
 export default function StatusPanel(props: Props): JSX.Element {
-  const { t } = useTranslation();
-
   switch (props.status.tag) {
     case "waiting":
       return (
@@ -84,6 +81,7 @@ export default function StatusPanel(props: Props): JSX.Element {
             />
           );
       }
+      break;
     case "hidden":
       return <Hidden />;
   }

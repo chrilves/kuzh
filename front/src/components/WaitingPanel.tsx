@@ -1,4 +1,5 @@
 import { ChangeEvent, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { JSONNormalizedStringifyD } from "../lib/JSONNormalizedStringify";
 import { Status } from "../model/assembly/Status";
 import { Fingerprint, Name } from "../model/Crypto";
@@ -6,8 +7,6 @@ import { Member } from "../model/Member";
 import { Parameters } from "../model/Parameters";
 import { Question } from "../model/Question";
 import ReadinessPanel from "./ReadinessPanel";
-import { useTranslation } from "react-i18next";
-import { ObservableVar } from "../lib/Var";
 
 type Props = {
   myFingerprint: Fingerprint;
@@ -308,7 +307,7 @@ function ClosedAnswerPanel(props: ClosedAnswerProps): JSX.Element {
       phase !== Phase.confirmed
     )
       setPhase(Phase.confirmed);
-  }, [props.myReadiness]);
+  }, [props.myReadiness, phase]);
 
   function changePhase(newPhase: Phase<boolean>) {
     const realNewPhase = Phase.change(
@@ -463,7 +462,7 @@ function OpenAnswerPanel(props: OpenAnswerProps): JSX.Element {
       phase !== Phase.confirmed
     )
       setPhase(Phase.confirmed);
-  }, [props.myReadiness]);
+  }, [phase, props.myReadiness]);
 
   function changePhase(newPhase: Phase<string>) {
     const realNewPhase = Phase.change(
@@ -652,7 +651,7 @@ function QuestionPanel(props: {
       phase !== Phase.confirmed
     )
       setPhase(Phase.confirmed);
-  }, [props.myReadiness]);
+  }, [phase, props.myReadiness]);
 
   function changePhase(newPhase: Phase<Question | null>) {
     const realNewPhase = Phase.change(

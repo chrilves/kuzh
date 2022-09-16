@@ -1,7 +1,3 @@
-import { JSONNormalizedStringifyD } from "../lib/JSONNormalizedStringify";
-import { Ballot } from "./Ballot";
-import { Question } from "./Question";
-
 export namespace Parameters {
   export const kuzhURL = "https://kuzh.cc/";
   export const sourceURL = "https://github.com/chrilves/kuzh";

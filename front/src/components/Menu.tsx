@@ -7,7 +7,6 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import Fuse from "../lib/Fuse";
-import { withAsync } from "../lib/Utils";
 import { AsssemblyInfo } from "../model/assembly/AssembyInfo";
 import { Membership } from "../model/Crypto";
 import { Operation } from "../model/Operation";
@@ -30,12 +29,9 @@ export default function Menu(
   >(undefined);
   const { t } = useTranslation();
 
-  const fetchLast = withAsync(async () => {
-    const last = await props.storageAPI.fetchLastMembership();
-    setlastMembership(last);
-  });
-
-  useEffect(fetchLast, [props.storageAPI]);
+  useEffect(() => {
+    props.storageAPI.fetchLastMembership().then(setlastMembership);
+  }, [props.storageAPI]);
 
   const nick = ((x) => (x ? x : ""))(props.storageAPI.fetchNickname());
 
@@ -247,11 +243,12 @@ function Wizzard(
 
   let postAction: (() => void) | undefined = undefined;
 
-  const performPostAction = withAsync(async () => {
-    if (postAction && (await fuse.break())) postAction();
-  });
-
-  useEffect(performPostAction, [props.lastMembership]);
+  useEffect(() => {
+    fuse.break().then((b) => {
+      if (postAction && b) postAction();
+    });
+  }
+  , [fuse, postAction, props.lastMembership]);
 
   let assemblyId: string;
   if (assemblyIdP) {

@@ -1,10 +1,8 @@
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Harvest } from "../model/assembly/Harvest";
 import { Fingerprint, Name } from "../model/Crypto";
 import MemberList from "./MemberList";
-import { Member } from "../model/Member";
-import { Harvest } from "../model/assembly/Harvest";
-import { useTranslation } from "react-i18next";
-import { GetSet } from "../lib/Var";
-import { useState } from "react";
 
 type Props = {
   harvest: Harvest;
