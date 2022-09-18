@@ -16,9 +16,14 @@ namespace CryptoConfig {
   export const dhAlgorithm = "ECDH";
   export const singingAlgorithm = "ECDSA";
   export const namedCurve = "P-384";
-  export const dhKeySize = 97;
 
-  export const alg = "ES384";
+  // DH Key Compression constants
+  export const dhKeySize = 120;
+  export const dhSkpiHeader = new Uint8Array([
+    48, 118, 48, 16, 6, 7, 42, 134, 72, 206, 61, 2, 1, 6, 5, 43, 129, 4, 0, 34,
+    3, 98, 0, 4,
+  ]);
+  export const dhCompressedSize = dhKeySize - dhSkpiHeader.byteLength;
 }
 
 export type SerializedKey = string;
@@ -257,9 +262,16 @@ export class Me {
   }
 
   readonly decrypt = async (message: Uint8Array): Promise<Uint8Array> => {
+    const dhSpki = new Uint8Array(CryptoConfig.dhKeySize);
+    dhSpki.set(CryptoConfig.dhSkpiHeader);
+    dhSpki.set(
+      message.slice(0, CryptoConfig.dhCompressedSize),
+      CryptoConfig.dhSkpiHeader.byteLength
+    );
+
     const dhPubKey = await window.crypto.subtle.importKey(
-      "raw",
-      message.slice(0, CryptoConfig.dhKeySize),
+      "spki",
+      dhSpki,
       {
         name: CryptoConfig.dhAlgorithm,
         namedCurve: CryptoConfig.namedCurve,
@@ -267,13 +279,16 @@ export class Me {
       true,
       []
     );
-    const sharedSecret = await window.crypto.subtle.deriveBits(
-      {
-        name: CryptoConfig.dhAlgorithm,
-        public: dhPubKey,
-      },
-      this.dhPair.private,
-      8 * (CryptoConfig.aesKeyBytes + CryptoConfig.aesIvBytes)
+
+    const sharedSecret = new Uint8Array(
+      await window.crypto.subtle.deriveBits(
+        {
+          name: CryptoConfig.dhAlgorithm,
+          public: dhPubKey,
+        },
+        this.dhPair.private,
+        8 * (CryptoConfig.aesKeyBytes + CryptoConfig.aesIvBytes)
+      )
     );
 
     const aesKey = await window.crypto.subtle.importKey(
@@ -291,7 +306,7 @@ export class Me {
           iv: sharedSecret.slice(CryptoConfig.aesKeyBytes),
         },
         aesKey,
-        message.slice(CryptoConfig.dhKeySize)
+        message.slice(CryptoConfig.dhCompressedSize)
       )
     );
   };
@@ -461,13 +476,15 @@ export class IdentityProof {
       ["deriveBits"]
     );
 
-    const sharedSecret = await window.crypto.subtle.deriveBits(
-      {
-        name: CryptoConfig.dhAlgorithm,
-        public: this.dhPublic.value,
-      },
-      dhEphemeral.privateKey,
-      8 * (CryptoConfig.aesKeyBytes + CryptoConfig.aesIvBytes)
+    const sharedSecret = new Uint8Array(
+      await window.crypto.subtle.deriveBits(
+        {
+          name: CryptoConfig.dhAlgorithm,
+          public: this.dhPublic.value,
+        },
+        dhEphemeral.privateKey,
+        8 * (CryptoConfig.aesKeyBytes + CryptoConfig.aesIvBytes)
+      )
     );
 
     const aesKey = await window.crypto.subtle.importKey(
@@ -489,18 +506,27 @@ export class IdentityProof {
       )
     );
 
-    const dhPubRaw = new Uint8Array(
-      await window.crypto.subtle.exportKey("raw", dhEphemeral.publicKey)
+    const dhPubSpki = new Uint8Array(
+      await window.crypto.subtle.exportKey("spki", dhEphemeral.publicKey)
     );
 
-    if (dhPubRaw.byteLength !== CryptoConfig.dhKeySize)
+    // Checking if parameters are indeed valid
+    if (dhPubSpki.byteLength !== CryptoConfig.dhKeySize)
       throw new Error(
-        `DH Pub size of ${dhPubRaw.byteLength} instead of ${CryptoConfig.dhKeySize}`
+        `DH Pub size of ${dhPubSpki.byteLength} instead of ${CryptoConfig.dhKeySize}`
       );
 
-    const enc = new Uint8Array(dhPubRaw.byteLength + cypher.byteLength);
-    enc.set(dhPubRaw, 0);
-    enc.set(cypher, dhPubRaw.byteLength);
+    for (let i = 0; i < CryptoConfig.dhSkpiHeader.byteLength; i++)
+      if (dhPubSpki[i] !== CryptoConfig.dhSkpiHeader[i])
+        throw new Error(
+          `DH Header mismatch dh[${i}] === ${dhPubSpki[i]} !== header[${i}] === ${CryptoConfig.dhSkpiHeader[i]}`
+        );
+
+    const dhRaw = dhPubSpki.slice(CryptoConfig.dhSkpiHeader.byteLength);
+
+    const enc = new Uint8Array(dhRaw.byteLength + cypher.byteLength);
+    enc.set(dhRaw, 0);
+    enc.set(cypher, dhRaw.byteLength);
 
     return enc;
   };
