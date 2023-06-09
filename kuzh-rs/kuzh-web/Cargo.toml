@@ -1,0 +1,28 @@
+[package]
+name = "kuzh-web"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+wasm-bindgen = "*"
+gloo-storage = "*"
+gloo-net = { version = "*", features = ["websocket"] }
+gloo-console = "*"
+wasm-bindgen-futures = "*"
+futures = "*"
+yew = { version = "*", features = ["csr"] }
+web-sys = {version = "*", features = ["console"]}
+kuzh-common = {path = "../kuzh-common"}
+# The `console_error_panic_hook` crate provides better debugging of panics by
+# logging them with `console.error`. This is great for development, but requires
+# all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
+# code size when deploying.
+console_error_panic_hook = { version = "0.1.6", optional = true }
+hex = "0.4.3"
+base64 = {version = "0.21.2", features = ["std"]}
+getrandom = {version = "*", features = ["js"]}
+
+[dev-dependencies]
+wasm-bindgen-test = "*"
