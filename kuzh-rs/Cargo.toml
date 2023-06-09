@@ -1,0 +1,9 @@
+[workspace]
+
+members = [
+    "kuzh-common",
+    "kuzh-server",
+    "kuzh-web"
+]
+
+resolver = "2"

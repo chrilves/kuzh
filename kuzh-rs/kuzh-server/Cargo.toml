@@ -1,0 +1,24 @@
+[package]
+name = "kuzh-server"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio-tungstenite = "*"
+kuzh-common = { path = "../kuzh-common" }
+tokio = {version = "*", features = ["full"] }
+futures = "*"
+futures-util = "*"
+futures-channel = "*"
+hex = "0.4.3"
+base64 = {version = "0.21.2", features = ["std"]}
+tokio-postgres = "0.7.8"
+refinery = { version = "0.8.10", features = ["tokio-postgres"] }
+clap = { version = "4.3.19", features = ["derive"] }
+deadpool-postgres = "0.10.5"
+
+[dev-dependencies]
+assert2 = "*"
+tokio = { version = "*", features = ["net", "macros", "rt-multi-thread"] }

@@ -36,3 +36,8 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Rust
+*.wasm
+kuzh-rs/kuzh-server/dev-env/pgdata/
+kuzh-rs/kuzh-web/dist/

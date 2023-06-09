@@ -1,0 +1,56 @@
+[package]
+name = "kuzh-web"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build]
+target = "wasm32-unknown-unknown"
+
+
+[dependencies]
+wasm-bindgen = "*"
+gloo-net = { version = "*", features = ["websocket"] }
+#gloo-console = "*"
+wasm-bindgen-futures = "*"
+futures = "*"
+yew = { version = "*", features = ["csr"] }
+js-sys = {version = "*"}
+web-sys = {version = "*", features = [
+  "console",
+  "DomStringList",
+  "IdbDatabase",
+  "IdbFactory",
+  "IdbFileRequest",
+  "IdbLocaleAwareKeyRange",
+  "IdbMutableFile",
+  "IdbObjectStore",
+  "IdbObjectStoreParameters",
+  "IdbOpenDbRequest",
+  "IdbRequest",
+  "IdbVersionChangeEvent",
+  "Window"
+]}
+kuzh-common = {path = "../kuzh-common"}
+# The `console_error_panic_hook` crate provides better debugging of panics by
+# logging them with `console.error`. This is great for development, but requires
+# all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
+# code size when deploying.
+console_error_panic_hook = { version = "0.1.6", optional = true }
+base64 = {version = "0.21.2", features = ["std"]}
+getrandom = {version = "*", features = ["js"]}
+wee_alloc = { version = "0.4.2", optional = false }
+thiserror = "*"
+
+[dev-dependencies]
+wasm-bindgen-test = "*"
+
+[profile.release]
+strip = true  # Automatically strip symbols from the binary.
+opt-level = "z"  # Optimize for size.
+lto = true
+codegen-units = 1
+
+[features]
+default = ["console_error_panic_hook"]
