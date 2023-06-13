@@ -1,3 +1,4 @@
+
 use futures::{SinkExt, StreamExt};
 use gloo_net::websocket::{futures::WebSocket, Message};
 use wasm_bindgen::prelude::*;
@@ -16,7 +17,6 @@ macro_rules! console_log {
 #[function_component]
 fn App() -> Html {
     let counter = use_state(|| 0);
-    use hex::encode;
     use kuzh_common::crypto::*;
 
     let secret1 = use_state(SecretKey::random);
@@ -57,7 +57,31 @@ fn App() -> Html {
     }
 }
 
-fn main() {
+async fn migrate() {
+    use gluesql::*;
+    use gluesql::core::*;
+    use gluesql::core::ast::*;
+    use gluesql::core::ast_builder::*;
+    use gluesql::prelude::*;
+    use gluesql::core::store::*;
+
+    let mut storage = gluesql_idb_storage::IdbStorage::new(Some(String::from("kuzh-idb-storage"))).await.unwrap();
+    let mut glue : Glue<IdbStorage> = Glue::new(storage);
+
+    console_log!("Commencé");
+    glue.execute_stmt_async(&begin().unwrap()).await.unwrap();
+    console_log!("Fini");
+
+    let actual = table("Foo")
+    .create_table()
+    .add_column("id INTEGER")
+    .add_column("name TEXT")
+    .execute(&mut glue)
+    .await;
+}
+
+pub fn main() {
+    spawn_local(migrate());
     yew::Renderer::<App>::new().render();
 }
 

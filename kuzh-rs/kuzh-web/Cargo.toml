@@ -5,24 +5,42 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[build]
+target = "wasm32-unknown-unknown"
+
+
 [dependencies]
 wasm-bindgen = "*"
-gloo-storage = "*"
-gloo-net = { version = "*", features = ["websocket"] }
-gloo-console = "*"
+#gloo-net = { version = "*", features = ["websocket"] }
+#gloo-console = "*"
 wasm-bindgen-futures = "*"
 futures = "*"
-yew = { version = "*", features = ["csr"] }
-web-sys = {version = "*", features = ["console"]}
-kuzh-common = {path = "../kuzh-common"}
+#yew = { version = "*", features = ["csr"] }
+#web-sys = {version = "*", features = ["console"]}
+#kuzh-common = {path = "../kuzh-common"}
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
 # code size when deploying.
-console_error_panic_hook = { version = "0.1.6", optional = true }
-hex = "0.4.3"
-base64 = {version = "0.21.2", features = ["std"]}
-getrandom = {version = "*", features = ["js"]}
+#console_error_panic_hook = { version = "0.1.6", optional = true }
+#base64 = {version = "0.21.2", features = ["std"]}
+#getrandom = {version = "*", features = ["js"]}
+gluesql = {version = "0.14.0", default-features = false, features = ["idb-storage"]}
+gluesql-idb-storage = { version = "0.14.0", default-features = false }
+#wee_alloc = { version = "0.4.2", optional = true }
 
 [dev-dependencies]
 wasm-bindgen-test = "*"
+
+[profile.release]
+strip = true  # Automatically strip symbols from the binary.
+opt-level = "z"  # Optimize for size.
+lto = true
+codegen-units = 1
+
+[features]
+#default = ["console_error_panic_hook"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"

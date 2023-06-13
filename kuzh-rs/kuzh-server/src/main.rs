@@ -20,15 +20,17 @@
 use std::{
     collections::HashMap,
     env,
-    io::Error as IoError,
+    io::{Error as IoError, ErrorKind},
     net::SocketAddr,
     sync::{Arc, Mutex},
 };
 
 use futures_channel::mpsc::{unbounded, UnboundedSender};
-use futures_util::{future, pin_mut, stream::TryStreamExt, SinkExt, StreamExt};
+use futures_util::{future, pin_mut, stream::TryStreamExt, SinkExt, StreamExt, TryFutureExt};
 
+use refinery::Runner;
 use tokio::net::{TcpListener, TcpStream};
+use tokio_postgres::GenericClient;
 use tokio_tungstenite::tungstenite::protocol::Message;
 
 type Tx = UnboundedSender<Message>;
@@ -66,7 +68,45 @@ async fn handle_connection(raw_stream: TcpStream, addr: SocketAddr) {
 #[tokio::main]
 async fn main() -> Result<(), IoError> {
 
+    use tokio_postgres::Connection;
+    use tokio_postgres::{NoTls, Error, Config};
 
+    let mut config = Config::new();
+    
+    let (mut client, connection) =
+        config
+            .host("localhost")
+            .port(5432)
+            .dbname("kuzh")
+            .user("kuzh")
+            .password("kuzh")
+            .connect(NoTls)
+            .await
+            .unwrap(); 
+
+    // The connection object performs the actual communication with the database,
+    // so spawn it off to run on its own.
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("connection error: {}", e);
+        }
+    });
+
+    // Now we can execute a simple statement that just returns its parameter.
+    let rows = client
+        .query("SELECT $1::TEXT", &[&"hello world"])
+        .await.unwrap();
+
+    mod embedded {
+        use refinery::embed_migrations;
+        embed_migrations!("./src/sql_migrations/");
+    }
+    client.execute("create schema if not existskuzh ;", &[]).await.unwrap();
+    embedded::migrations::runner()
+        .set_migration_table_name("kuzh.refinery_schema_history")
+        .run_async(&mut client)
+        .await
+        .unwrap();
 
     let secret1 = SecretKey::random();
     let public1 = PublicKey::from(&secret1);

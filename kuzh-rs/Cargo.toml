@@ -3,7 +3,6 @@
 members = [
     "kuzh-common",
     "kuzh-server",
-    "kuzh-cli",
     "kuzh-web"
 ]
 
