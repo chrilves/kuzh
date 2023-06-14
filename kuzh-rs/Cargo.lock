@@ -577,20 +577,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "gluesql"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3b4b0e7a6603a4292f3b6ce898cb9d1ee0e815f1ecacc91ce2511887cbd0b61"
-dependencies = [
- "gluesql-core",
- "gluesql-idb-storage",
-]
-
-[[package]]
 name = "gluesql-core"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "def8a48b8330dca145204665647cd8bd59765a622198c62e34f943d08f899d16"
 dependencies = [
  "async-recursion",
  "async-trait",
@@ -619,8 +607,6 @@ dependencies = [
 [[package]]
 name = "gluesql-idb-storage"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2283384b116ea0dfc8b7e7da77eabde32665f32c6400ff7ea481eeda380b6475"
 dependencies = [
  "async-trait",
  "futures",
@@ -637,8 +623,6 @@ dependencies = [
 [[package]]
 name = "gluesql-utils"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "370e90a71cc43e6235e6a1af3a454dba793d8f043e2bd9ac90f1f6e4ff44ddd6"
 dependencies = [
  "futures",
  "indexmap",
@@ -882,8 +866,7 @@ dependencies = [
 name = "kuzh-web"
 version = "0.1.0"
 dependencies = [
- "futures",
- "gluesql",
+ "gluesql-core",
  "gluesql-idb-storage",
  "wasm-bindgen",
  "wasm-bindgen-futures",

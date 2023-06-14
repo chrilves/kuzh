@@ -14,7 +14,7 @@ wasm-bindgen = "*"
 #gloo-net = { version = "*", features = ["websocket"] }
 #gloo-console = "*"
 wasm-bindgen-futures = "*"
-futures = "*"
+#futures = "*"
 #yew = { version = "*", features = ["csr"] }
 #web-sys = {version = "*", features = ["console"]}
 #kuzh-common = {path = "../kuzh-common"}
@@ -25,8 +25,9 @@ futures = "*"
 #console_error_panic_hook = { version = "0.1.6", optional = true }
 #base64 = {version = "0.21.2", features = ["std"]}
 #getrandom = {version = "*", features = ["js"]}
-gluesql = {version = "0.14.0", default-features = false, features = ["idb-storage"]}
-gluesql-idb-storage = { version = "0.14.0", default-features = false }
+#gluesql = {version = "0.14.0", default-features = false, features = ["idb-storage"]}
+gluesql-core = {path = "/home/tof/sources/gluesql/core", default-features = false}
+gluesql-idb-storage = { path = "/home/tof/sources/gluesql/storages/idb-storage", default-features = false }
 #wee_alloc = { version = "0.4.2", optional = true }
 
 [dev-dependencies]
