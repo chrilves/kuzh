@@ -10,8 +10,8 @@ use crate::newtypes::*;
 pub enum RoomAccessibility {
     OpenToAnyone,
     MembersOnly,
-    PublicKeyProtected(PublicKey),
-    SecretKeyProtected(SecretKey),
+    PublicKeyProtected(Box<PublicKey>),
+    SecretKeyProtected(Box<SecretKey>),
 }
 
 pub struct IdentityInfo {
@@ -49,11 +49,11 @@ pub enum QuestionDeleteSpec {
 pub enum RoomEvent {
     // Identities
     RoomCreation {
-        room: CryptoID,
-        first_admin: CryptoID,
+        room: Box<CryptoID>,
+        first_admin: Box<CryptoID>,
     },
-    NewUser(CryptoID),
-    NewMask(CryptoID),
+    NewUser(Box<CryptoID>),
+    NewMask(Box<CryptoID>),
     Connected(UserID),
     Disconnected(UserID),
     ChangeRole {
@@ -105,14 +105,14 @@ pub enum RoomEvent {
     CheaterWrongCommitment {
         context: Box<[u8]>,
         user: UserID,
-        encryption: (PublicKey, Sig),
-        secret: (SecretKey, Sig),
+        encryption: Box<(PublicKey, Sig)>,
+        secret: Box<(SecretKey, Sig)>,
     },
     CheaterTwoAnswers {
         context: Box<[u8]>,
         user: UserID,
-        answer_1: Answer,
-        answer_2: Answer,
+        answer_1: Box<Answer>,
+        answer_2: Box<Answer>,
     },
 
     // Messages

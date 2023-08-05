@@ -35,9 +35,9 @@ pub enum AnsweringEvent {
     Collect,
 
     // Anonymous Protocol
-    Ready(PublicKey),
-    Answer(Answer),
-    SecretShare(SecretKey),
+    Ready(Box<PublicKey>),
+    Answer(Box<Answer>),
+    SecretShare(Box<SecretKey>),
 
     // Messages
     Message(String),

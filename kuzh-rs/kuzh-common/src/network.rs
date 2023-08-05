@@ -1,7 +1,7 @@
 use crate::{
     chain::{AnyBlock, AnyTransaction},
     crypto::EncryptedMessageData,
-    newtypes::{MaskID, UserID},
+    newtypes::UserID,
 };
 
 pub struct EncryptedMessage {
@@ -12,10 +12,10 @@ pub struct EncryptedMessage {
 
 pub enum ClientMesage {
     Transaction(AnyTransaction),
-    NetworkMessage(EncryptedMessage),
+    NetworkMessage(Box<EncryptedMessage>),
 }
 
 pub enum ServerMesage {
     Block(AnyBlock),
-    NetworkMessage(EncryptedMessage),
+    NetworkMessage(Box<EncryptedMessage>),
 }

@@ -108,7 +108,7 @@ pub mod ring_sig {
 
     impl ConstantTimeEq for RingSig {
         #[inline]
-        fn ct_eq(&self, other: &Self) -> subtle::Choice {
+        fn ct_eq(&self, _other: &Self) -> subtle::Choice {
             subtle::Choice::from(1)
         }
     }

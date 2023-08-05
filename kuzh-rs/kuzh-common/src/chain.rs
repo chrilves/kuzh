@@ -1,7 +1,7 @@
 use crate::{
     answering::AnsweringEvent,
     crypto::Signed,
-    newtypes::{Hashed, MaskID, Nonce, UserID},
+    newtypes::{Hashed, Nonce, UserID},
     room::RoomEvent,
 };
 
