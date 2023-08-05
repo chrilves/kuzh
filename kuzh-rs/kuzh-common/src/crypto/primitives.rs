@@ -7,7 +7,8 @@ use rand::rngs::OsRng;
 use subtle::ConstantTimeEq;
 use thiserror::Error;
 
-type Bin = [u8; 32];
+pub const CRYPTO_BIN_SIZE: usize = 32;
+pub type Bin = [u8; CRYPTO_BIN_SIZE];
 
 #[derive(Error, Debug)]
 pub enum CryptoError {
@@ -88,12 +89,12 @@ pub mod sig {
 
     #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
     #[repr(transparent)]
-    pub struct Sig {}
+    pub struct Sig([u8; 64]);
 
     impl ConstantTimeEq for Sig {
         #[inline]
         fn ct_eq(&self, other: &Self) -> subtle::Choice {
-            subtle::Choice::from(1)
+            self.0.ct_eq(&other.0)
         }
     }
 }

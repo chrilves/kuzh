@@ -1,13 +1,14 @@
-use crate::crypto::*;
-use crate::gate::*;
+use crate::newtypes::*;
+use std::collections::HashMap;
 
-pub struct Transaction<Event> {
-    from: User,
-    events: Vec<Event>,
-    nonce: Nonce,
-    signature: Sig,
-    nonce_sig: Sig,
+pub enum IdentityID<MaskID> {
+    RoomID,
+    User(UserID),
+    Mask(MaskID),
 }
+
+pub type RoomIdentityID = IdentityID<MaskID>;
+pub type AnsweringIdentityID = IdentityID<AnswerID>;
 
 pub enum QuestionKind {
     Open,
@@ -15,12 +16,24 @@ pub enum QuestionKind {
 }
 
 pub struct Question {
-    id: QuestionID,
-    kind: QuestionKind,
-    question: String,
+    pub id: QuestionID,
+    pub from: RoomIdentityID,
+    pub kind: QuestionKind,
+    pub question: String,
+    pub clarifications: Vec<String>,
 }
 
-pub struct Message {
-    from: Option<User>,
-    message: String,
+pub enum Role {
+    Admin,
+    Moderator,
+    Regular,
+    Banned,
 }
+
+pub struct PublicationRights<MaskID> {
+    pub role: Role,
+    pub explicit: HashMap<IdentityID<MaskID>, bool>,
+}
+
+pub type RoomPublicationRights = PublicationRights<MaskID>;
+pub type AnsweringPublicationRights = PublicationRights<AnswerID>;

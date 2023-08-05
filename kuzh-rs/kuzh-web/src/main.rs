@@ -1,10 +1,16 @@
+mod indexeddb;
 
 use futures::{SinkExt, StreamExt};
 use gloo_net::websocket::{futures::WebSocket, Message};
-use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::console::log_1;
+use web_sys::{
+    console::log_1, IdbDatabase, IdbObjectStoreParameters, IdbOpenDbRequest, IdbVersionChangeEvent,
+};
 use yew::prelude::*;
+
+// Use `wee_alloc` as the global allocator.
+#[global_allocator]
+static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 macro_rules! console_log {
     // Note that this is using the `log` function imported above during
@@ -57,31 +63,48 @@ fn App() -> Html {
     }
 }
 
-async fn migrate() {
-    use gluesql::*;
-    use gluesql::core::*;
-    use gluesql::core::ast::*;
-    use gluesql::core::ast_builder::*;
-    use gluesql::prelude::*;
-    use gluesql::core::store::*;
+async fn db() {
+    use wasm_bindgen::{prelude::*, JsCast};
+    use web_sys::Window;
+    let win: Window = web_sys::window().unwrap();
+    console_log!("window open");
+    let db = win.indexed_db().unwrap().unwrap();
+    db.delete_database("kuzh");
+    let upgrade = |event: IdbVersionChangeEvent| {
+        let db = event
+            .target()
+            .unwrap()
+            .unchecked_into::<IdbOpenDbRequest>()
+            .result()
+            .unwrap()
+            .unchecked_into::<IdbDatabase>();
+        let mut params = IdbObjectStoreParameters::new();
+        params.auto_increment(false);
+        params.key_path(Some(&JsValue::from("id")));
+        db.create_object_store_with_optional_parameters("room_events", &params)
+            .unwrap();
+        db.create_object_store_with_optional_parameters("room_state", &params)
+            .unwrap();
+    };
+    match indexeddb::open_db(db, "kuzh", 3, upgrade).await {
+        Err(indexeddb::IndexedDBOpenError::Blocked(_)) => console_log!("Blocked"),
+        Err(indexeddb::IndexedDBOpenError::Error(_)) => console_log!("Error"),
+        Err(indexeddb::IndexedDBOpenError::JsValueError(js)) => console_log!("JsError"),
+        Ok(indexeddb::IndexedDBOpened { database }) => {
+            let stores = database.object_store_names();
+            if stores.contains("blocks") {
+                console_log!("Contains blocks");
+            } else {
+                console_log!("Not Contains blocks");
+            }
+        }
+    }
 
-    let mut storage = gluesql_idb_storage::IdbStorage::new(Some(String::from("kuzh-idb-storage"))).await.unwrap();
-    let mut glue : Glue<IdbStorage> = Glue::new(storage);
-
-    console_log!("Commencé");
-    glue.execute_stmt_async(&begin().unwrap()).await.unwrap();
-    console_log!("Fini");
-
-    let actual = table("Foo")
-    .create_table()
-    .add_column("id INTEGER")
-    .add_column("name TEXT")
-    .execute(&mut glue)
-    .await;
+    console_log!("Finished");
 }
 
 pub fn main() {
-    spawn_local(migrate());
+    spawn_local(db());
     yew::Renderer::<App>::new().render();
 }
 

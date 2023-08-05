@@ -3,34 +3,22 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 use crate::answering::Answer;
-use crate::answering::AnsweringState;
 use crate::common::*;
 use crate::crypto::*;
-use crate::gate::*;
+use crate::newtypes::*;
 
 pub enum RoomAccessibility {
     OpenToAnyone,
     MembersOnly,
     PublicKeyProtected(PublicKey),
+    SecretKeyProtected(SecretKey),
 }
 
-pub struct ID {
-    dsa_public_key: PublicKey,
-    dh_public_key: PublicKey,
-}
-
-pub enum Role {
-    Room,
-    Admin,
-    Moderator,
-    User,
-    Banned,
-}
-
-pub struct UserInfo {
-    id: ID,
-    nonce: Nonce,
-    name: String,
+pub struct IdentityInfo {
+    pub crypto_id: CryptoID,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub nonce: Nonce,
 }
 
 pub enum Like {
@@ -39,65 +27,125 @@ pub enum Like {
 }
 
 pub struct QuestionInfo {
-    question: Question,
-    base_score: i16,
-    likes: HashMap<User, Like>,
+    pub question: Question,
+    pub base_score: i64,
+    pub likes: HashMap<UserID, Like>,
+}
+
+pub enum QuestionPosition {
+    Before(QuestionID),
+    After(QuestionID),
+    Top,
+    Bottom,
+}
+
+pub enum QuestionDeleteSpec {
+    All,
+    Before(QuestionID),
+    After(QuestionID),
+    Questions(Vec<QuestionID>),
 }
 
 pub enum RoomEvent {
-    // Server Events
-    NewUser(ID),
-    Connected(User),
-    Disconnected(User),
+    // Identities
+    RoomCreation {
+        room: CryptoID,
+        first_admin: CryptoID,
+    },
+    NewUser(CryptoID),
+    NewMask(CryptoID),
+    Connected(UserID),
+    Disconnected(UserID),
+    ChangeRole {
+        user: UserID,
+        role: Role,
+    },
+    ChangeIdentityInfo {
+        identity: RoomIdentityID,
+        name: Option<String>,
+        description: Option<String>,
+    },
+
+    // Room
+    RoomAccessibility(RoomAccessibility),
+    MaxConnectedUsers(u16),
+
+    // Questions
     Question {
         kind: QuestionKind,
         question: String,
     },
-    AnonMessage {
-        rnd: u64,
-        msg: String,
+    ClarifyQuestion {
+        id: QuestionID,
+        clarification: String,
     },
+    LikeQuestion {
+        id: QuestionID,
+        like: Option<Like>,
+    },
+    OrderQuestion {
+        question: QuestionID,
+        position: QuestionPosition,
+    },
+    DeleteQuestions(QuestionDeleteSpec),
+
+    // Question Rights
+    MaxQuestions(u8),
+    QuestionRights(Role),
+    ExplicitQuestionRight {
+        identity: RoomIdentityID,
+        allow: Option<bool>,
+    },
+
+    // Answering
+    OpenAnswering,
+    CloseAnswering,
     FinishedAnswering,
+
     CheaterWrongCommitment {
         context: Box<[u8]>,
-        user: User,
+        user: UserID,
         encryption: (PublicKey, Sig),
         secret: (SecretKey, Sig),
     },
     CheaterTwoAnswers {
         context: Box<[u8]>,
-        user: User,
+        user: UserID,
         answer_1: Answer,
         answer_2: Answer,
     },
 
-    // User events
-    UpdateNonce(Nonce),
-    ChangeUserName(String), // You can only change your name
+    // Messages
     Message(String),
-    LikeQuestion {
-        id: QuestionID,
-        like: Option<Like>,
+    MessageRights(Role),
+    ExplicitMessageRight {
+        identity: RoomIdentityID,
+        allow: Option<bool>,
     },
+}
 
-    // Admin/Moderator Events
-    ChangeRoomName(String),
-    ChangeRoomAccessibility(RoomAccessibility),
-    ChangeRole {
-        id: User,
-        role: Role,
-    },
-    DeleteQuestion(QuestionID),
-    TopQuestion(QuestionID),
-    OpenAnswering,
-    CloseAnswering,
+pub struct IdentitiesState<A> {
+    pub identities: Vec<IdentityInfo>,
+    pub next_id: Option<A>,
+}
+
+pub struct QuestionsState {
+    pub limit: u8,
+    pub next_id: Option<QuestionID>,
+    pub questions: BinaryHeap<QuestionInfo>,
+    pub rights: RoomPublicationRights,
 }
 
 pub struct RoomState {
-    users: Vec<UserInfo>,
-    connected: HashSet<User>,
-    questions: BinaryHeap<QuestionInfo>,
-    next_question_id: QuestionID,
-    messages: Vec<Message>,
-    answering: Option<AnsweringState>,
+    pub block_height: u64,
+    pub block_hash: Hashed,
+    pub room: IdentityInfo,
+    pub users: IdentitiesState<UserID>,
+    pub masks: IdentitiesState<MaskID>,
+    pub room_accessibility: RoomAccessibility,
+    pub max_connected_users: u16,
+    pub connected: HashSet<UserID>,
+    pub questions_state: QuestionsState,
+    pub message_rights: RoomPublicationRights,
+    pub answering: Option<QuestionID>,
 }

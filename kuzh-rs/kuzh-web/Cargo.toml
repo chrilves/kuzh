@@ -11,24 +11,37 @@ target = "wasm32-unknown-unknown"
 
 [dependencies]
 wasm-bindgen = "*"
-#gloo-net = { version = "*", features = ["websocket"] }
+gloo-net = { version = "*", features = ["websocket"] }
 #gloo-console = "*"
 wasm-bindgen-futures = "*"
-#futures = "*"
-#yew = { version = "*", features = ["csr"] }
-#web-sys = {version = "*", features = ["console"]}
-#kuzh-common = {path = "../kuzh-common"}
+futures = "*"
+yew = { version = "*", features = ["csr"] }
+js-sys = {version = "*"}
+web-sys = {version = "*", features = [
+  "console",
+  "DomStringList",
+  "IdbDatabase",
+  "IdbFactory",
+  "IdbFileRequest",
+  "IdbLocaleAwareKeyRange",
+  "IdbMutableFile",
+  "IdbObjectStore",
+  "IdbObjectStoreParameters",
+  "IdbOpenDbRequest",
+  "IdbRequest",
+  "IdbVersionChangeEvent",
+  "Window"
+]}
+kuzh-common = {path = "../kuzh-common"}
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
 # code size when deploying.
-#console_error_panic_hook = { version = "0.1.6", optional = true }
-#base64 = {version = "0.21.2", features = ["std"]}
-#getrandom = {version = "*", features = ["js"]}
-#gluesql = {version = "0.14.0", default-features = false, features = ["idb-storage"]}
-gluesql-core = {path = "/home/tof/sources/gluesql/core", default-features = false}
-gluesql-idb-storage = { path = "/home/tof/sources/gluesql/storages/idb-storage", default-features = false }
-#wee_alloc = { version = "0.4.2", optional = true }
+console_error_panic_hook = { version = "0.1.6", optional = true }
+base64 = {version = "0.21.2", features = ["std"]}
+getrandom = {version = "*", features = ["js"]}
+wee_alloc = { version = "0.4.2", optional = false }
+thiserror = "*"
 
 [dev-dependencies]
 wasm-bindgen-test = "*"
@@ -40,8 +53,4 @@ lto = true
 codegen-units = 1
 
 [features]
-#default = ["console_error_panic_hook"]
-
-[lib]
-crate-type = ["cdylib", "rlib"]
-path = "src/lib.rs"
+default = ["console_error_panic_hook"]

@@ -11,3 +11,4 @@ curve25519-dalek = {version = "4.0.0-rc.2", features = ["rand_core"] }
 subtle = "2.5.0"
 rand = "0.8.5"
 thiserror = "1.0.40"
+nonempty = "0.8.1"

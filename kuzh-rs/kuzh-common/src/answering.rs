@@ -2,45 +2,63 @@ use std::collections::{HashMap, HashSet};
 
 use crate::crypto::*;
 use crate::{
-    common::{Message, Question},
-    gate::*,
+    common::{Question, Role},
+    newtypes::*,
 };
 
+pub const ANSWER_SIZE: usize = 300;
+
 pub struct Answer {
-    encryption_key: PublicKey,
-    answer: [u8; 300],
-    signature: RingSig,
+    pub sign_key: PublicKey,
+    pub encrypt_key: PublicKey,
+    pub answer: [u8; ANSWER_SIZE],
+    pub ring_sig: RingSig,
+    pub sig: Sig,
 }
 
-pub enum AnswerEvent {
-    // Server Event
-    PublishAnswer(Answer),
-    AnonMessage { rnd: u64, msg: String },
-    LostUser(User),
+pub enum AnsweringIdentityID {
+    Room,
+    User(UserID),
+    Mask(AnswerID),
+}
 
-    // User Events
-    Leave, // Only you can leave
-    Ready(PublicKey),
-    SecretShare(SecretKey),
-    Message(String), // Users must be present, admins/modos can always
+pub enum AnsweringEvent {
+    // User Management
+    LostUser(UserID),
+    Leave,
+    Kick {
+        user: UserID,
+    },
 
-    // Admin/Moderator Events
-    Kick { user: User },
+    // Admin Management
     HurryUp,
     Collect,
+
+    // Anonymous Protocol
+    Ready(PublicKey),
+    Answer(Answer),
+    SecretShare(SecretKey),
+
+    // Messages
+    Message(String),
+    MessageRights(Role),
+    ExplicitMessageRight {
+        identity: AnsweringIdentityID,
+        allow: Option<bool>,
+    },
 }
 
 pub struct UserOpenState {
-    encryption_share: Option<PublicKey>,
+    pub encryption_share: Option<PublicKey>,
 }
 
 pub struct UserAnswersState {
-    encryption_share: PublicKey,
+    pub encryption_share: PublicKey,
 }
 
 pub struct UserDecryptState {
-    encryption_share: PublicKey,
-    secret_share: Option<SecretKey>,
+    pub encryption_share: PublicKey,
+    pub secret_share: Option<SecretKey>,
 }
 
 pub enum ClearAnswers {
@@ -50,29 +68,28 @@ pub enum ClearAnswers {
 
 pub enum AnsweringMembers {
     Open {
-        members: HashMap<User, UserOpenState>,
-        gone: HashSet<User>,
+        members: HashMap<UserID, UserOpenState>,
+        gone: HashSet<UserID>,
         encryption_key: PublicKey,
     },
     Answers {
-        members: HashMap<User, UserAnswersState>,
+        members: HashMap<UserID, UserAnswersState>,
         encryption_key: PublicKey,
         answers: Vec<Answer>,
     },
     Decrypt {
-        members: HashMap<User, UserDecryptState>,
+        members: HashMap<UserID, UserDecryptState>,
         encryption_key: PublicKey,
         secret_key: SecretKey,
         answers: Vec<Answer>,
     },
     Debate {
-        members: HashSet<User>,
+        members: HashSet<UserID>,
         answers: ClearAnswers,
     },
 }
 
 pub struct AnsweringState {
-    question: Question,
-    members: AnsweringMembers,
-    messages: Vec<Message>,
+    pub question: Question,
+    pub members: AnsweringMembers,
 }
