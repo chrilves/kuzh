@@ -7,6 +7,7 @@ pub enum IdentityID<MaskID> {
     Mask(MaskID),
 }
 
+pub type NodeIdentity = IdentityID<!>;
 pub type RoomIdentityID = IdentityID<MaskID>;
 pub type AnsweringIdentityID = IdentityID<AnswerID>;
 

@@ -106,7 +106,28 @@ pub mod nonce {
     }
 }
 
+pub mod block_height {
+    use std::marker::PhantomData;
+
+    use super::*;
+
+    #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
+    #[repr(transparent)]
+    pub struct BlockHeight<Event> {
+        height: u64,
+        _marker: PhantomData<Event>
+    }
+
+    impl<Event> ConstantTimeEq for BlockHeight<Event> {
+        #[inline]
+        fn ct_eq(&self, other: &Self) -> subtle::Choice {
+            self.height.ct_eq(&other.height)
+        }
+    }
+}
+
 pub use answer_id::*;
+pub use block_height::*;
 pub use hashed::*;
 pub use mask_id::*;
 pub use message_id::*;

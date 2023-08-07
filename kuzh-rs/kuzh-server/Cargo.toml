@@ -17,6 +17,7 @@ base64 = {version = "0.21.2", features = ["std"]}
 tokio-postgres = "0.7.8"
 refinery = { version = "0.8.10", features = ["tokio-postgres"] }
 clap = { version = "4.3.19", features = ["derive"] }
+deadpool-postgres = "0.10.5"
 
 [dev-dependencies]
 assert2 = "*"

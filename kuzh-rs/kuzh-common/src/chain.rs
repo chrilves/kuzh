@@ -1,34 +1,30 @@
 use crate::{
     answering::AnsweringEvent,
     crypto::Signed,
-    newtypes::{Hashed, Nonce, UserID},
+    newtypes::{BlockHeight, Hashed, Nonce, QuestionID, UserID},
     room::RoomEvent,
 };
 
-pub struct Transaction<Event> {
-    pub chain: u64,
+pub struct RawTransaction<ChainID, Event> {
+    pub chain: ChainID,
     pub from: UserID,
     pub events: Vec<Event>,
     pub nonce: Nonce,
 }
 
-pub type SignedTransaction<Event> = Signed<Transaction<Event>>;
+pub type Transaction<ChainID, Event> = Signed<RawTransaction<ChainID, Event>>;
 
-pub struct Block<Event> {
-    pub chain: u64,
-    pub height: u64,
+pub struct RawBlock<ChainID, Event> {
+    pub chain: ChainID,
+    pub height: BlockHeight<Event>,
     pub parent_hash: Hashed,
-    pub transactions: Vec<Transaction<Event>>,
+    pub transactions: Vec<Transaction<ChainID, Event>>,
 }
 
-pub type SignedBlock<Event> = Signed<Block<Event>>;
+pub type Block<ChainID, Event> = Signed<RawBlock<ChainID, Event>>;
 
-pub enum AnyTransaction {
-    Room(SignedTransaction<RoomEvent>),
-    Answering(SignedTransaction<AnsweringEvent>),
-}
+pub type RoomTransaction = Transaction<(), RoomEvent>;
+pub type RoomBlock = Block<(), RoomEvent>;
 
-pub enum AnyBlock {
-    Room(SignedBlock<RoomEvent>),
-    Answering(SignedBlock<AnsweringEvent>),
-}
+pub type AnsweringTransaction = Transaction<QuestionID, AnsweringEvent>;
+pub type AnsweringBlock = Block<QuestionID, AnsweringEvent>;

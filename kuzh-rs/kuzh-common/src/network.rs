@@ -1,21 +1,23 @@
 use crate::{
-    chain::{AnyBlock, AnyTransaction},
+    chain::{RoomBlock, AnsweringBlock, RoomTransaction, AnsweringTransaction},
     crypto::EncryptedMessageData,
-    newtypes::UserID,
+    newtypes::UserID, common::IdentityID,
 };
 
 pub struct EncryptedMessage {
-    pub from: UserID,
+    pub from: IdentityID<()>,
     pub to: UserID,
     pub data: EncryptedMessageData,
 }
 
 pub enum ClientMesage {
-    Transaction(AnyTransaction),
+    RoomTransaction(RoomTransaction),
+    AnsweringTransaction(AnsweringTransaction),
     NetworkMessage(Box<EncryptedMessage>),
 }
 
 pub enum ServerMesage {
-    Block(AnyBlock),
+    RoomBlock(RoomBlock),
+    AnsweringBlock(AnsweringBlock),
     NetworkMessage(Box<EncryptedMessage>),
 }
