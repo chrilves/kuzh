@@ -3,7 +3,7 @@ use subtle::ConstantTimeEq;
 pub mod user_id {
     use super::*;
 
-    #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Hash, Ord)]
+    #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash, Ord)]
     #[repr(transparent)]
     pub struct UserID(u16);
 
@@ -18,7 +18,7 @@ pub mod user_id {
 pub mod mask_id {
     use super::*;
 
-    #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Hash, Ord)]
+    #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash, Ord)]
     #[repr(transparent)]
     pub struct MaskID(u32);
 
@@ -33,7 +33,7 @@ pub mod mask_id {
 pub mod question_id {
     use super::*;
 
-    #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
     #[repr(transparent)]
     pub struct QuestionID(u16);
 
@@ -115,7 +115,7 @@ pub mod block_height {
     #[repr(transparent)]
     pub struct BlockHeight<Event> {
         height: u64,
-        _marker: PhantomData<Event>
+        _marker: PhantomData<Event>,
     }
 
     impl<Event> ConstantTimeEq for BlockHeight<Event> {

@@ -1,6 +1,7 @@
 use crate::newtypes::*;
 use std::collections::HashMap;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IdentityID<MaskID> {
     RoomID,
     User(UserID),
@@ -11,11 +12,14 @@ pub type NodeIdentity = IdentityID<!>;
 pub type RoomIdentityID = IdentityID<MaskID>;
 pub type AnsweringIdentityID = IdentityID<AnswerID>;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum QuestionKind {
-    Open,
     Closed,
+    Open,
+    Poll(Vec<String>),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Question {
     pub id: QuestionID,
     pub from: RoomIdentityID,

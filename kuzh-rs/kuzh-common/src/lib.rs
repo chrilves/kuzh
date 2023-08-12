@@ -2,7 +2,6 @@
 #![feature(return_position_impl_trait_in_trait)]
 #![feature(never_type)]
 
-
 pub mod answering;
 pub mod chain;
 pub mod common;

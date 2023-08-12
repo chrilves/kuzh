@@ -21,9 +21,15 @@ pub enum CryptoError {
 pub mod public_key {
     use super::*;
 
-    #[derive(Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     #[repr(transparent)]
     pub struct PublicKey(pub(crate) RistrettoPoint);
+
+    impl std::hash::Hash for PublicKey {
+        fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+            self.0.compress().hash(state);
+        }
+    }
 
     impl PublicKey {
         #[inline]
@@ -51,7 +57,7 @@ pub mod secret_key {
     use std::ops::Mul;
 
     use super::*;
-    #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     #[repr(transparent)]
     pub struct SecretKey(pub(crate) Scalar);
 
@@ -87,7 +93,7 @@ pub mod secret_key {
 pub mod sig {
     use super::*;
 
-    #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
     #[repr(transparent)]
     pub struct Sig([u8; 64]);
 
@@ -102,7 +108,7 @@ pub mod sig {
 pub mod ring_sig {
     use super::*;
 
-    #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
     #[repr(transparent)]
     pub struct RingSig {}
 

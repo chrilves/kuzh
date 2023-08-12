@@ -1,7 +1,8 @@
 use crate::{
-    chain::{RoomBlock, AnsweringBlock, RoomTransaction, AnsweringTransaction},
+    chain::{AnsweringBlock, AnsweringTransaction, RoomBlock, RoomTransaction},
+    common::IdentityID,
     crypto::EncryptedMessageData,
-    newtypes::UserID, common::IdentityID,
+    newtypes::UserID,
 };
 
 pub struct EncryptedMessage {
