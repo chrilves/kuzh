@@ -3,6 +3,7 @@ use crate::{
     newtypes::Nonce,
 };
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RoomAccessibility {
     OpenToAnyone,
     MembersOnly,
@@ -10,17 +11,20 @@ pub enum RoomAccessibility {
     SecretKeyProtected(Box<SecretKey>),
 }
 
-pub struct IdentityInfo {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct IdentityInfo<R> {
     pub crypto_id: CryptoID,
     pub name: Option<String>,
     pub description: Option<String>,
     pub nonce: Nonce,
+    pub role: R,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Like {
     Like,
     Dislike,
 }
 
 pub mod events;
-pub mod states;
+pub mod state;

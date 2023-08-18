@@ -7,6 +7,25 @@ pub mod user_id {
     #[repr(transparent)]
     pub struct UserID(u16);
 
+    impl UserID {
+        pub const FIRST: UserID = UserID(0);
+
+        pub fn next(&self) -> Option<UserID> {
+            if self.0 < u16::MAX {
+                Some(UserID(self.0 + 1))
+            } else {
+                None
+            }
+        }
+    }
+
+    impl From<UserID> for usize {
+        #[inline]
+        fn from(val: UserID) -> usize {
+            val.0 as usize
+        }
+    }
+
     impl ConstantTimeEq for UserID {
         #[inline]
         fn ct_eq(&self, other: &Self) -> subtle::Choice {
@@ -22,6 +41,25 @@ pub mod mask_id {
     #[repr(transparent)]
     pub struct MaskID(u32);
 
+    impl MaskID {
+        pub const FIRST: MaskID = MaskID(0);
+
+        pub fn next(&self) -> Option<MaskID> {
+            if self.0 < u32::MAX {
+                Some(MaskID(self.0 + 1))
+            } else {
+                None
+            }
+        }
+    }
+
+    impl From<MaskID> for usize {
+        #[inline]
+        fn from(val: MaskID) -> usize {
+            val.0 as usize
+        }
+    }
+
     impl ConstantTimeEq for MaskID {
         #[inline]
         fn ct_eq(&self, other: &Self) -> subtle::Choice {
@@ -33,9 +71,28 @@ pub mod mask_id {
 pub mod question_id {
     use super::*;
 
-    #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash, Ord)]
     #[repr(transparent)]
     pub struct QuestionID(u16);
+
+    impl QuestionID {
+        pub const FIRST: QuestionID = QuestionID(0);
+
+        pub fn next(&self) -> Option<QuestionID> {
+            if self.0 < u16::MAX {
+                Some(QuestionID(self.0 + 1))
+            } else {
+                None
+            }
+        }
+    }
+
+    impl From<QuestionID> for usize {
+        #[inline]
+        fn from(val: QuestionID) -> usize {
+            val.0 as usize
+        }
+    }
 
     impl ConstantTimeEq for QuestionID {
         #[inline]
@@ -94,9 +151,27 @@ pub mod hashed {
 pub mod nonce {
     use super::*;
 
-    #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
     #[repr(transparent)]
     pub struct Nonce(u64);
+
+    impl Nonce {
+        #[inline]
+        pub fn new() -> Nonce {
+            Nonce(0)
+        }
+
+        #[inline]
+        pub fn next(self) -> Nonce {
+            Nonce(self.0 + 1)
+        }
+    }
+
+    impl Default for Nonce {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
 
     impl ConstantTimeEq for Nonce {
         #[inline]

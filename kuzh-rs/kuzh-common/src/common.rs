@@ -1,7 +1,7 @@
 use crate::newtypes::*;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IdentityID<MaskID> {
     RoomID,
     User(UserID),
@@ -14,8 +14,8 @@ pub type AnsweringIdentityID = IdentityID<AnswerID>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum QuestionKind {
-    Closed,
     Open,
+    Closed,
     Poll(Vec<String>),
 }
 
@@ -28,11 +28,34 @@ pub struct Question {
     pub clarifications: Vec<String>,
 }
 
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub enum Role {
     Admin,
     Moderator,
     Regular,
     Banned,
+}
+
+impl PartialOrd for Role {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Role {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        fn value(r: Role) -> u8 {
+            use Role::*;
+            match r {
+                Admin => 0,
+                Moderator => 1,
+                Regular => 2,
+                Banned => 3,
+            }
+        }
+
+        value(*self).cmp(&value(*other))
+    }
 }
 
 pub struct PublicationRights<MaskID> {

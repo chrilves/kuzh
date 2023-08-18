@@ -21,27 +21,21 @@ pub enum CryptoError {
 pub mod public_key {
     use super::*;
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     #[repr(transparent)]
-    pub struct PublicKey(pub(crate) RistrettoPoint);
-
-    impl std::hash::Hash for PublicKey {
-        fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-            self.0.compress().hash(state);
-        }
-    }
+    pub struct PublicKey(pub(crate) CompressedRistretto);
 
     impl PublicKey {
         #[inline]
         pub fn to_bytes(&self) -> Bin {
-            self.0.compress().to_bytes()
+            self.0.to_bytes()
         }
     }
 
     impl From<&SecretKey> for PublicKey {
         #[inline]
         fn from(value: &SecretKey) -> Self {
-            PublicKey(&value.0 * RISTRETTO_BASEPOINT_TABLE)
+            PublicKey((&value.0 * RISTRETTO_BASEPOINT_TABLE).compress())
         }
     }
 
@@ -82,10 +76,10 @@ pub mod secret_key {
     }
 
     impl<'a, 'b> Mul<&'b PublicKey> for &'a SecretKey {
-        type Output = PublicKey;
+        type Output = Option<PublicKey>;
         #[inline]
-        fn mul(self, _rhs: &'b PublicKey) -> PublicKey {
-            PublicKey(self.0 * _rhs.0)
+        fn mul(self, _rhs: &'b PublicKey) -> Option<PublicKey> {
+            Some(PublicKey((self.0 * _rhs.0.decompress()?).compress()))
         }
     }
 }

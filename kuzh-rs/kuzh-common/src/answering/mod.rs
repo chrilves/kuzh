@@ -17,4 +17,4 @@ pub struct Answer {
 }
 
 pub mod events;
-pub mod states;
+pub mod state;

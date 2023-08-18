@@ -65,9 +65,9 @@ type CancelAsnweringStateChange = Box<dyn FnMut(&mut AnsweringState)>;
 impl AnsweringState {
     pub fn event(
         &mut self,
-        from: AnsweringIdentityID,
-        event: AnsweringEvent,
+        _from: AnsweringIdentityID,
+        _event: AnsweringEvent,
     ) -> Result<CancelAsnweringStateChange, String> {
-        Ok(Box::new(|state| ()))
+        Ok(Box::new(|_state| ()))
     }
 }

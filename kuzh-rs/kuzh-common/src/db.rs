@@ -2,11 +2,11 @@ use futures_util::Stream;
 
 use crate::{
     answering::events::AnsweringEvent,
-    answering::states::AnsweringState,
+    answering::state::AnsweringState,
     chain::{AnsweringBlock, RoomBlock},
     newtypes::BlockHeight,
     room::events::RoomEvent,
-    room::states::RoomState,
+    room::state::RoomState,
 };
 
 trait CommonDB {

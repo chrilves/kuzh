@@ -20,32 +20,28 @@ pub enum RoomEvent {
         user: UserID,
         role: Role,
     },
-    ChangeIdentityInfo {
-        identity: RoomIdentityID,
-        name: Option<String>,
-        description: Option<String>,
-    },
+    ChangeIdentityInfo(ChangeIdentityInfo),
 
     // Room
-    RoomAccessibility(RoomAccessibility),
+    ChangeRoomAccessibility(RoomAccessibility),
     MaxConnectedUsers(u16),
 
     // Questions
-    Question {
+    NewQuestion {
         kind: QuestionKind,
         question: String,
     },
     ClarifyQuestion {
-        id: QuestionID,
+        question: QuestionID,
         clarification: String,
     },
     LikeQuestion {
-        id: QuestionID,
+        question: QuestionID,
         like: Option<Like>,
     },
-    OrderQuestion {
+    ChangeQuestionPriority {
         question: QuestionID,
-        position: QuestionPosition,
+        priority: QuestionPriority,
     },
     DeleteQuestions(QuestionDeleteSpec),
 
@@ -84,16 +80,47 @@ pub enum RoomEvent {
     },
 }
 
-pub enum QuestionPosition {
-    Before(QuestionID),
-    After(QuestionID),
-    Top,
+#[derive(Debug)]
+pub struct ChangeIdentityInfo {
+    pub identity: RoomIdentityID,
+    pub name: Option<String>,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum QuestionPriority {
     Bottom,
+    Low,
+    Standard,
+    Hight,
+    Top,
+}
+
+impl PartialOrd for QuestionPriority {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for QuestionPriority {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        fn to_u8(p: &QuestionPriority) -> u8 {
+            use QuestionPriority::*;
+            match p {
+                Bottom => 0,
+                Low => 1,
+                Standard => 2,
+                Hight => 3,
+                Top => 4,
+            }
+        }
+
+        to_u8(self).cmp(&to_u8(other))
+    }
 }
 
 pub enum QuestionDeleteSpec {
-    All,
-    Before(QuestionID),
-    After(QuestionID),
-    Questions(Vec<QuestionID>),
+    Delete(Vec<QuestionID>),
+    Keep(Vec<QuestionID>),
+    DeletePriority(QuestionPriority),
 }
