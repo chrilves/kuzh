@@ -57,28 +57,69 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<(), IoError> {
-    let args = Args::parse();
+    //let args = Args::parse();
 
-    let kuzh_db = db::connect(
-        &args.db_host,
-        args.db_port,
-        &args.db_name,
-        &args.db_user,
-        &args.db_password,
-    )
-    .await
-    .unwrap();
+    let mut pks = Vec::new();
+    let mut sks = Vec::new();
 
-    // Create the event loop and TCP listener we'll accept connections on.
-    println!("Listening on {}:{}", &args.host, args.port);
-    let listener = TcpListener::bind((args.host, args.port)).await.unwrap();
-
-    // Let's spawn the handling of each connection in a separate task.
-    while let Ok((stream, addr)) = listener.accept().await {
-        tokio::spawn(handle_connection(stream, addr));
+    for j in 0..20000 {
+        let s = SecretKey::random();
+        sks.push(s);
+        pks.push(s.public_key());
     }
 
+    let sa = SecretKey::random();
+    let pa = sa.public_key();
+
+    let tag1 = b"tag1";
+    let tag2 = b"tag2";
+
+    use RingSig;
+
+    let m1 = b"message1";
+    let m2 = b"message2";
+
+    let i = 58;
+    let j: usize = 7;
+
+    let si11 = RingSig::sign(tag1, &pks, m1, sks[i], i).unwrap();
+    //let si12 = RingSig::sign(tag1, &pks, m2, sks[i], i).unwrap();
+    /*let si21 = RingSig::sign(tag2, &pks, m1, sks[i], i).unwrap();
+    let si22 = RingSig::sign(tag2, &pks, m2, sks[i], i).unwrap();
+    let sj11 = RingSig::sign(tag1, &pks, m1, sks[j], j).unwrap();*/
+    let sj12 = RingSig::sign(tag1, &pks, m2, sks[j], j).unwrap();
+    /*let sj21 = RingSig::sign(tag2, &pks, m1, sks[j], j).unwrap();
+    let sj22 = RingSig::sign(tag2, &pks, m2, sks[j], j).unwrap();*/
+    println!("verif 1: {:?}", si11.verify(tag1, &pks, m1));
+    println!("verif 2: {:?}", sj12.verify(tag1, &pks, m2));
+    println!(
+        "trace: {:?}",
+        RingSig::link(tag1, &pks, m1, &si11, m1, &sj12)
+    );
+
     Ok(())
+    /*
+        let kuzh_db = db::connect(
+            &args.db_host,
+            args.db_port,
+            &args.db_name,
+            &args.db_user,
+            &args.db_password,
+        )
+        .await
+        .unwrap();
+
+        // Create the event loop and TCP listener we'll accept connections on.
+        println!("Listening on {}:{}", &args.host, args.port);
+        let listener = TcpListener::bind((args.host, args.port)).await.unwrap();
+
+        // Let's spawn the handling of each connection in a separate task.
+        while let Ok((stream, addr)) = listener.accept().await {
+            tokio::spawn(handle_connection(stream, addr));
+        }
+
+        Ok(())
+    */
 }
 
 async fn handle_connection(raw_stream: TcpStream, addr: SocketAddr) {

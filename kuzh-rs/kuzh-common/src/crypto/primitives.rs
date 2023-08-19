@@ -30,6 +30,11 @@ pub mod public_key {
         pub fn to_bytes(&self) -> Bin {
             self.0.to_bytes()
         }
+
+        #[inline]
+        pub fn as_bytes(&self) -> &Bin {
+            self.0.as_bytes()
+        }
     }
 
     impl From<&SecretKey> for PublicKey {
@@ -65,6 +70,11 @@ pub mod secret_key {
         #[inline]
         pub fn to_bytes(&self) -> Bin {
             self.0.to_bytes()
+        }
+
+        #[inline]
+        pub fn public_key(&self) -> PublicKey {
+            PublicKey((&self.0 * RISTRETTO_BASEPOINT_TABLE).compress())
         }
     }
 
@@ -102,14 +112,255 @@ pub mod sig {
 pub mod ring_sig {
     use super::*;
 
-    #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
-    #[repr(transparent)]
-    pub struct RingSig {}
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct RingSig {
+        a1: CompressedRistretto,
+        c: Vec<Scalar>,
+        z: Vec<Scalar>,
+    }
 
-    impl ConstantTimeEq for RingSig {
-        #[inline]
-        fn ct_eq(&self, _other: &Self) -> subtle::Choice {
-            subtle::Choice::from(1)
+    #[derive(Debug)]
+    pub enum Link {
+        Independent,
+        SamePublicKey(usize),
+        SameMessage,
+    }
+
+    impl RingSig {
+        fn compute_h(tag: &[u8], public_keys: &[PublicKey]) -> RistrettoPoint {
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(b"h");
+            hasher.update(tag);
+            for key in public_keys {
+                hasher.update(&key.to_bytes());
+            }
+            let mut hash_tag = [0u8; 64];
+            hasher.finalize_xof().fill(&mut hash_tag);
+            RistrettoPoint::from_uniform_bytes(&hash_tag)
+        }
+
+        fn compute_a0(tag: &[u8], public_keys: &[PublicKey], message: &[u8]) -> RistrettoPoint {
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(b"a0");
+            hasher.update(tag);
+            for key in public_keys {
+                hasher.update(&key.to_bytes());
+            }
+            hasher.update(message);
+            let mut hash_tag = [0u8; 64];
+            hasher.finalize_xof().fill(&mut hash_tag);
+            RistrettoPoint::from_uniform_bytes(&hash_tag)
+        }
+
+        fn compute_c(
+            tag: &[u8],
+            public_keys: &[PublicKey],
+            big_a0: &RistrettoPoint,
+            big_a1: &RistrettoPoint,
+            a: &[RistrettoPoint],
+            b: &[RistrettoPoint],
+        ) -> Scalar {
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(b"c");
+            hasher.update(tag);
+            for key in public_keys {
+                hasher.update(&key.to_bytes());
+            }
+            hasher.update(&big_a0.compress().to_bytes());
+            hasher.update(&big_a1.compress().to_bytes());
+            for an in a {
+                hasher.update(an.compress().as_bytes());
+            }
+            for bn in b {
+                hasher.update(bn.compress().as_bytes());
+            }
+            Scalar::from_bytes_mod_order(*hasher.finalize().as_bytes())
+        }
+
+        pub fn sign(
+            tag: &[u8],
+            public_keys: &[PublicKey],
+            message: &[u8],
+            secret: SecretKey,
+            index: usize,
+        ) -> Result<RingSig, String> {
+            let nb_keys = public_keys.len();
+            if index >= nb_keys {
+                return Err(String::from("RingSig::sign: index bigger than keys"));
+            }
+            if secret.public_key() != public_keys[index] {
+                return Err(String::from(
+                    "RingSig::sign: the secret key does not match the public key",
+                ));
+            }
+            let h = Self::compute_h(tag, public_keys);
+            let sigma_i = secret.0 * h;
+            let big_a0 = Self::compute_a0(tag, public_keys, message);
+            let big_a1 = Scalar::from((index + 1) as u64).invert() * (sigma_i - big_a0);
+
+            let mut sigmas = Vec::new();
+            for j in 0..nb_keys {
+                sigmas.push(if j == index {
+                    sigma_i
+                } else {
+                    big_a0 + Scalar::from((j + 1) as u64) * big_a1
+                });
+            }
+
+            let mut a = Vec::new();
+            let mut b = Vec::new();
+            let mut c = Vec::new();
+            let mut z = Vec::new();
+            let mut other_c = Scalar::ZERO;
+            let wi = Scalar::random(&mut OsRng);
+            for j in 0..nb_keys {
+                if j != index {
+                    let zj = Scalar::random(&mut OsRng);
+                    let cj = Scalar::random(&mut OsRng);
+                    other_c += cj;
+                    c.push(cj);
+                    z.push(zj);
+                    a.push(
+                        &zj * RISTRETTO_BASEPOINT_TABLE
+                            + cj * public_keys[j].0.decompress().ok_or(format!(
+                                "RingSig::sign: invalid public_keys[{:?}]: {:?}",
+                                j, public_keys[j]
+                            ))?,
+                    );
+                    b.push(zj * h + cj * sigmas[j]);
+                } else {
+                    a.push(&wi * RISTRETTO_BASEPOINT_TABLE);
+                    b.push(wi * h);
+                    z.push(Scalar::ZERO);
+                    c.push(Scalar::ZERO);
+                }
+            }
+
+            let ci = Self::compute_c(tag, public_keys, &big_a0, &big_a1, &a, &b) - other_c;
+            z[index] = wi - (ci * secret.0);
+            c[index] = ci;
+
+            Ok(RingSig {
+                a1: big_a1.compress(),
+                c,
+                z,
+            })
+        }
+
+        pub fn verify(
+            &self,
+            tag: &[u8],
+            public_keys: &[PublicKey],
+            message: &[u8],
+        ) -> Result<bool, String> {
+            let nb_keys = public_keys.len();
+            if self.c.len() != nb_keys {
+                return Err(String::from("RingSig::verify: size of c do not match keys"));
+            }
+            if self.z.len() != nb_keys {
+                return Err(String::from("RingSig::verify: size of z do not match keys"));
+            }
+            let big_a1 = self
+                .a1
+                .decompress()
+                .ok_or(String::from("RingSig::verify: a1 decompression failed"))?;
+            let big_a0 = Self::compute_a0(tag, public_keys, message);
+            let h = Self::compute_h(tag, public_keys);
+
+            let mut a = Vec::new();
+            let mut b = Vec::new();
+            for j in 0..nb_keys {
+                a.push(
+                    &self.z[j] * RISTRETTO_BASEPOINT_TABLE
+                        + self.c[j]
+                            * public_keys[j].0.decompress().ok_or(format!(
+                                "RingSig::sign: invalid public_keys[{:?}]: {:?}",
+                                j, public_keys[j]
+                            ))?,
+                );
+                let sigma = big_a0 + Scalar::from((j + 1) as u64) * big_a1;
+                b.push(self.z[j] * h + self.c[j] * sigma);
+            }
+
+            Ok(Self::compute_c(tag, public_keys, &big_a0, &big_a1, &a, &b) == self.c.iter().sum())
+        }
+
+        pub fn link(
+            tag: &[u8],
+            public_keys: &[PublicKey],
+            message1: &[u8],
+            sig1: &RingSig,
+            message2: &[u8],
+            sig2: &RingSig,
+        ) -> Result<Link, String> {
+            let nb_keys = public_keys.len();
+            if nb_keys == 0 {
+                return Err(String::from("RingSig::trace: no public keys"));
+            }
+            if sig1.c.len() != nb_keys {
+                return Err(String::from(
+                    "RingSig::trace: size of sig1.c do not match keys",
+                ));
+            }
+            if sig1.z.len() != nb_keys {
+                return Err(String::from(
+                    "RingSig::trace: size of sig1.z do not match keys",
+                ));
+            }
+            if sig2.c.len() != nb_keys {
+                return Err(String::from(
+                    "RingSig::trace: size of sig2.c do not match keys",
+                ));
+            }
+            if sig2.z.len() != nb_keys {
+                return Err(String::from(
+                    "RingSig::trace: size of sig2.z do not match keys",
+                ));
+            }
+            if nb_keys == 1 {
+                return Ok(Link::SamePublicKey(0));
+            }
+            let big_a0_1 = Self::compute_a0(tag, public_keys, message1);
+            let big_a0_2 = Self::compute_a0(tag, public_keys, message2);
+
+            let big_a1_1 = sig1
+                .a1
+                .decompress()
+                .ok_or(String::from("RingSig::trace: sig1.a1 decompression failed"))?;
+            let big_a1_2 = sig2
+                .a1
+                .decompress()
+                .ok_or(String::from("RingSig::trace: sig2.a1 decompression failed"))?;
+
+            let mut seen_diff = false;
+            let mut nb_eq: usize = 0;
+            let mut last_eq: usize = 0;
+
+            for j in 0..nb_keys {
+                let sigma_1 = big_a0_1 + Scalar::from((j + 1) as u64) * big_a1_1;
+                let sigma_2 = big_a0_2 + Scalar::from((j + 1) as u64) * big_a1_2;
+
+                if sigma_1 == sigma_2 {
+                    nb_eq += 1;
+                    last_eq = j;
+                } else {
+                    seen_diff = true;
+                }
+
+                if seen_diff && nb_eq > 1 {
+                    return Ok(Link::Independent);
+                }
+            }
+
+            Ok(if seen_diff {
+                if nb_eq == 1 {
+                    Link::SamePublicKey(last_eq)
+                } else {
+                    Link::Independent
+                }
+            } else {
+                Link::SameMessage
+            })
         }
     }
 }

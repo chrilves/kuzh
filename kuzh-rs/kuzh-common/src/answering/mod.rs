@@ -7,7 +7,7 @@ use crate::{
 pub type AnsweringIdentityID = IdentityID<AnswerID>;
 pub const ANSWER_SIZE: usize = 300;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Answer {
     pub sign_key: PublicKey,
     pub encrypt_key: PublicKey,

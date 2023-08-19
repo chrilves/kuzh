@@ -1,14 +1,23 @@
 use std::collections::HashMap;
 
 use kuzh_common::{
-    answering::AnsweringState, chain::AnyTransaction, crypto::SecretKey, network::ClientMesage,
-    newtypes::UserID, room::RoomState,
+    answering::state::AnsweringState,
+    chain::{AnsweringTransaction, RoomTransaction},
+    crypto::SecretKey,
+    network::ClientMesage,
+    newtypes::UserID,
+    room::state::RoomState,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 struct UserDB {}
 
 impl UserDB {}
+
+pub enum AnyTransaction {
+    Room(RoomTransaction),
+    Answering(AnsweringTransaction),
+}
 
 struct RoomAgent {
     room_secret_key: SecretKey,
