@@ -1,4 +1,3 @@
-use crate::answering::Answer;
 use crate::common::*;
 use crate::crypto::*;
 use crate::newtypes::*;
@@ -58,6 +57,7 @@ pub enum RoomEvent {
     CloseAnswering,
     FinishedAnswering,
 
+    /*
     CheaterWrongCommitment {
         context: Box<[u8]>,
         user: UserID,
@@ -70,7 +70,7 @@ pub enum RoomEvent {
         answer_1: Box<Answer>,
         answer_2: Box<Answer>,
     },
-
+    */
     // Messages
     Message(String),
     MessageRights(Role),

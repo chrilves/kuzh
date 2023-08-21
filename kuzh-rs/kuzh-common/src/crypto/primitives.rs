@@ -269,11 +269,11 @@ pub mod ring_sig {
 
             let mut a = Vec::new();
             let mut b = Vec::new();
-            for j in 0..nb_keys {
+            for (j, pk) in public_keys.iter().enumerate() {
                 a.push(
                     &self.z[j] * RISTRETTO_BASEPOINT_TABLE
                         + self.c[j]
-                            * public_keys[j].0.decompress().ok_or(format!(
+                            * pk.0.decompress().ok_or(format!(
                                 "RingSig::sign: invalid public_keys[{:?}]: {:?}",
                                 j, public_keys[j]
                             ))?,

@@ -8,11 +8,22 @@ pub mod user_id {
     pub struct UserID(u16);
 
     impl UserID {
-        pub const FIRST: UserID = UserID(0);
+        pub const MIN: UserID = UserID(0);
+        pub const MAX: UserID = UserID(u16::MAX);
 
-        pub fn next(&self) -> Option<UserID> {
+        #[inline(always)]
+        pub const fn next(&self) -> Option<UserID> {
             if self.0 < u16::MAX {
                 Some(UserID(self.0 + 1))
+            } else {
+                None
+            }
+        }
+
+        #[inline(always)]
+        pub const fn previous(&self) -> Option<UserID> {
+            if self.0 > 0 {
+                Some(UserID(self.0 - 1))
             } else {
                 None
             }
@@ -42,11 +53,22 @@ pub mod mask_id {
     pub struct MaskID(u32);
 
     impl MaskID {
-        pub const FIRST: MaskID = MaskID(0);
+        pub const MIN: MaskID = MaskID(0);
+        pub const MAX: MaskID = MaskID(u32::MAX);
 
-        pub fn next(&self) -> Option<MaskID> {
+        #[inline(always)]
+        pub const fn next(&self) -> Option<MaskID> {
             if self.0 < u32::MAX {
                 Some(MaskID(self.0 + 1))
+            } else {
+                None
+            }
+        }
+
+        #[inline(always)]
+        pub const fn previous(&self) -> Option<MaskID> {
+            if self.0 > 0 {
+                Some(MaskID(self.0 - 1))
             } else {
                 None
             }
@@ -76,11 +98,22 @@ pub mod question_id {
     pub struct QuestionID(u16);
 
     impl QuestionID {
-        pub const FIRST: QuestionID = QuestionID(0);
+        pub const MIN: QuestionID = QuestionID(0);
+        pub const MAX: QuestionID = QuestionID(u16::MAX);
 
-        pub fn next(&self) -> Option<QuestionID> {
+        #[inline(always)]
+        pub const fn next(&self) -> Option<QuestionID> {
             if self.0 < u16::MAX {
                 Some(QuestionID(self.0 + 1))
+            } else {
+                None
+            }
+        }
+
+        #[inline(always)]
+        pub const fn previous(&self) -> Option<QuestionID> {
+            if self.0 > 0 {
+                Some(QuestionID(self.0 - 1))
             } else {
                 None
             }

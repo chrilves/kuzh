@@ -6,6 +6,7 @@ use crate::common::RoomPublicationRights;
 use crate::crypto::PublicKey;
 use crate::crypto::PublicKeyType;
 use crate::newtypes::QuestionID;
+use crate::room::events::QuestionDeleteSpec;
 use crate::room::events::QuestionPriority;
 
 use super::events::ChangeIdentityInfo;
@@ -87,8 +88,8 @@ pub struct QuestionsState {
 
 #[derive(Debug)]
 pub enum RoomStateCancel {
-    RemoveUser(UserID),
-    RemoveMask(MaskID),
+    RemoveNewUser,
+    RemoveNewMask,
     Connect(UserID),
     Disconnect(UserID),
     RestoreRole {
@@ -109,10 +110,20 @@ pub enum RoomStateCancel {
         question: QuestionID,
         priority: QuestionPriority,
     },
-
+    RestoreDeletedQuestions(Vec<QuestionInfo>),
     RestoreMaxQuestions(u8),
     RestoreQuestionRights(Role),
+    RestoreExplicitQuestionRights {
+        identity: RoomIdentityID,
+        allow: Option<bool>,
+    },
+    CancelOpenAnswering(QuestionInfo),
+    ReopenAnswering(QuestionID),
     RestoreMessageRights(Role),
+    RestoreExplicitMessageRights {
+        identity: RoomIdentityID,
+        allow: Option<bool>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -239,7 +250,7 @@ impl RoomState {
                             role: Role::Regular,
                         });
                         self.users.next_id = n.next();
-                        Ok(Some(RemoveUser(n)))
+                        Ok(Some(RemoveNewUser))
                     }
                     None => Err(MaxUserIDReached),
                 }
@@ -270,7 +281,7 @@ impl RoomState {
                             role: (),
                         });
                         self.masks.next_id = n.next();
-                        Ok(Some(RemoveMask(n)))
+                        Ok(Some(RemoveNewMask))
                     }
                     None => Err(MaxMaskIDReached),
                 }
@@ -285,8 +296,12 @@ impl RoomState {
                 if self.connected.contains(&id) {
                     return Err(AlreadyConnected);
                 }
-                self.connected.insert(id);
-                Ok(Some(Disconnect(id)))
+                Ok(if self.connected.contains(&id) {
+                    None
+                } else {
+                    self.connected.insert(id);
+                    Some(Disconnect(id))
+                })
             }
             Disconnected(id) => {
                 if from != RoomIdentityID::RoomID {
@@ -298,8 +313,12 @@ impl RoomState {
                 if !self.connected.contains(&id) {
                     return Err(NotConnected);
                 }
-                self.connected.remove(&id);
-                Ok(Some(Connect(id)))
+                Ok(if self.connected.contains(&id) {
+                    self.connected.remove(&id);
+                    Some(Connect(id))
+                } else {
+                    None
+                })
             }
             ChangeRole { user, role } => {
                 use IdentityID::*;
@@ -355,7 +374,7 @@ impl RoomState {
                     if id_info.name.is_some() {
                         std::mem::swap(&mut id_info.name, &mut i.name);
                     }
-                    if id_info.name.is_some() {
+                    if id_info.description.is_some() {
                         std::mem::swap(&mut id_info.description, &mut i.description);
                     }
 
@@ -470,7 +489,52 @@ impl RoomState {
                 Ok(Some(RestoreQuestionPriority { question, priority }))
             }
             DeleteQuestions(spec) => {
-                todo! {}
+                self.ensure_admin_or_moderator(from)?;
+
+                let mut deleted = Vec::new();
+
+                let check_exist = |qs: &[QuestionID]| {
+                    if qs
+                        .iter()
+                        .all(|id| self.questions_state.questions.contains_key(id))
+                    {
+                        Ok(())
+                    } else {
+                        Err(NoSuchQuestion)
+                    }
+                };
+
+                use QuestionDeleteSpec::*;
+                let to_delete = match spec {
+                    Delete(qs) => {
+                        check_exist(&qs)?;
+                        qs
+                    }
+                    Keep(qs) => {
+                        check_exist(&qs)?;
+                        let qs_set: HashSet<QuestionID> = qs.into_iter().collect();
+                        self.questions_state
+                            .questions
+                            .keys()
+                            .filter(|k| qs_set.contains(k))
+                            .copied()
+                            .collect()
+                    }
+                    DeletePriority(p) => self
+                        .questions_state
+                        .questions
+                        .values()
+                        .filter(|v| v.priority < p)
+                        .map(|v| v.question.id)
+                        .collect(),
+                };
+
+                for id in &to_delete {
+                    if let Some(q) = self.questions_state.questions.remove(id) {
+                        deleted.push(q);
+                    }
+                }
+                Ok(Some(RestoreDeletedQuestions(deleted)))
             }
             // Question Rights
             MaxQuestions(mut m) => {
@@ -484,37 +548,68 @@ impl RoomState {
                 Ok(Some(RestoreQuestionRights(r)))
             }
             ExplicitQuestionRight { identity, allow } => {
-                todo! {}
+                self.ensure_admin_or_moderator(from)?;
+                if !self.valid_identity_id(identity) {
+                    return Err(NoSuchIdentity);
+                }
+                let old = self.questions_state.rights.explicit.remove(&identity);
+                if let Some(r) = allow {
+                    self.questions_state.rights.explicit.insert(identity, r);
+                }
+                Ok(Some(RestoreExplicitQuestionRights {
+                    identity,
+                    allow: old,
+                }))
             }
             // Answering
             OpenAnswering => {
-                todo! {}
+                self.ensure_admin_or_moderator(from)?;
+
+                let mut min: Option<&QuestionInfo> = None;
+
+                for v in self.questions_state.questions.values() {
+                    match min {
+                        Some(m) => {
+                            if *m < *v {
+                                min = Some(m)
+                            }
+                        }
+                        None => min = Some(v),
+                    }
+                }
+
+                Ok(min.map(|m| m.question.id).and_then(|id| {
+                    self.questions_state
+                        .questions
+                        .remove(&id)
+                        .map(CancelOpenAnswering)
+                }))
             }
             CloseAnswering => {
-                todo! {}
+                self.ensure_admin_or_moderator(from)?;
+
+                Ok(match self.answering {
+                    Some(old) => {
+                        self.answering = None;
+                        Some(ReopenAnswering(old))
+                    }
+                    None => None,
+                })
             }
             FinishedAnswering => {
-                todo! {}
-            }
-
-            CheaterWrongCommitment {
-                context,
-                user,
-                encryption,
-                secret,
-            } => {
-                todo! {}
-            }
-            CheaterTwoAnswers {
-                context,
-                user,
-                answer_1,
-                answer_2,
-            } => {
-                todo! {}
+                if !(from == IdentityID::RoomID) {
+                    return Err(Unauthorized);
+                }
+                Ok(match self.answering {
+                    Some(old) => {
+                        self.answering = None;
+                        Some(ReopenAnswering(old))
+                    }
+                    None => None,
+                })
             }
             // Messages
-            Message(m) => match self.message_rights.explicit.get(&from) {
+            Message(_) => match self.message_rights.explicit.get(&from) {
                 Some(true) => Ok(None),
                 Some(false) => Err(Unauthorized),
                 None => {
@@ -531,7 +626,183 @@ impl RoomState {
                 Ok(Some(RestoreMessageRights(r)))
             }
             ExplicitMessageRight { identity, allow } => {
-                todo! {}
+                self.ensure_admin_or_moderator(from)?;
+                if !self.valid_identity_id(identity) {
+                    return Err(NoSuchIdentity);
+                }
+                let old = self.message_rights.explicit.remove(&identity);
+                if let Some(r) = allow {
+                    self.message_rights.explicit.insert(identity, r);
+                }
+                Ok(Some(RestoreExplicitMessageRights {
+                    identity,
+                    allow: old,
+                }))
+            }
+        }
+    }
+
+    pub fn restore(&mut self, event: RoomStateCancel) -> Result<(), RoomError> {
+        use RoomStateCancel::*;
+        match event {
+            RemoveNewUser => {
+                if let Some(id) = self.users.identities.pop() {
+                    self.public_key_index.remove(&id.crypto_id.sign_key);
+                    self.public_key_index
+                        .remove(&id.crypto_id.encrypt_key.value);
+                }
+                self.users.next_id = match self.users.next_id {
+                    Some(n) => n.previous(),
+                    None => Some(UserID::MAX),
+                };
+                Ok(())
+            }
+            RemoveNewMask => {
+                if let Some(id) = self.masks.identities.pop() {
+                    self.public_key_index.remove(&id.crypto_id.sign_key);
+                    self.public_key_index
+                        .remove(&id.crypto_id.encrypt_key.value);
+                }
+                self.masks.next_id = match self.masks.next_id {
+                    Some(n) => n.previous(),
+                    None => Some(MaskID::MAX),
+                };
+                Ok(())
+            }
+            Connect(id) => {
+                self.connected.insert(id);
+                Ok(())
+            }
+            Disconnect(id) => {
+                self.connected.remove(&id);
+                Ok(())
+            }
+            RestoreRole { user, role } => {
+                self.users.identities[usize::from(user)].role = role;
+                Ok(())
+            }
+            RestoreIdentityInfo(info) => {
+                fn doit<A>(
+                    id_info: self::ChangeIdentityInfo,
+                    i: &mut IdentityInfo<A>,
+                ) -> Result<(), RoomError> {
+                    if id_info.name.is_some() {
+                        i.name = id_info.name;
+                    }
+                    if id_info.description.is_some() {
+                        i.description = id_info.description;
+                    }
+
+                    Ok(())
+                }
+
+                use IdentityID::*;
+                match info.identity {
+                    RoomID => doit(info, &mut self.room),
+                    User(id) => doit(info, &mut self.users.identities[usize::from(id)]),
+                    Mask(id) => doit(info, &mut self.masks.identities[usize::from(id)]),
+                }
+            }
+            RestoreRoomAccessibility(accessibility) => {
+                self.room_accessibility = accessibility;
+                Ok(())
+            }
+            RestoreMaxConnectedUsers(nb) => {
+                self.max_connected_users = nb;
+                Ok(())
+            }
+            RemoveNewQuestion => {
+                let id_opt = match self.questions_state.next_id {
+                    Some(n) => n.previous(),
+                    None => Some(QuestionID::MAX),
+                };
+                self.questions_state.next_id = id_opt;
+                if let Some(id) = id_opt {
+                    self.questions_state.questions.remove(&id);
+                }
+                Ok(())
+            }
+            RemoveQuestionClarification(id) => {
+                if let Some(info) = self.questions_state.questions.get_mut(&id) {
+                    info.question.clarifications.pop();
+                }
+                Ok(())
+            }
+            RestoreLikeQuestion {
+                from,
+                question,
+                like,
+            } => {
+                if let Some(info) = self.questions_state.questions.get_mut(&question) {
+                    match like {
+                        Some(l) => {
+                            info.likes.insert(from, l);
+                        }
+                        None => {
+                            info.likes.remove(&from);
+                        }
+                    }
+                }
+                Ok(())
+            }
+            RestoreQuestionPriority { question, priority } => {
+                if let Some(info) = self.questions_state.questions.get_mut(&question) {
+                    info.priority = priority;
+                }
+                Ok(())
+            }
+            RestoreDeletedQuestions(infos) => {
+                for info in infos {
+                    self.questions_state
+                        .questions
+                        .insert(info.question.id, info);
+                }
+                Ok(())
+            }
+            RestoreMaxQuestions(nb) => {
+                self.questions_state.max_questions = nb;
+                Ok(())
+            }
+            RestoreQuestionRights(role) => {
+                self.questions_state.rights.role = role;
+                Ok(())
+            }
+            RestoreExplicitQuestionRights { identity, allow } => {
+                match allow {
+                    Some(a) => {
+                        self.questions_state.rights.explicit.insert(identity, a);
+                    }
+                    None => {
+                        self.questions_state.rights.explicit.remove(&identity);
+                    }
+                }
+                Ok(())
+            }
+            CancelOpenAnswering(info) => {
+                self.answering = None;
+                self.questions_state
+                    .questions
+                    .insert(info.question.id, info);
+                Ok(())
+            }
+            ReopenAnswering(id) => {
+                self.answering = Some(id);
+                Ok(())
+            }
+            RestoreMessageRights(role) => {
+                self.message_rights.role = role;
+                Ok(())
+            }
+            RestoreExplicitMessageRights { identity, allow } => {
+                match allow {
+                    Some(a) => {
+                        self.message_rights.explicit.insert(identity, a);
+                    }
+                    None => {
+                        self.message_rights.explicit.remove(&identity);
+                    }
+                }
+                Ok(())
             }
         }
     }
