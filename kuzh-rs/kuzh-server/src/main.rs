@@ -82,20 +82,25 @@ async fn main() -> Result<(), IoError> {
     let i = 58;
     let j: usize = 7;
 
+    /*
     let si11 = RingSig::sign(tag1, &pks, m1, sks[i], i).unwrap();
-    //let si12 = RingSig::sign(tag1, &pks, m2, sks[i], i).unwrap();
-    /*let si21 = RingSig::sign(tag2, &pks, m1, sks[i], i).unwrap();
+    let si12 = RingSig::sign(tag1, &pks, m2, sks[i], i).unwrap();
+    let si21 = RingSig::sign(tag2, &pks, m1, sks[i], i).unwrap();
     let si22 = RingSig::sign(tag2, &pks, m2, sks[i], i).unwrap();
-    let sj11 = RingSig::sign(tag1, &pks, m1, sks[j], j).unwrap();*/
+    let sj11 = RingSig::sign(tag1, &pks, m1, sks[j], j).unwrap();
     let sj12 = RingSig::sign(tag1, &pks, m2, sks[j], j).unwrap();
-    /*let sj21 = RingSig::sign(tag2, &pks, m1, sks[j], j).unwrap();
-    let sj22 = RingSig::sign(tag2, &pks, m2, sks[j], j).unwrap();*/
+    let sj21 = RingSig::sign(tag2, &pks, m1, sks[j], j).unwrap();
+    let sj22 = RingSig::sign(tag2, &pks, m2, sks[j], j).unwrap();
     println!("verif 1: {:?}", si11.verify(tag1, &pks, m1));
     println!("verif 2: {:?}", sj12.verify(tag1, &pks, m2));
     println!(
         "trace: {:?}",
         RingSig::link(tag1, &pks, m1, &si11, m1, &sj12)
     );
+    */
+
+    let sig = sa.sign(m1);
+    println!("sig: {:?}", pa.verify(m2, sig));
 
     Ok(())
     /*

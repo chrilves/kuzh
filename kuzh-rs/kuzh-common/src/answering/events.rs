@@ -1,22 +1,29 @@
+use crate::common::Question;
 use crate::crypto::*;
 use crate::{common::Role, newtypes::*};
 
 use super::{Answer, AnsweringIdentityID};
 
 pub enum AnsweringEvent {
+    CreateAnswering(Question),
     // User Management
-    LostUser(UserID),
+    Join,
     Leave,
-    Kick {
-        user: UserID,
-    },
+    Connected(UserID),
+    Disconnected(UserID),
+    Kick(UserID),
+    Unkick(UserID),
 
     // Admin Management
-    HurryUp,
-    Collect,
+    ChangeJoinability(bool),
+    ChangeCollectability(bool),
+    Go,
 
     // Anonymous Protocol
-    Ready(Box<PublicKey>),
+    Ready {
+        public_key: Box<PublicKey>,
+        challenge: Box<Sig>
+    },
     Answer(Box<Answer>),
     SecretShare(Box<SecretKey>),
 

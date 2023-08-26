@@ -1,3 +1,4 @@
+use crate::chain::RoomTransaction;
 use crate::common::IdentityID;
 use crate::common::Question;
 use crate::common::Role;
@@ -8,6 +9,7 @@ use crate::crypto::PublicKeyType;
 use crate::newtypes::QuestionID;
 use crate::room::events::QuestionDeleteSpec;
 use crate::room::events::QuestionPriority;
+use crate::room::has_role::HasRole;
 
 use super::events::ChangeIdentityInfo;
 use super::events::RoomEvent;
@@ -140,6 +142,11 @@ pub enum RoomError {
     MaxQuestionsReached,
     MaxQuestionIDReached,
     NoSuchQuestion,
+    AnsweringAlreadyCreated,
+    AnsweringUnjoinable,
+    InvalidRole,
+    AlreadyJoined,
+    InvalidAnsweringPhase
 }
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
@@ -166,56 +173,30 @@ impl std::cmp::PartialOrd for RoleUser {
 }
 
 impl RoomState {
-    pub fn valid_user_id(&self, user_id: UserID) -> bool {
+    pub fn is_valid_user_id(&self, user_id: UserID) -> bool {
         match self.users.next_id {
             Some(n) => user_id < n,
             None => true,
         }
     }
 
-    pub fn valid_mask_id(&self, mask_id: MaskID) -> bool {
+    pub fn is_valid_mask_id(&self, mask_id: MaskID) -> bool {
         match self.masks.next_id {
             Some(n) => mask_id < n,
             None => true,
         }
     }
 
-    pub fn valid_identity_id(&self, id: RoomIdentityID) -> bool {
+    pub fn is_valid_identity_id(&self, id: RoomIdentityID) -> bool {
         use IdentityID::*;
         match id {
             RoomID => true,
-            User(id) => self.valid_user_id(id),
-            Mask(id) => self.valid_mask_id(id),
+            User(id) => self.is_valid_user_id(id),
+            Mask(id) => self.is_valid_mask_id(id),
         }
     }
 
-    pub fn role(&self, id: UserID) -> Result<Role, RoomError> {
-        match self.users.identities.get::<usize>(id.into()) {
-            Some(u) => Ok(u.role),
-            None => Err(RoomError::NoSuchUser),
-        }
-    }
-
-    pub fn identity_role(&self, id: RoomIdentityID) -> Result<Role, RoomError> {
-        use IdentityID::*;
-        use Role::*;
-        match id {
-            RoomID => Ok(Admin),
-            User(uid) => self.role(uid),
-            Mask(_) => Ok(Regular),
-        }
-    }
-
-    #[inline]
-    pub fn ensure_admin_or_moderator(&self, from: RoomIdentityID) -> Result<(), RoomError> {
-        use Role::*;
-        match self.identity_role(from)? {
-            Admin | Moderator => Ok(()),
-            _ => Err(RoomError::Unauthorized),
-        }
-    }
-
-    pub fn update(
+    pub fn apply_event(
         &mut self,
         from: RoomIdentityID,
         event: RoomEvent,
@@ -290,7 +271,7 @@ impl RoomState {
                 if from != RoomIdentityID::RoomID {
                     return Err(Unauthorized);
                 }
-                if !self.valid_user_id(id) {
+                if !self.is_valid_user_id(id) {
                     return Err(NoSuchUser);
                 }
                 if self.connected.contains(&id) {
@@ -307,7 +288,7 @@ impl RoomState {
                 if from != RoomIdentityID::RoomID {
                     return Err(Unauthorized);
                 }
-                if !self.valid_user_id(id) {
+                if !self.is_valid_user_id(id) {
                     return Err(NoSuchUser);
                 }
                 if !self.connected.contains(&id) {
@@ -324,11 +305,11 @@ impl RoomState {
                 use IdentityID::*;
                 use Role::*;
 
-                let user_role = self.role(user)?;
+                let user_role = user.role(self)?;
 
                 match from {
                     User(from_user) => {
-                        let from_role = self.role(from_user)?;
+                        let from_role = from_user.role(self)?;
 
                         if !RoleUser(from_role, from_user).le(&RoleUser(user_role, user)) {
                             return Err(Unauthorized);
@@ -349,7 +330,7 @@ impl RoomState {
                 }))
             }
             ChangeIdentityInfo(id_info) => {
-                if !self.valid_identity_id(id_info.identity) {
+                if !self.is_valid_identity_id(id_info.identity) {
                     return Err(NoSuchIdentity);
                 }
 
@@ -357,13 +338,11 @@ impl RoomState {
                 use Role::*;
 
                 if id_info.identity == RoomID && from != RoomID {
-                    let from_role = self.identity_role(from)?;
+                    let from_role = from.role(self)?;
                     if from_role != Admin {
                         return Err(Unauthorized);
                     }
-                }
-
-                if id_info.identity != from {
+                } else if id_info.identity != from || from.role(self)? == Banned {
                     return Err(Unauthorized);
                 }
 
@@ -389,21 +368,19 @@ impl RoomState {
             }
             // Room
             ChangeRoomAccessibility(mut a) => {
-                self.ensure_admin_or_moderator(from)?;
+                from.ensure_admin_or_moderator(self)?;
                 std::mem::swap(&mut a, &mut self.room_accessibility);
                 Ok(Some(RestoreRoomAccessibility(a)))
             }
             MaxConnectedUsers(mut c) => {
-                self.ensure_admin_or_moderator(from)?;
+                from.ensure_admin_or_moderator(self)?;
                 std::mem::swap(&mut c, &mut self.max_connected_users);
                 Ok(Some(RestoreMaxConnectedUsers(c)))
             }
             // Questions
             NewQuestion { kind, question } => {
                 match self.questions_state.rights.explicit.get(&from) {
-                    Some(false) | None
-                        if self.identity_role(from)? > self.questions_state.rights.role =>
-                    {
+                    Some(false) | None if from.role(self)? > self.questions_state.rights.role => {
                         return Err(Unauthorized)
                     }
                     _ => (),
@@ -439,15 +416,17 @@ impl RoomState {
                 question,
                 clarification,
             } => {
-                let has_right = self.ensure_admin_or_moderator(from);
+                let role = from.role(self)?;
+
                 let q = &mut self
                     .questions_state
                     .questions
                     .get_mut(&question)
                     .ok_or(NoSuchQuestion)?
                     .question;
-                if q.from != from {
-                    has_right?;
+                use Role::*;
+                if role != Banned && (q.from == from || role == Admin || role == Moderator) {
+                    return Err(Unauthorized);
                 }
                 q.clarifications.push(clarification);
                 Ok(Some(RemoveQuestionClarification(question)))
@@ -458,6 +437,10 @@ impl RoomState {
                     User(id) => id,
                     _ => return Err(Unauthorized),
                 };
+
+                if user_id.role(self)? == Role::Banned {
+                    return Err(RoomError::Unauthorized);
+                }
 
                 match self.questions_state.questions.get_mut(&question) {
                     Some(q) => match like {
@@ -479,7 +462,7 @@ impl RoomState {
                 question,
                 mut priority,
             } => {
-                self.ensure_admin_or_moderator(from)?;
+                from.ensure_admin_or_moderator(self)?;
                 let q = &mut self
                     .questions_state
                     .questions
@@ -489,7 +472,7 @@ impl RoomState {
                 Ok(Some(RestoreQuestionPriority { question, priority }))
             }
             DeleteQuestions(spec) => {
-                self.ensure_admin_or_moderator(from)?;
+                from.ensure_admin_or_moderator(self)?;
 
                 let mut deleted = Vec::new();
 
@@ -538,18 +521,22 @@ impl RoomState {
             }
             // Question Rights
             MaxQuestions(mut m) => {
-                self.ensure_admin_or_moderator(from)?;
+                from.ensure_admin_or_moderator(self)?;
                 std::mem::swap(&mut m, &mut self.questions_state.max_questions);
                 Ok(Some(RestoreMaxQuestions(m)))
             }
             QuestionRights(mut r) => {
-                self.ensure_admin_or_moderator(from)?;
+                from.ensure_admin_or_moderator(self)?;
+                if r == Role::Banned {
+                    return Err(InvalidRole);
+                }
+
                 std::mem::swap(&mut r, &mut self.questions_state.rights.role);
                 Ok(Some(RestoreQuestionRights(r)))
             }
             ExplicitQuestionRight { identity, allow } => {
-                self.ensure_admin_or_moderator(from)?;
-                if !self.valid_identity_id(identity) {
+                from.ensure_admin_or_moderator(self)?;
+                if !self.is_valid_identity_id(identity) {
                     return Err(NoSuchIdentity);
                 }
                 let old = self.questions_state.rights.explicit.remove(&identity);
@@ -563,7 +550,7 @@ impl RoomState {
             }
             // Answering
             OpenAnswering => {
-                self.ensure_admin_or_moderator(from)?;
+                from.ensure_admin_or_moderator(self)?;
 
                 let mut min: Option<&QuestionInfo> = None;
 
@@ -586,7 +573,7 @@ impl RoomState {
                 }))
             }
             CloseAnswering => {
-                self.ensure_admin_or_moderator(from)?;
+                from.ensure_admin_or_moderator(self)?;
 
                 Ok(match self.answering {
                     Some(old) => {
@@ -613,7 +600,7 @@ impl RoomState {
                 Some(true) => Ok(None),
                 Some(false) => Err(Unauthorized),
                 None => {
-                    if self.identity_role(from)? <= self.message_rights.role {
+                    if from.role(self)? <= self.message_rights.role {
                         Ok(None)
                     } else {
                         Err(Unauthorized)
@@ -621,13 +608,16 @@ impl RoomState {
                 }
             },
             MessageRights(mut r) => {
-                self.ensure_admin_or_moderator(from)?;
+                from.ensure_admin_or_moderator(self)?;
+                if r == Role::Banned {
+                    return Err(InvalidRole);
+                }
                 std::mem::swap(&mut r, &mut self.message_rights.role);
                 Ok(Some(RestoreMessageRights(r)))
             }
             ExplicitMessageRight { identity, allow } => {
-                self.ensure_admin_or_moderator(from)?;
-                if !self.valid_identity_id(identity) {
+                from.ensure_admin_or_moderator(self)?;
+                if !self.is_valid_identity_id(identity) {
                     return Err(NoSuchIdentity);
                 }
                 let old = self.message_rights.explicit.remove(&identity);
@@ -642,7 +632,7 @@ impl RoomState {
         }
     }
 
-    pub fn restore(&mut self, event: RoomStateCancel) -> Result<(), RoomError> {
+    pub fn cancel_event(&mut self, event: RoomStateCancel) {
         use RoomStateCancel::*;
         match event {
             RemoveNewUser => {
@@ -655,7 +645,6 @@ impl RoomState {
                     Some(n) => n.previous(),
                     None => Some(UserID::MAX),
                 };
-                Ok(())
             }
             RemoveNewMask => {
                 if let Some(id) = self.masks.identities.pop() {
@@ -667,33 +656,24 @@ impl RoomState {
                     Some(n) => n.previous(),
                     None => Some(MaskID::MAX),
                 };
-                Ok(())
             }
             Connect(id) => {
                 self.connected.insert(id);
-                Ok(())
             }
             Disconnect(id) => {
                 self.connected.remove(&id);
-                Ok(())
             }
             RestoreRole { user, role } => {
                 self.users.identities[usize::from(user)].role = role;
-                Ok(())
             }
             RestoreIdentityInfo(info) => {
-                fn doit<A>(
-                    id_info: self::ChangeIdentityInfo,
-                    i: &mut IdentityInfo<A>,
-                ) -> Result<(), RoomError> {
+                fn doit<A>(id_info: self::ChangeIdentityInfo, i: &mut IdentityInfo<A>) {
                     if id_info.name.is_some() {
                         i.name = id_info.name;
                     }
                     if id_info.description.is_some() {
                         i.description = id_info.description;
                     }
-
-                    Ok(())
                 }
 
                 use IdentityID::*;
@@ -705,11 +685,9 @@ impl RoomState {
             }
             RestoreRoomAccessibility(accessibility) => {
                 self.room_accessibility = accessibility;
-                Ok(())
             }
             RestoreMaxConnectedUsers(nb) => {
                 self.max_connected_users = nb;
-                Ok(())
             }
             RemoveNewQuestion => {
                 let id_opt = match self.questions_state.next_id {
@@ -720,13 +698,11 @@ impl RoomState {
                 if let Some(id) = id_opt {
                     self.questions_state.questions.remove(&id);
                 }
-                Ok(())
             }
             RemoveQuestionClarification(id) => {
                 if let Some(info) = self.questions_state.questions.get_mut(&id) {
                     info.question.clarifications.pop();
                 }
-                Ok(())
             }
             RestoreLikeQuestion {
                 from,
@@ -743,13 +719,11 @@ impl RoomState {
                         }
                     }
                 }
-                Ok(())
             }
             RestoreQuestionPriority { question, priority } => {
                 if let Some(info) = self.questions_state.questions.get_mut(&question) {
                     info.priority = priority;
                 }
-                Ok(())
             }
             RestoreDeletedQuestions(infos) => {
                 for info in infos {
@@ -757,53 +731,64 @@ impl RoomState {
                         .questions
                         .insert(info.question.id, info);
                 }
-                Ok(())
             }
             RestoreMaxQuestions(nb) => {
                 self.questions_state.max_questions = nb;
-                Ok(())
             }
             RestoreQuestionRights(role) => {
                 self.questions_state.rights.role = role;
-                Ok(())
             }
-            RestoreExplicitQuestionRights { identity, allow } => {
-                match allow {
-                    Some(a) => {
-                        self.questions_state.rights.explicit.insert(identity, a);
-                    }
-                    None => {
-                        self.questions_state.rights.explicit.remove(&identity);
-                    }
+            RestoreExplicitQuestionRights { identity, allow } => match allow {
+                Some(a) => {
+                    self.questions_state.rights.explicit.insert(identity, a);
                 }
-                Ok(())
-            }
+                None => {
+                    self.questions_state.rights.explicit.remove(&identity);
+                }
+            },
             CancelOpenAnswering(info) => {
                 self.answering = None;
                 self.questions_state
                     .questions
                     .insert(info.question.id, info);
-                Ok(())
             }
             ReopenAnswering(id) => {
                 self.answering = Some(id);
-                Ok(())
             }
             RestoreMessageRights(role) => {
                 self.message_rights.role = role;
-                Ok(())
             }
-            RestoreExplicitMessageRights { identity, allow } => {
-                match allow {
-                    Some(a) => {
-                        self.message_rights.explicit.insert(identity, a);
-                    }
-                    None => {
-                        self.message_rights.explicit.remove(&identity);
-                    }
+            RestoreExplicitMessageRights { identity, allow } => match allow {
+                Some(a) => {
+                    self.message_rights.explicit.insert(identity, a);
                 }
-                Ok(())
+                None => {
+                    self.message_rights.explicit.remove(&identity);
+                }
+            },
+        }
+    }
+
+    pub fn transact(
+        &mut self,
+        transaction: RoomTransaction,
+    ) -> Result<Vec<RoomStateCancel>, RoomError> {
+        let mut cancel_events = Vec::new();
+
+        for event in transaction.value.events {
+            match self.apply_event(transaction.value.from, event) {
+                Ok(Some(c)) => cancel_events.push(c),
+                Ok(None) => {}
+                Err(e) => {
+                    cancel_events.reverse();
+                    for c in cancel_events {
+                        self.cancel_event(c);
+                    }
+                    return Err(e);
+                }
             }
         }
+
+        Ok(cancel_events)
     }
 }

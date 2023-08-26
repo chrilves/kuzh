@@ -1,6 +1,5 @@
 use std::array::TryFromSliceError;
 
-use curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
 use curve25519_dalek::ristretto::*;
 use curve25519_dalek::Scalar;
 use rand::rngs::OsRng;
@@ -35,12 +34,21 @@ pub mod public_key {
         pub fn as_bytes(&self) -> &Bin {
             self.0.as_bytes()
         }
+
+        pub fn verify(&self, message: &[u8], sig: Sig) -> Option<bool> {
+            let r = (RistrettoPoint::mul_base(&sig.a)) + (sig.c * self.0.decompress()?);
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(r.compress().as_bytes());
+            hasher.update(message);
+            let c2 = Scalar::from_bytes_mod_order(*hasher.finalize().as_bytes());
+            Some(sig.c == c2)
+        }
     }
 
     impl From<&SecretKey> for PublicKey {
         #[inline]
         fn from(value: &SecretKey) -> Self {
-            PublicKey((&value.0 * RISTRETTO_BASEPOINT_TABLE).compress())
+            PublicKey(RistrettoPoint::mul_base(&value.0).compress())
         }
     }
 
@@ -61,6 +69,8 @@ pub mod secret_key {
     pub struct SecretKey(pub(crate) Scalar);
 
     impl SecretKey {
+        pub const ZERO: SecretKey = SecretKey(Scalar::ZERO);
+
         /// Get a true random SecretKey (via OsRng)
         #[inline]
         pub fn random() -> SecretKey {
@@ -74,7 +84,20 @@ pub mod secret_key {
 
         #[inline]
         pub fn public_key(&self) -> PublicKey {
-            PublicKey((&self.0 * RISTRETTO_BASEPOINT_TABLE).compress())
+            PublicKey(RistrettoPoint::mul_base(&self.0).compress())
+        }
+
+        pub fn sign(&self, message: &[u8]) -> Sig {
+            let r = Scalar::random(&mut OsRng);
+            let rp = RistrettoPoint::mul_base(&r);
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(rp.compress().as_bytes());
+            hasher.update(message);
+            let c = Scalar::from_bytes_mod_order(*hasher.finalize().as_bytes());
+            Sig {
+                c,
+                a: r - c * self.0,
+            }
         }
     }
 
@@ -97,15 +120,10 @@ pub mod secret_key {
 pub mod sig {
     use super::*;
 
-    #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
-    #[repr(transparent)]
-    pub struct Sig([u8; 64]);
-
-    impl ConstantTimeEq for Sig {
-        #[inline]
-        fn ct_eq(&self, other: &Self) -> subtle::Choice {
-            self.0.ct_eq(&other.0)
-        }
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct Sig {
+        pub c: Scalar,
+        pub a: Scalar,
     }
 }
 
@@ -221,7 +239,7 @@ pub mod ring_sig {
                     c.push(cj);
                     z.push(zj);
                     a.push(
-                        &zj * RISTRETTO_BASEPOINT_TABLE
+                        RistrettoPoint::mul_base(&zj)
                             + cj * public_keys[j].0.decompress().ok_or(format!(
                                 "RingSig::sign: invalid public_keys[{:?}]: {:?}",
                                 j, public_keys[j]
@@ -229,7 +247,7 @@ pub mod ring_sig {
                     );
                     b.push(zj * h + cj * sigmas[j]);
                 } else {
-                    a.push(&wi * RISTRETTO_BASEPOINT_TABLE);
+                    a.push(RistrettoPoint::mul_base(&wi));
                     b.push(wi * h);
                     z.push(Scalar::ZERO);
                     c.push(Scalar::ZERO);
@@ -271,7 +289,7 @@ pub mod ring_sig {
             let mut b = Vec::new();
             for (j, pk) in public_keys.iter().enumerate() {
                 a.push(
-                    &self.z[j] * RISTRETTO_BASEPOINT_TABLE
+                    RistrettoPoint::mul_base(&self.z[j])
                         + self.c[j]
                             * pk.0.decompress().ok_or(format!(
                                 "RingSig::sign: invalid public_keys[{:?}]: {:?}",

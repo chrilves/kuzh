@@ -8,6 +8,16 @@ pub enum IdentityID<MaskID> {
     Mask(MaskID),
 }
 
+impl<A> IdentityID<A> {
+    #[inline(always)]
+    pub fn user_id(&self) -> Option<UserID> {
+        match self {
+            IdentityID::User(id) => Some(*id),
+            _ => None,
+        }
+    }
+}
+
 pub type NodeIdentity = IdentityID<!>;
 pub type RoomIdentityID = IdentityID<MaskID>;
 pub type AnsweringIdentityID = IdentityID<AnswerID>;
@@ -34,6 +44,19 @@ pub enum Role {
     Moderator,
     Regular,
     Banned,
+}
+
+impl Role {
+    #[inline(always)]
+    pub const fn is_admin_or_moderator(self) -> bool {
+        use Role::*;
+        matches!(self, Admin | Moderator)
+    }
+
+    #[inline(always)]
+    pub const fn is_not_banned(self) -> bool {
+        !matches!(self, Role::Banned)
+    }
 }
 
 impl PartialOrd for Role {

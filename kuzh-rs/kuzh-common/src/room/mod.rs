@@ -27,4 +27,7 @@ pub enum Like {
 }
 
 pub mod events;
+pub mod has_role;
 pub mod state;
+
+pub use has_role::*;

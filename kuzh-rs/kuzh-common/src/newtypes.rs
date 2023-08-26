@@ -142,6 +142,36 @@ pub mod answer_id {
     #[repr(transparent)]
     pub struct AnswerID(u16);
 
+    impl AnswerID {
+        pub const MIN: AnswerID = AnswerID(0);
+        pub const MAX: AnswerID = AnswerID(u16::MAX);
+
+        #[inline(always)]
+        pub const fn next(&self) -> Option<AnswerID> {
+            if self.0 < u16::MAX {
+                Some(AnswerID(self.0 + 1))
+            } else {
+                None
+            }
+        }
+
+        #[inline(always)]
+        pub const fn previous(&self) -> Option<AnswerID> {
+            if self.0 > 0 {
+                Some(AnswerID(self.0 - 1))
+            } else {
+                None
+            }
+        }
+    }
+
+    impl From<AnswerID> for usize {
+        #[inline]
+        fn from(val: AnswerID) -> usize {
+            val.0 as usize
+        }
+    }
+
     impl ConstantTimeEq for AnswerID {
         #[inline]
         fn ct_eq(&self, other: &Self) -> subtle::Choice {
