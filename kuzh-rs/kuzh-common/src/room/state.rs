@@ -146,7 +146,7 @@ pub enum RoomError {
     AnsweringUnjoinable,
     InvalidRole,
     AlreadyJoined,
-    InvalidAnsweringPhase
+    InvalidAnsweringPhase,
 }
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]

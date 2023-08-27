@@ -1,6 +1,6 @@
 use crate::{
     common::IdentityID,
-    crypto::{PublicKey, RingSig, Sig, SecretKey},
+    crypto::{PublicKey, RingSig, SecretKey, Sig},
     newtypes::AnswerID,
 };
 
@@ -17,10 +17,9 @@ pub struct Answer {
     pub sig: Sig,
 }
 
-
 impl Answer {
-    pub fn decrypt(&self, secret: SecretKey) -> ClearAnswers {
-        todo!{}
+    pub fn decrypt(&self, _secret: SecretKey) -> ClearAnswer {
+        todo! {}
     }
 }
 
@@ -28,15 +27,14 @@ impl Answer {
 pub struct ClearAnswer {
     pub sign_key: PublicKey,
     pub encrypt_key: PublicKey,
-    pub answer: ClearAnswerBody
+    pub answer: ClearAnswerBody,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClearAnswerBody {
     Open(String),
     Closed(bool),
-    Poll(u8)
+    Poll(u8),
 }
 
 pub mod events;

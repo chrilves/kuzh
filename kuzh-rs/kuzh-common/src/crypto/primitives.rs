@@ -3,6 +3,7 @@ use std::array::TryFromSliceError;
 use curve25519_dalek::ristretto::*;
 use curve25519_dalek::Scalar;
 use rand::rngs::OsRng;
+use std::iter::Sum;
 use subtle::ConstantTimeEq;
 use thiserror::Error;
 
@@ -20,35 +21,30 @@ pub enum CryptoError {
 pub mod public_key {
     use super::*;
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     #[repr(transparent)]
-    pub struct PublicKey(pub(crate) CompressedRistretto);
+    pub struct PublicKey(pub(crate) RistrettoPoint);
 
     impl PublicKey {
         #[inline]
         pub fn to_bytes(&self) -> Bin {
-            self.0.to_bytes()
+            self.0.compress().to_bytes()
         }
 
-        #[inline]
-        pub fn as_bytes(&self) -> &Bin {
-            self.0.as_bytes()
-        }
-
-        pub fn verify(&self, message: &[u8], sig: Sig) -> Option<bool> {
-            let r = (RistrettoPoint::mul_base(&sig.a)) + (sig.c * self.0.decompress()?);
+        pub fn verify(&self, message: &[u8], sig: Sig) -> bool {
+            let r = (RistrettoPoint::mul_base(&sig.a)) + (sig.c * self.0);
             let mut hasher = blake3::Hasher::new();
             hasher.update(r.compress().as_bytes());
             hasher.update(message);
             let c2 = Scalar::from_bytes_mod_order(*hasher.finalize().as_bytes());
-            Some(sig.c == c2)
+            sig.c == c2
         }
     }
 
     impl From<&SecretKey> for PublicKey {
         #[inline]
         fn from(value: &SecretKey) -> Self {
-            PublicKey(RistrettoPoint::mul_base(&value.0).compress())
+            PublicKey(RistrettoPoint::mul_base(&value.0))
         }
     }
 
@@ -56,6 +52,20 @@ pub mod public_key {
         #[inline]
         fn ct_eq(&self, other: &Self) -> subtle::Choice {
             self.0.ct_eq(&other.0)
+        }
+    }
+
+    impl<'a> Sum<&'a PublicKey> for PublicKey {
+        #[inline(always)]
+        fn sum<I: Iterator<Item = &'a PublicKey>>(iter: I) -> PublicKey {
+            PublicKey(iter.map(|p| p.0).sum())
+        }
+    }
+
+    impl std::hash::Hash for PublicKey {
+        #[inline(always)]
+        fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+            self.0.compress().hash(state);
         }
     }
 }
@@ -84,7 +94,7 @@ pub mod secret_key {
 
         #[inline]
         pub fn public_key(&self) -> PublicKey {
-            PublicKey(RistrettoPoint::mul_base(&self.0).compress())
+            PublicKey(RistrettoPoint::mul_base(&self.0))
         }
 
         pub fn sign(&self, message: &[u8]) -> Sig {
@@ -112,7 +122,21 @@ pub mod secret_key {
         type Output = Option<PublicKey>;
         #[inline]
         fn mul(self, _rhs: &'b PublicKey) -> Option<PublicKey> {
-            Some(PublicKey((self.0 * _rhs.0.decompress()?).compress()))
+            Some(PublicKey(self.0 * _rhs.0))
+        }
+    }
+
+    impl<'a> Sum<&'a SecretKey> for SecretKey {
+        #[inline(always)]
+        fn sum<I: Iterator<Item = &'a SecretKey>>(iter: I) -> SecretKey {
+            SecretKey(iter.map(|s| s.0).sum())
+        }
+    }
+
+    impl Sum<SecretKey> for SecretKey {
+        #[inline(always)]
+        fn sum<I: Iterator<Item = SecretKey>>(iter: I) -> SecretKey {
+            SecretKey(iter.map(|s| s.0).sum())
         }
     }
 }
@@ -238,13 +262,7 @@ pub mod ring_sig {
                     other_c += cj;
                     c.push(cj);
                     z.push(zj);
-                    a.push(
-                        RistrettoPoint::mul_base(&zj)
-                            + cj * public_keys[j].0.decompress().ok_or(format!(
-                                "RingSig::sign: invalid public_keys[{:?}]: {:?}",
-                                j, public_keys[j]
-                            ))?,
-                    );
+                    a.push(RistrettoPoint::mul_base(&zj) + (cj * public_keys[j].0));
                     b.push(zj * h + cj * sigmas[j]);
                 } else {
                     a.push(RistrettoPoint::mul_base(&wi));
@@ -288,14 +306,7 @@ pub mod ring_sig {
             let mut a = Vec::new();
             let mut b = Vec::new();
             for (j, pk) in public_keys.iter().enumerate() {
-                a.push(
-                    RistrettoPoint::mul_base(&self.z[j])
-                        + self.c[j]
-                            * pk.0.decompress().ok_or(format!(
-                                "RingSig::sign: invalid public_keys[{:?}]: {:?}",
-                                j, public_keys[j]
-                            ))?,
-                );
+                a.push(RistrettoPoint::mul_base(&self.z[j]) + (self.c[j] * pk.0));
                 let sigma = big_a0 + Scalar::from((j + 1) as u64) * big_a1;
                 b.push(self.z[j] * h + self.c[j] * sigma);
             }

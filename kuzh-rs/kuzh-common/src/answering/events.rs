@@ -20,12 +20,13 @@ pub enum AnsweringEvent {
     Go,
 
     // Anonymous Protocol
-    Ready {
+    Ready,
+    Encrypt {
         public_key: Box<PublicKey>,
-        challenge: Box<Sig>
+        challenge: Box<Sig>,
     },
-    Answer(Box<Answer>),
-    SecretShare(Box<SecretKey>),
+    Answers(Box<Answer>),
+    Decrypt(Box<SecretKey>),
 
     // Messages
     Message(String),

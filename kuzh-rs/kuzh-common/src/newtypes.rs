@@ -138,7 +138,7 @@ pub mod question_id {
 pub mod answer_id {
     use super::*;
 
-    #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
     #[repr(transparent)]
     pub struct AnswerID(u16);
 

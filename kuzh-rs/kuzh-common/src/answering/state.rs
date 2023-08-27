@@ -1,6 +1,3 @@
-use curve25519_dalek::RistrettoPoint;
-use curve25519_dalek::Scalar;
-
 use crate::common::AnsweringIdentityID;
 use crate::common::IdentityID;
 use crate::common::Question;
@@ -11,45 +8,41 @@ use crate::room::state::RoomState;
 use crate::room::HasRole;
 use std::collections::{HashMap, HashSet};
 
-use super::ClearAnswer;
 use super::events::AnsweringEvent;
 use super::Answer;
+use super::ClearAnswer;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AnsweringState {
     pub question: Question,
-    pub phase: AnsweringPhase,
+    pub phase: Phase,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AnsweringMemberPresence {
-    Present,
-    Absent,
-    Kicked,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AnsweringPhase {
+pub enum Phase {
     Open {
         joinable: bool,
         collectable: bool,
-        members: HashMap<UserID, UserOpenState>,
-        remaining_members: u16
+        members: HashMap<UserID, OpenStatus>,
+        unready_members: u16,
+    },
+    Encrypt {
+        iteration: u64,
+        ready_members: HashMap<UserID, PublicKey>,
+        unready_members: HashSet<UserID>,
     },
     Answers {
         iteration: u64,
         members: HashMap<UserID, PublicKey>,
-        encryption: RistrettoPoint,
+        encryption: PublicKey,
         answers: Vec<Answer>,
-        remaining_answers: u16
+        remaining_answers: u16,
     },
     Decrypt {
         iteration: u64,
-        members: HashMap<UserID, UserDecryptState>,
-        encryption: RistrettoPoint,
-        secret: SecretKey,
+        ready_members: HashMap<UserID, DecryptStatus>,
         answers: Vec<Answer>,
-        remaining_members: u16
+        unready_members: HashMap<UserID, PublicKey>,
     },
     Debate {
         members: HashSet<UserID>,
@@ -58,109 +51,168 @@ pub enum AnsweringPhase {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UserOpenState {
-    pub status: AnsweringMemberPresence,
-    pub encryption_share: Option<PublicKey>,
+pub struct OpenStatus {
+    pub status: MemberPresence,
+    pub ready: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MemberPresence {
+    Present,
+    Absent,
+    Kicked,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct UserDecryptState {
-    pub encryption_share: PublicKey,
-    pub secret_share: Option<SecretKey>,
+pub struct DecryptStatus {
+    pub public_key: PublicKey,
+    pub secret_key: SecretKey,
 }
 
-impl AnsweringPhase  {
+impl Phase {
     pub fn normalize(&mut self) {
-        use AnsweringPhase::*;
+        use Phase::*;
         match self {
             Open {
                 collectable,
                 members,
-                remaining_members,
+                unready_members,
                 ..
-            } if *collectable && *remaining_members == 0 => {
-                let mut encryption_point: RistrettoPoint = RistrettoPoint::mul_base(&Scalar::ZERO);
-                let nb = members.len() as u16;
-                let mut new_members = HashMap::with_capacity(nb as usize);
+            } if *collectable && *unready_members == 0 => {
+                let mut unready_members: HashSet<UserID> = HashSet::new();
 
-                for (id, info) in members {
-                    use AnsweringMemberPresence::*;
-                    match (info.status, info.encryption_share) {
-                        (Present, Some(pk)) => {
-                            if let Some(point) = pk.0.decompress() {
-                                encryption_point = encryption_point + point;
-                                new_members.insert(*id, pk);
-                            }
-                        }
-                        _ => {}
+                for (id, info) in std::mem::replace(members, HashMap::with_capacity(0)) {
+                    use MemberPresence::*;
+                    if let OpenStatus {
+                        status: Present,
+                        ready: true,
+                    } = info
+                    {
+                        unready_members.insert(id);
                     }
                 }
 
-                *self = Answers {
+                *self = Encrypt {
                     iteration: 0,
-                    members: new_members,
-                    encryption: encryption_point,
-                    answers: Vec::with_capacity(nb as usize),
-                    remaining_answers: nb
+                    ready_members: HashMap::with_capacity(members.len()),
+                    unready_members,
+                }
+            }
+            Encrypt {
+                iteration,
+                ready_members,
+                unready_members,
+            } if unready_members.is_empty() => {
+                let nb = ready_members.len();
+                *self = Answers {
+                    iteration: *iteration,
+                    members: std::mem::replace(ready_members, HashMap::with_capacity(0)),
+                    encryption: ready_members.values().sum(),
+                    answers: Vec::with_capacity(nb),
+                    remaining_answers: nb as u16,
                 }
             }
             Answers {
                 iteration,
                 members,
-                encryption,
                 answers,
-                remaining_answers
+                remaining_answers,
+                ..
             } if *remaining_answers == 0 => {
-                let nb = members.len() as u16;
-
                 *self = Decrypt {
                     iteration: *iteration,
-                    members: members.into_iter().map(|(k,v)| (*k, UserDecryptState{
-                        encryption_share: v,
-                        secret_share: None
-                    })).collect(),
-                    encryption: *encryption,
-                    secret: SecretKey::ZERO,
-                    answers: Vec::with_capacity(nb as usize),
-                    remaining_members: nb
+                    ready_members: HashMap::with_capacity(members.len()),
+                    answers: std::mem::replace(answers, Vec::with_capacity(0)),
+                    unready_members: std::mem::replace(members, HashMap::with_capacity(0)),
+                }
+            }
+            Decrypt {
+                ready_members,
+                answers,
+                unready_members,
+                ..
+            } if unready_members.is_empty() => {
+                let secret = ready_members
+                    .values()
+                    .map(|v| v.secret_key)
+                    .sum::<SecretKey>();
+                *self = Debate {
+                    members: ready_members.keys().copied().collect(),
+                    answers: answers.iter_mut().map(|ans| ans.decrypt(secret)).collect(),
+                }
+            }
+            Debate {
+                members: _,
+                answers: _,
+            } => {
+                todo! {}
+            }
+            _ => {}
+        }
+    }
+
+    pub fn next_iteration(&mut self) {
+        use Phase::*;
+        match self {
+            Encrypt {
+                iteration,
+                ready_members,
+                unready_members,
+            } => {
+                *iteration += 1;
+                ready_members.keys().for_each(|k| {
+                    unready_members.insert(*k);
+                });
+                ready_members.clear();
+            }
+            Answers {
+                iteration, members, ..
+            } => {
+                let unready_members: HashSet<UserID> = members.keys().copied().collect();
+                members.clear();
+
+                *self = Encrypt {
+                    iteration: *iteration + 1,
+                    ready_members: std::mem::replace(members, HashMap::with_capacity(0)),
+                    unready_members,
                 }
             }
             Decrypt {
                 iteration,
-                members,
-                encryption,
-                secret,
-                answers,
-                remaining_members
-            } if *remaining_members == 0 => {
-                *self = Debate {
-                    members: members.keys().into_iter().copied().collect(),
-                    answers: answers.into_iter().map(|ans| ans.decrypt(secret)).collect()
+                ready_members,
+                unready_members,
+                ..
+            } => {
+                let mut members: HashSet<UserID> =
+                    HashSet::with_capacity(unready_members.len() + ready_members.len());
+                for (id, _) in std::mem::replace(ready_members, HashMap::with_capacity(0)) {
+                    members.insert(id);
+                }
+                for id in unready_members.keys() {
+                    members.insert(*id);
+                }
+
+                unready_members.clear();
+
+                *self = Encrypt {
+                    iteration: *iteration + 1,
+                    ready_members: std::mem::replace(unready_members, HashMap::with_capacity(0)),
+                    unready_members: members,
                 }
             }
-            Debate {
-                members,
-                answers,
-            } => { todo!{}}
-            _ => Ok(())
+            _ => {}
         }
     }
-
 }
 
 pub enum AsnweringStateCancel {
     RestoreJoinability(bool),
     RestoreCollectability(bool),
     CancelJoin(UserID),
-    CancelLeave {
-        user: UserID,
-
-
-    }
+    CancelLeave { user: UserID },
 }
 
 impl AnsweringState {
-
     pub fn apply_event(
         &mut self,
         from: AnsweringIdentityID,
@@ -168,35 +220,29 @@ impl AnsweringState {
         room_state: &RoomState,
     ) -> Result<Option<AsnweringStateCancel>, RoomError> {
         use AnsweringEvent::*;
-        use AnsweringMemberPresence::*;
-        use AnsweringPhase::*;
         use AsnweringStateCancel::*;
+        use MemberPresence::*;
+        use Phase::*;
         use RoomError::*;
         match event {
             CreateAnswering(_) => Err(AnsweringAlreadyCreated),
             ChangeJoinability(mut b) => {
                 from.ensure_admin_or_moderator(room_state)?;
                 match &mut self.phase {
-                    Open {
-                        joinable,
-                        ..
-                    } => {
+                    Open { joinable, .. } => {
                         std::mem::swap(joinable, &mut b);
                         Ok(Some(RestoreJoinability(b)))
-                    },
+                    }
                     _ => Err(InvalidAnsweringPhase),
                 }
             }
             ChangeCollectability(mut b) => {
                 from.ensure_admin_or_moderator(room_state)?;
                 match &mut self.phase {
-                    Open {
-                        collectable,
-                        ..
-                    } => {
+                    Open { collectable, .. } => {
                         std::mem::swap(collectable, &mut b);
                         Ok(Some(RestoreCollectability(b)))
-                    },
+                    }
                     _ => Err(InvalidAnsweringPhase),
                 }
             }
@@ -209,19 +255,19 @@ impl AnsweringState {
                     Open {
                         joinable,
                         members,
-                        nb_not_ready,
+                        unready_members,
                         ..
                     } if *joinable => match members.get(&user_id) {
                         Some(_) => Err(AlreadyJoined),
                         None => {
                             members.insert(
                                 user_id,
-                                UserOpenState {
+                                OpenStatus {
                                     status: Present,
-                                    encryption_share: None,
+                                    ready: false,
                                 },
                             );
-                            *nb_not_ready += 1;
+                            *unready_members += 1;
                             Ok(Some(CancelJoin(user_id)))
                         }
                     },
@@ -229,39 +275,44 @@ impl AnsweringState {
                 }
             }
             Leave => {
-                todo!{}
+                todo! {}
             }
-            Connected(id) => {
+            Connected(_id) => {
                 if from != IdentityID::RoomID {
-                    return Err(Unauthorized)
+                    return Err(Unauthorized);
                 }
 
-                todo!{}
-            }
-            Disconnected(id) => {
                 todo! {}
             }
-            Kick(id) => {
+            Disconnected(_id) => {
                 todo! {}
             }
-            Unkick(id) => {
+            Kick(_id) => {
+                todo! {}
+            }
+            Unkick(_id) => {
                 todo! {}
             }
 
             // Admin Management
-
             Go => {
                 todo! {}
             }
 
             // Anonymous Protocol
-            Ready(pk) => {
+            Ready => {
                 todo! {}
             }
-            Answer(ans) => {
+            AnsweringEvent::Encrypt {
+                public_key: _,
+                challenge: _,
+            } => {
                 todo! {}
             }
-            SecretShare(sk) => {
+            AnsweringEvent::Answers(_ans) => {
+                todo! {}
+            }
+            Decrypt(_sk) => {
                 todo! {}
             }
 
@@ -269,10 +320,13 @@ impl AnsweringState {
             Message(_) => {
                 todo! {}
             }
-            MessageRights(role) => {
+            MessageRights(_role) => {
                 todo! {}
             }
-            ExplicitMessageRight { identity, allow } => {
+            ExplicitMessageRight {
+                identity: _,
+                allow: _,
+            } => {
                 todo! {}
             }
         }
