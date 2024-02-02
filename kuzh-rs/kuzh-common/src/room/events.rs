@@ -1,25 +1,29 @@
+use never_type::Never;
+
 use crate::common::*;
 use crate::crypto::*;
-use crate::newtypes::*;
 
+use super::state::RoomError;
 use super::Like;
 use super::RoomAccessibility;
 
 pub enum RoomEvent {
     // Identities
-    RoomCreation {
-        room: Box<CryptoID>,
-        first_admin: Box<CryptoID>,
-    },
+    RoomCreation(Box<CryptoID>),
     NewUser(Box<CryptoID>),
     NewMask(Box<CryptoID>),
-    Connected(UserID),
-    Disconnected(UserID),
     ChangeRole {
         user: UserID,
         role: Role,
     },
-    ChangeIdentityInfo(ChangeIdentityInfo),
+    ChangeName {
+        identity: RoomIdentityID,
+        name: Option<String>
+    },
+    ChangeDescription {
+        identity: RoomIdentityID,
+        description: Option<String>
+    },
 
     // Room
     ChangeRoomAccessibility(RoomAccessibility),
@@ -42,7 +46,8 @@ pub enum RoomEvent {
         question: QuestionID,
         priority: QuestionPriority,
     },
-    DeleteQuestions(QuestionDeleteSpec),
+    DeleteQuestion(QuestionID),
+    DeleteQuestionPriority(QuestionPriority),
 
     // Question Rights
     MaxQuestions(u8),
@@ -80,12 +85,6 @@ pub enum RoomEvent {
     },
 }
 
-#[derive(Debug)]
-pub struct ChangeIdentityInfo {
-    pub identity: RoomIdentityID,
-    pub name: Option<String>,
-    pub description: Option<String>,
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum QuestionPriority {
@@ -119,8 +118,21 @@ impl Ord for QuestionPriority {
     }
 }
 
-pub enum QuestionDeleteSpec {
-    Delete(Vec<QuestionID>),
-    Keep(Vec<QuestionID>),
-    DeletePriority(QuestionPriority),
+pub type RoomTransaction = Transaction<(), MaskID, Never, RoomEvent>;
+pub type SignedRoomTransaction = SignedTransaction<(), MaskID, Never, RoomEvent>;
+pub type RoomBlock = Block<(), MaskID, Never, RoomEvent>;
+pub type RoomSignedBlock = SignedBlock<(), MaskID, Never, RoomEvent>;
+
+trait RoomState {
+}
+
+trait Transact<State>: RoomState {
+    async fn apply_event(&mut self, from: RoomIdentityID, event: &RoomEvent) -> Option<RoomError>;
+    async fn revert(self) -> State;
+    async fn commit(self) -> State;
+}
+
+trait Transactable: RoomState {
+    type Transact;
+    async fn patch(self) -> impl Transact<Self>;
 }

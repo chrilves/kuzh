@@ -1,8 +1,12 @@
 use crate::{
-    common::IdentityID,
+    common::{
+        AnswerID, Block, IdentityID, MaskID, QuestionID, SignedBlock, SignedTransaction,
+        Transaction,
+    },
     crypto::{PublicKey, RingSig, SecretKey, Sig},
-    newtypes::AnswerID,
 };
+
+use self::events::AnsweringEvent;
 
 pub type AnsweringIdentityID = IdentityID<AnswerID>;
 pub const ANSWER_SIZE: usize = 300;
@@ -39,3 +43,9 @@ pub enum ClearAnswerBody {
 
 pub mod events;
 pub mod state;
+
+pub type AnsweringTransaction = Transaction<QuestionID, MaskID, AnswerID, AnsweringEvent>;
+pub type AnsweringSignedTransaction =
+    SignedTransaction<QuestionID, MaskID, AnswerID, AnsweringEvent>;
+pub type AnsweringRawBlock = Block<QuestionID, MaskID, AnswerID, AnsweringEvent>;
+pub type AnsweringBlock = SignedBlock<QuestionID, MaskID, AnswerID, AnsweringEvent>;

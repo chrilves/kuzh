@@ -5,7 +5,7 @@ use crate::crypto::{PublicKey, SecretKey};
 use crate::newtypes::UserID;
 use crate::room::state::RoomError;
 use crate::room::state::RoomState;
-use crate::room::HasRole;
+use crate::room::HasIdentityInfo;
 use std::collections::{HashMap, HashSet};
 
 use super::events::AnsweringEvent;
@@ -46,6 +46,7 @@ pub enum Phase {
     },
     Debate {
         members: HashSet<UserID>,
+        present: HashSet<UserID>,
         answers: Vec<ClearAnswer>,
     },
 }
@@ -59,7 +60,14 @@ pub struct OpenStatus {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MemberPresence {
     Present,
-    Absent,
+    Disconnected,
+    Kicked,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RemovalReason {
+    Left,
+    Deconnected,
     Kicked,
 }
 
@@ -70,7 +78,7 @@ pub struct DecryptStatus {
 }
 
 impl Phase {
-    pub fn normalize(&self) -> Option<Phase> {
+    pub fn normalize(&mut self) {
         use Phase::*;
         match self {
             Open {
@@ -91,11 +99,11 @@ impl Phase {
                         unready_members.insert(*id);
                     }
                 }
-                Some(Encrypt {
+                *self = Encrypt {
                     iteration: 0,
-                    ready_members: HashMap::with_capacity(members.len()),
+                    ready_members: HashMap::with_capacity(unready_members.len()),
                     unready_members,
-                })
+                };
             }
             Encrypt {
                 iteration,
@@ -103,13 +111,15 @@ impl Phase {
                 unready_members,
             } if unready_members.is_empty() => {
                 let nb = ready_members.len();
-                Some(Answers {
+                let members = std::mem::replace(ready_members, HashMap::with_capacity(0));
+                let encryption = members.values().sum();
+                *self = Answers {
                     iteration: *iteration,
-                    members: ready_members.clone(),
-                    encryption: ready_members.values().sum(),
+                    members,
+                    encryption,
                     answers: Vec::with_capacity(nb),
                     remaining_answers: nb as u16,
-                })
+                };
             }
             Answers {
                 iteration,
@@ -117,12 +127,14 @@ impl Phase {
                 answers,
                 remaining_answers,
                 ..
-            } if *remaining_answers == 0 => Some(Decrypt {
-                iteration: *iteration,
-                ready_members: HashMap::with_capacity(members.len()),
-                answers: answers.clone(),
-                unready_members: members.clone(),
-            }),
+            } if *remaining_answers == 0 => {
+                *self = Decrypt {
+                    iteration: *iteration,
+                    ready_members: HashMap::with_capacity(members.len()),
+                    answers: std::mem::replace(answers, Vec::with_capacity(0)),
+                    unready_members: std::mem::replace(members, HashMap::with_capacity(0)),
+                };
+            }
             Decrypt {
                 ready_members,
                 answers,
@@ -133,16 +145,18 @@ impl Phase {
                     .values()
                     .map(|v| v.secret_key)
                     .sum::<SecretKey>();
-                Some(Debate {
-                    members: ready_members.keys().copied().collect(),
+                let members: HashSet<UserID> = ready_members.keys().copied().collect();
+                *self = Debate {
+                    members: members.clone(),
+                    present: members,
                     answers: answers.iter().map(|ans| ans.decrypt(secret)).collect(),
-                })
+                };
             }
-            _ => None,
+            _ => {}
         }
     }
 
-    pub fn next_iteration(&self) -> Option<Phase> {
+    pub fn next_iteration(&mut self) {
         use Phase::*;
         match self {
             Encrypt {
@@ -150,26 +164,23 @@ impl Phase {
                 ready_members,
                 unready_members,
             } => {
-                let mut unready = unready_members.clone();
                 for id in ready_members.keys() {
-                    unready.insert(*id);
+                    unready_members.insert(*id);
                 }
-
-                Some(Encrypt {
-                    iteration: *iteration + 1,
-                    ready_members: HashMap::with_capacity(
-                        ready_members.len() + unready_members.len(),
-                    ),
-                    unready_members: unready,
-                })
+                *iteration += 1;
+                ready_members.clear();
             }
             Answers {
                 iteration, members, ..
-            } => Some(Encrypt {
-                iteration: *iteration + 1,
-                ready_members: HashMap::with_capacity(members.len()),
-                unready_members: members.keys().copied().collect(),
-            }),
+            } => {
+                let unready_members: HashSet<UserID> = members.keys().copied().collect();
+                members.clear();
+                *self = Encrypt {
+                    iteration: *iteration + 1,
+                    ready_members: std::mem::replace(members, HashMap::with_capacity(0)),
+                    unready_members,
+                };
+            }
             Decrypt {
                 iteration,
                 ready_members,
@@ -184,27 +195,116 @@ impl Phase {
                 for id in unready_members.keys() {
                     members.insert(*id);
                 }
-                Some(Encrypt {
+                unready_members.clear();
+                *self = Encrypt {
                     iteration: *iteration + 1,
-                    ready_members: HashMap::with_capacity(members.len()),
+                    ready_members: std::mem::replace(unready_members, HashMap::with_capacity(0)),
                     unready_members: members,
-                })
+                }
             }
-            _ => None,
+            _ => {}
         }
     }
-}
 
-pub enum AsnweringStateCancel {
-    RestoreJoinability(bool),
-    RestoreCollectability(bool),
-    CancelJoin(UserID),
-    CancelLeaveOpen {
-        user: UserID,
-        open_status: OpenStatus,
-        phase: Option<Box<Phase>>,
-    },
-    CancelLeaveDebate(UserID),
+    pub fn remove_user(&mut self, user_id: UserID, reason: RemovalReason) -> Result<(), RoomError> {
+        use MemberPresence::*;
+        use Phase::*;
+        use RoomError::*;
+        match self {
+            Open {
+                members,
+                unready_members,
+                ..
+            } => match members.get(&user_id) {
+                Some(OpenStatus { status, ready }) => {
+                    let user_info = members.get_mut(&user_id).ok_or(NoSuchUser)?;
+
+                    match reason {
+                        RemovalReason::Deconnected => {
+                            if *status != Present {
+                                return Err(Unauthorized);
+                            }
+                        }
+                        _ => {
+                            if *status == Kicked {
+                                return Err(Unauthorized);
+                            }
+                        }
+                    }
+
+                    if *status == Present && !ready {
+                        *unready_members -= 1;
+                    }
+
+                    match reason {
+                        RemovalReason::Left => {
+                            members.remove(&user_id);
+                        }
+                        RemovalReason::Deconnected => {
+                            user_info.status = MemberPresence::Disconnected;
+                        }
+                        RemovalReason::Kicked => {
+                            user_info.status = MemberPresence::Kicked;
+                        }
+                    }
+                    self.normalize();
+                    Ok(())
+                }
+                None => Err(NoSuchUser),
+            },
+            Phase::Debate { members, .. } => {
+                if members.contains(&user_id) {
+                    members.remove(&user_id);
+                    Ok(())
+                } else {
+                    Err(NoSuchUser)
+                }
+            }
+            Phase::Encrypt {
+                ready_members,
+                unready_members,
+                ..
+            } => {
+                if unready_members.contains(&user_id) {
+                    unready_members.remove(&user_id);
+                    self.normalize();
+                    return Ok(());
+                }
+                if ready_members.contains_key(&user_id) {
+                    ready_members.remove(&user_id);
+                    self.normalize();
+                    return Ok(());
+                }
+                Err(NoSuchUser)
+            }
+            Phase::Answers { members, .. } => {
+                if members.contains_key(&user_id) {
+                    members.remove(&user_id);
+                    self.next_iteration();
+                    Ok(())
+                } else {
+                    Err(NoSuchUser)
+                }
+            }
+            Phase::Decrypt {
+                unready_members,
+                ready_members,
+                ..
+            } => {
+                if unready_members.contains_key(&user_id) {
+                    unready_members.remove(&user_id);
+                    self.next_iteration();
+                    return Ok(());
+                }
+                if ready_members.contains_key(&user_id) {
+                    ready_members.remove(&user_id);
+                    self.next_iteration();
+                    return Ok(());
+                }
+                Err(NoSuchUser)
+            }
+        }
+    }
 }
 
 impl AnsweringState {
@@ -213,30 +313,29 @@ impl AnsweringState {
         from: AnsweringIdentityID,
         event: AnsweringEvent,
         room_state: &RoomState,
-    ) -> Result<Option<AsnweringStateCancel>, RoomError> {
+    ) -> Result<(), RoomError> {
         use AnsweringEvent::*;
-        use AsnweringStateCancel::*;
         use MemberPresence::*;
         use Phase::*;
         use RoomError::*;
         match event {
             CreateAnswering(_) => Err(AnsweringAlreadyCreated),
-            ChangeJoinability(mut b) => {
+            ChangeJoinability(b) => {
                 from.ensure_admin_or_moderator(room_state)?;
                 match &mut self.phase {
                     Open { joinable, .. } => {
-                        std::mem::swap(joinable, &mut b);
-                        Ok(Some(RestoreJoinability(b)))
+                        *joinable = b;
+                        Ok(())
                     }
                     _ => Err(InvalidAnsweringPhase),
                 }
             }
-            ChangeCollectability(mut b) => {
+            ChangeCollectability(b) => {
                 from.ensure_admin_or_moderator(room_state)?;
                 match &mut self.phase {
                     Open { collectable, .. } => {
-                        std::mem::swap(collectable, &mut b);
-                        Ok(Some(RestoreCollectability(b)))
+                        *collectable = b;
+                        Ok(())
                     }
                     _ => Err(InvalidAnsweringPhase),
                 }
@@ -263,7 +362,7 @@ impl AnsweringState {
                                 },
                             );
                             *unready_members += 1;
-                            Ok(Some(CancelJoin(user_id)))
+                            Ok(())
                         }
                     },
                     _ => Err(AnsweringUnjoinable),
@@ -271,6 +370,12 @@ impl AnsweringState {
             }
             Leave => {
                 let user_id = from.user_id().ok_or(Unauthorized)?;
+                self.phase.remove_user(user_id, RemovalReason::Left)
+            }
+            Connected(user_id) => {
+                if from != IdentityID::RoomID {
+                    return Err(Unauthorized);
+                }
 
                 match &mut self.phase {
                     Open {
@@ -285,20 +390,11 @@ impl AnsweringState {
                             if !ready {
                                 *unready_members -= 1;
                             }
-                            match members.remove(&user_id) {
-                                Some(v) => {
-                                    let new_phase = self
-                                        .phase
-                                        .normalize()
-                                        .map(|p| Box::new(std::mem::replace(&mut self.phase, p)));
-
-                                    Ok(Some(CancelLeaveOpen {
-                                        user: user_id,
-                                        open_status: v,
-                                        phase: new_phase,
-                                    }))
-                                }
-                                None => Err(NoSuchUser),
+                            if members.remove(&user_id).is_some() {
+                                self.phase.normalize();
+                                Ok(())
+                            } else {
+                                Err(NoSuchUser)
                             }
                         }
                         Some(_) => Err(Unauthorized),
@@ -307,38 +403,23 @@ impl AnsweringState {
                     Phase::Debate { members, .. } => {
                         if members.contains(&user_id) {
                             members.remove(&user_id);
-                            Ok(Some(CancelLeaveDebate(user_id)))
+                            Ok(())
                         } else {
                             Err(NoSuchUser)
                         }
                     }
-                    Phase::Encrypt { .. } => {
-                        todo! {}
-                    }
-                    Phase::Answers { .. } => {
-                        todo! {}
-                    }
-                    Phase::Decrypt { .. } => {
-                        todo! {}
-                    }
+                    _ => Err(ConnectionRefused),
                 }
             }
-            Connected(_id) => {
+            AnsweringEvent::Disconnected(user_id) => {
                 if from != IdentityID::RoomID {
                     return Err(Unauthorized);
                 }
-
-                todo! {}
+                self.phase.remove_user(user_id, RemovalReason::Deconnected)
             }
-            Disconnected(_id) => {
-                if from != IdentityID::RoomID {
-                    return Err(Unauthorized);
-                }
-
-                todo! {}
-            }
-            Kick(_id) => {
-                todo! {}
+            Kick(user_id) => {
+                from.ensure_admin_or_moderator(room_state)?;
+                self.phase.remove_user(user_id, RemovalReason::Kicked)
             }
             Unkick(_id) => {
                 todo! {}

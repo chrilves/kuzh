@@ -37,10 +37,10 @@ kuzh-common = {path = "../kuzh-common"}
 # logging them with `console.error`. This is great for development, but requires
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
 # code size when deploying.
-console_error_panic_hook = { version = "0.1.6", optional = true }
-base64 = {version = "0.21.2", features = ["std"]}
+console_error_panic_hook = { version = "*", optional = true }
+base64 = {version = "*", features = ["std"]}
 getrandom = {version = "*", features = ["js"]}
-wee_alloc = { version = "0.4.2", optional = false }
+wee_alloc = { version = "*", optional = false }
 thiserror = "*"
 
 [dev-dependencies]

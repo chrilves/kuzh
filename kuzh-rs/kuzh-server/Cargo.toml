@@ -12,12 +12,12 @@ tokio = {version = "*", features = ["full"] }
 futures = "*"
 futures-util = "*"
 futures-channel = "*"
-hex = "0.4.3"
-base64 = {version = "0.21.2", features = ["std"]}
-tokio-postgres = "0.7.8"
-refinery = { version = "0.8.10", features = ["tokio-postgres"] }
-clap = { version = "4.3.19", features = ["derive"] }
-deadpool-postgres = "0.10.5"
+hex = "*"
+base64 = {version = "*", features = ["std"]}
+tokio-postgres = "*"
+refinery = { version = "*", features = ["tokio-postgres"] }
+clap = { version = "*", features = ["derive"] }
+deadpool-postgres = "*"
 
 [dev-dependencies]
 assert2 = "*"
