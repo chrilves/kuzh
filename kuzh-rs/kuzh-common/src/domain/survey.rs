@@ -84,15 +84,72 @@ trait RoomState4Survey {}
 pub trait SurveyState {}
 
 pub async fn apply_survey_event<R: RoomState4Survey, S: SurveyState>(
-    &mut survey_state: S,
+    survey_state: &mut S,
     room_state: &R,
     from: SurveyIdentityID,
     event: SurveyEvent,
 ) -> SurveyResult<()> {
+    use SurveyEvent::*;
 
     match event {
-        
+        CreateSurvey(Question) => {
+            todo! {}
+        }
+
+        // User Management
+        Join => {
+            todo! {}
+        }
+        Leave => {
+            todo! {}
+        }
+        Connected(user_id) => {
+            todo! {}
+        }
+        Disconnected(user_id) => {
+            todo! {}
+        }
+        Kick(user_id) => {
+            todo! {}
+        }
+        Unkick(user_id) => {
+            todo! {}
+        }
+
+        // Admin Management
+        SetJoinability(joinability) => {
+            todo! {}
+        }
+        SetCollectability(collectability) => {
+            todo! {}
+        }
+        Go => {
+            todo! {}
+        }
+
+        // Anonymous Protocol
+        Ready => {
+            todo! {}
+        }
+        PublicPartialKey {
+            public_key,
+            challenge,
+        } => {
+            todo! {}
+        }
+        NewAnswer(answer) => {
+            todo! {}
+        }
+        PrivatePartialKey(secret_key) => {
+            todo! {}
+        }
+
+        // Messages
+        Message(String) => {
+            todo! {}
+        }
+        SetMessageLevel(AllowLevel) => {
+            todo! {}
+        }
     }
-
-
 }
