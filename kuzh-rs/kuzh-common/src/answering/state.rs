@@ -1,11 +1,4 @@
-use crate::common::AnsweringIdentityID;
-use crate::common::IdentityID;
-use crate::common::Question;
-use crate::crypto::{PublicKey, SecretKey};
-use crate::newtypes::UserID;
-use crate::room::state::RoomError;
-use crate::room::state::RoomState;
-use crate::room::HasIdentityInfo;
+
 use std::collections::{HashMap, HashSet};
 
 use super::events::AnsweringEvent;
@@ -320,7 +313,7 @@ impl AnsweringState {
         use RoomError::*;
         match event {
             CreateAnswering(_) => Err(AnsweringAlreadyCreated),
-            ChangeJoinability(b) => {
+            SetJoinability(b) => {
                 from.ensure_admin_or_moderator(room_state)?;
                 match &mut self.phase {
                     Open { joinable, .. } => {
@@ -330,7 +323,7 @@ impl AnsweringState {
                     _ => Err(InvalidAnsweringPhase),
                 }
             }
-            ChangeCollectability(b) => {
+            SetCollectability(b) => {
                 from.ensure_admin_or_moderator(room_state)?;
                 match &mut self.phase {
                     Open { collectable, .. } => {
@@ -449,15 +442,6 @@ impl AnsweringState {
 
             // Messages
             Message(_) => {
-                todo! {}
-            }
-            MessageRights(_role) => {
-                todo! {}
-            }
-            ExplicitMessageRight {
-                identity: _,
-                allow: _,
-            } => {
                 todo! {}
             }
         }
