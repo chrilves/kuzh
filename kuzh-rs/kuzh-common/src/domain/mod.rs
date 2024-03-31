@@ -1,6 +1,3 @@
-use crate::crypto::Bin;
-use subtle::ConstantTimeEq;
-
 macro_rules! id_type {
     ($newtype:ident,$basetype:ident) => {
         #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash, Ord)]
@@ -46,10 +43,10 @@ macro_rules! id_type {
     };
 }
 
-id_type!(MessageID, u64);
+id_type!(BlockHeight, u32);
 
-pub mod chain;
-pub mod identity;
-pub mod question;
+pub mod chat;
+pub mod lobby;
 pub mod room;
-pub mod survey;
+
+//pub mod survey;

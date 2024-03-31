@@ -1,12 +1,3 @@
-use crate::crypto::{PublicKey, RingSig, SecretKey, Sig};
-
-use super::{
-    chain::{Block, SignedBlock, SignedTransaction, Transaction},
-    identity::{AllowLevel, AnswerID, IdentityID, MaskID, UserID},
-    question::{Question, QuestionID},
-    room::RoomState,
-};
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecryptedAnswer {
     pub sign_key: PublicKey,
@@ -61,10 +52,6 @@ pub enum SurveyEvent {
     },
     NewAnswer(Box<Answer>),
     PrivatePartialKey(Box<SecretKey>),
-
-    // Messages
-    Message(String),
-    SetMessageLevel(AllowLevel),
 }
 
 pub type SurveyIdentityID = IdentityID<MaskID, AnswerID>;
@@ -75,13 +62,42 @@ pub type SurveySignedTransaction = SignedTransaction<QuestionID, MaskID, AnswerI
 pub type SurveyRawBlock = Block<QuestionID, MaskID, AnswerID, SurveyEvent>;
 pub type SurveyBlock = SignedBlock<QuestionID, MaskID, AnswerID, SurveyEvent>;
 
-pub enum SurveyError {}
+pub enum SurveyError {
+    SurveyAlreadyCreated,
+}
 
 type SurveyResult<A> = Result<A, SurveyError>;
 
 trait RoomState4Survey {}
 
-pub trait SurveyState {}
+pub enum Phase {
+    Lobby,
+    PublicKeys,
+    Answers,
+    SecretKeys,
+    Debate,
+    Failed
+}
+
+
+pub trait SurveyState {
+
+    // ALL
+    async fn phase(&self) -> SurveyResult<Phase>;
+
+    async fn new_mask(&mut self, mask: CryptoID) -> SurveyResult<MaskID>;
+    async fn new_message(&mut self, from: SurveyIdentityID, message: String) -> SurveyResult<()>;
+
+    // LOBBY
+    async fn lobby_can_join(&self) -> SurveyResult<bool>;
+    async fn lobby_set_can_join(&mut self, can_join: bool) -> SurveyResult<()>;
+
+    async fn lobby_can_proceed(&self) -> SurveyResult<bool>;
+    async fn lobby_set_can_proceed(&mut self, can_proceeed: bool) -> SurveyResult<()>;
+
+    async fn lobby_new_user(&mut self, user: UserID) -> SurveyResult<()>;
+    
+}
 
 pub async fn apply_survey_event<R: RoomState4Survey, S: SurveyState>(
     survey_state: &mut S,
@@ -89,12 +105,11 @@ pub async fn apply_survey_event<R: RoomState4Survey, S: SurveyState>(
     from: SurveyIdentityID,
     event: SurveyEvent,
 ) -> SurveyResult<()> {
+    use SurveyError::*;
     use SurveyEvent::*;
 
     match event {
-        CreateSurvey(Question) => {
-            todo! {}
-        }
+        CreateSurvey(..) => Err(SurveyAlreadyCreated),
 
         // User Management
         Join => {
@@ -143,13 +158,23 @@ pub async fn apply_survey_event<R: RoomState4Survey, S: SurveyState>(
         PrivatePartialKey(secret_key) => {
             todo! {}
         }
-
-        // Messages
-        Message(String) => {
-            todo! {}
-        }
-        SetMessageLevel(AllowLevel) => {
-            todo! {}
-        }
     }
 }
+
+
+        // Survey
+        OpenSurvey => when_duty!(if room_state.alive_question_count().await? >= 1 {
+            room_state.open_survey().await
+        } else {
+            Err(NoSurvey)
+        }),
+        CloseSurvey => when_duty!(if room_state.is_survey_open().await? {
+            room_state.close_survey().await
+        } else {
+            Err(NoSurvey)
+        }),
+        FinishedSurvey => when_duty!(if room_state.is_survey_open().await? {
+            room_state.finished_survey().await
+        } else {
+            Err(NoSurvey)
+        }),

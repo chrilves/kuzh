@@ -1,19 +1,141 @@
-use crate::crypto::{CryptoID, PublicKey, SecretKey};
 use never_type::Never;
+
+use crate::crypto::{CryptoID, PublicKey, SecretKey, Sig};
+
+use super::BlockHeight;
+
+id_type!(UserID, u16);
+id_type!(MaskID, u32);
+id_type!(AnswerID, u8);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IdentityID<M, A> {
+    RoomID,
+    User(UserID),
+    Mask(M),
+    Answer(A),
+}
+
+impl<M, A> IdentityID<M, A> {
+    #[inline(always)]
+    pub fn is_anonymous(self) -> bool {
+        use IdentityID::*;
+        matches!(self, Mask(_) | Answer(_))
+    }
+
+    #[inline(always)]
+    pub fn is_user(self) -> bool {
+        use IdentityID::*;
+        matches!(self, User(_))
+    }
+}
 
 pub type RoomIdentityID = IdentityID<MaskID, Never>;
 
-use super::{
-    chain::{Block, Nonce, SignedBlock, SignedTransaction, Transaction},
-    identity::{
-        AllowLevel, DutyRole, IdentityID, MaskID, RegularRole, Role, SharingDutyRole, UserID,
-    },
-    question::{QuestionID, QuestionKind, QuestionPriority},
-};
-use RegularRole::*;
-use Role::*;
-use RoomError::*;
-use RoomEvent::*;
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, PartialOrd, Ord)]
+pub enum DutyRole {
+    Moderator,
+    Admin,
+    Owner,
+}
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub struct SharingDutyRole {
+    pub duty: DutyRole,
+    pub giver: bool,
+}
+
+impl PartialOrd for SharingDutyRole {
+    #[inline(always)]
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SharingDutyRole {
+    #[inline(always)]
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.duty.cmp(&other.duty)
+    }
+}
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, PartialOrd, Ord)]
+pub enum RegularRole {
+    Observer,
+    Messager,
+    Asker,
+}
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, PartialOrd, Ord)]
+pub enum Role {
+    Banned,
+    Regular(RegularRole),
+    Duty(SharingDutyRole),
+}
+
+impl Role {
+    #[inline(always)]
+    pub const fn is_duty(self) -> bool {
+        use Role::*;
+        matches!(self, Duty { .. })
+    }
+
+    #[inline(always)]
+    pub const fn duty(self) -> Option<SharingDutyRole> {
+        use Role::*;
+        match self {
+            Duty(sd) => Some(sd),
+            _ => None,
+        }
+    }
+
+    #[inline(always)]
+    pub const fn is_banned(self) -> bool {
+        matches!(self, Role::Banned)
+    }
+
+    pub fn can_grant_role(self, to: Self, role: Role) -> bool {
+        match self {
+            Role::Duty(sd) if self > to && self >= role => {
+                if self == role {
+                    sd.giver
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, PartialOrd, Ord)]
+pub enum AllowLevel {
+    Anonymous,
+    Regular,
+    Duty,
+}
+
+impl AllowLevel {
+    pub fn from_role_id<M, A>(role: Role, identity: IdentityID<M, A>) -> Option<AllowLevel> {
+        match role {
+            Role::Duty(..) => Some(AllowLevel::Duty),
+            Role::Regular(_) => match identity {
+                IdentityID::User(..) => Some(AllowLevel::Regular),
+                IdentityID::Mask(..) | IdentityID::Answer(..) => Some(AllowLevel::Anonymous),
+                IdentityID::RoomID => None,
+            },
+            Role::Banned => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct IdentityInfo {
+    pub crypto_id: CryptoID,
+    pub role: Role,
+    pub name: Option<String>,
+    pub description: Option<String>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RoomAccessibility {
@@ -23,19 +145,19 @@ pub enum RoomAccessibility {
     SecretKeyProtected(Box<SecretKey>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct IdentityInfo {
-    pub crypto_id: CryptoID,
-    pub nonce: Nonce,
-    pub role: Role,
-    pub name: Option<String>,
-    pub description: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Like {
-    Like,
-    Dislike,
+pub enum Cheater {
+    CheaterWrongCommitment {
+        context: Box<[u8]>,
+        user: UserID,
+        encryption: Box<(PublicKey, Sig)>,
+        secret: Box<(SecretKey, Sig)>,
+    },
+    CheaterTwoAnswers {
+        context: Box<[u8]>,
+        user: UserID,
+        //survey_1: Answer,
+        //survey_2: Answer,
+    },
 }
 
 pub enum RoomEvent {
@@ -46,6 +168,7 @@ pub enum RoomEvent {
     SetRole {
         identity: RoomIdentityID,
         role: Role,
+        reason: Option<Box<Cheater>>,
     },
     SetName(Option<String>),
     SetDescription(Option<String>),
@@ -55,95 +178,34 @@ pub enum RoomEvent {
     SetRoomDescription(Option<String>),
     SetRoomAccessibility(RoomAccessibility),
     SetMaxConnectedUsers(u16),
-
-    // Questions
-    NewQuestion {
-        kind: QuestionKind,
-        question: String,
-    },
-    ClarifyQuestion {
-        question: QuestionID,
-        clarification: String,
-    },
-    LikeQuestion {
-        question: QuestionID,
-        like: Option<Like>,
-    },
-    SetQuestionPriority {
-        question: QuestionID,
-        priority: QuestionPriority,
-    },
-    DeleteQuestion(QuestionID),
-    DeleteLowPriorityQuestions(QuestionPriority),
-
-    // Question Rights
-    SetMaxQuestions(u8),
-    SetQuestionLevel(AllowLevel),
-
-    // Messages
-    Message(String),
-    SetMessageLevel(AllowLevel),
-
-    // Survey
-    OpenSurvey,
-    CloseSurvey,
-    FinishedSurvey,
-    /*
-    CheaterWrongCommitment {
-        context: Box<[u8]>,
-        user: UserID,
-        encryption: Box<(PublicKey, Sig)>,
-        secret: Box<(SecretKey, Sig)>,
-    },
-    CheaterTwoAnswers {
-        context: Box<[u8]>,
-        user: UserID,
-        survey_1: Box<Answer>,
-        survey_2: Box<Answer>,
-    },
-    */
 }
-
-pub type RoomTransaction = Transaction<(), MaskID, Never, RoomEvent>;
-pub type RoomSignedTransaction = SignedTransaction<(), MaskID, Never, RoomEvent>;
-pub type RoomBlock = Block<(), MaskID, Never, RoomEvent>;
-pub type RoomSignedBlock = SignedBlock<(), MaskID, Never, RoomEvent>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RoomError {
-    RoomAlreadyCreated,
-    PublicKeyAlreadyUsed,
-    MaxUserIDReached,
-    MaxMaskIDReached,
-    AlreadyConnected,
-    NotConnected,
-    Unauthorized,
-    NoSuchUser,
-    NoSuchMask,
+    NameAlreadyTaken,
     NoSuchIdentity,
-    MaxQuestionsReached,
-    MaxQuestionIDReached,
-    NoSuchQuestion,
-    NoSurvey,
-    SurveyAlreadyCreated,
-    SurveyUnjoinable,
-    InvalidRole,
-    AlreadyJoined,
-    InvalidSurveyPhase,
-    ConnectionRefused,
+    PublicKeyAlreadyUsed,
+    RoomAlreadyCreated,
+    Unauthorized,
 }
 
 pub type RoomResult<A> = Result<A, RoomError>;
 
 pub trait RoomState {
     /// User Management
-    async fn known_key(&self, key: &PublicKey) -> RoomResult<bool>;
-    async fn new_user(&mut self, info: IdentityInfo) -> RoomResult<()>;
-    async fn user_role(&self, user: UserID) -> RoomResult<Role>;
+    async fn find_id_by_key(&self, key: &PublicKey) -> RoomResult<Option<RoomIdentityID>>;
+    async fn find_id_by_name(&self, name: &str) -> RoomResult<Option<RoomIdentityID>>;
+
+    async fn new_user(&mut self, info: IdentityInfo) -> RoomResult<UserID>;
+    async fn user_role(&self, user: UserID, height: Option<BlockHeight>) -> RoomResult<Role>;
     async fn set_user_role(&self, user: UserID, role: Role) -> RoomResult<()>;
 
-    async fn new_mask(&mut self, info: IdentityInfo) -> RoomResult<()>;
-    async fn mask_role(&self, mask: MaskID) -> RoomResult<Option<RegularRole>>;
+    async fn new_mask(&mut self, info: IdentityInfo) -> RoomResult<MaskID>;
+    async fn mask_role(
+        &self,
+        mask: MaskID,
+        height: Option<BlockHeight>,
+    ) -> RoomResult<Option<RegularRole>>;
     async fn set_mask_role(&self, mask: MaskID, role: Option<RegularRole>) -> RoomResult<()>;
 
     async fn set_name(&mut self, identity: RoomIdentityID, name: Option<String>) -> RoomResult<()>;
@@ -156,74 +218,42 @@ pub trait RoomState {
     // Room User Config
     async fn set_rooom_accessibility(&mut self, access: RoomAccessibility) -> RoomResult<()>;
     async fn set_max_connected_users(&mut self, nb_users: u16) -> RoomResult<()>;
-
-    // User Questions
-    async fn question_author(&self, question: QuestionID) -> RoomResult<RoomIdentityID>;
-    async fn new_question(
-        &mut self,
-        from: RoomIdentityID,
-        kind: QuestionKind,
-        question: String,
-    ) -> RoomResult<()>;
-
-    async fn add_question_clarification(
-        &mut self,
-        question: QuestionID,
-        clarification: String,
-    ) -> RoomResult<()>;
-
-    async fn like_question(
-        &mut self,
-        user: UserID,
-        question: QuestionID,
-        like: Option<Like>,
-    ) -> RoomResult<()>;
-
-    async fn is_question_alive(&self, question: QuestionID) -> RoomResult<bool>;
-    async fn alive_question_count(&self) -> RoomResult<u8>;
-
-    // Questions Config Management
-    async fn set_max_questions(&mut self, nb_questions: u8) -> RoomResult<()>;
-    async fn question_allow_level(&self) -> RoomResult<AllowLevel>;
-    async fn set_question_allow_level(&mut self, allow_level: AllowLevel) -> RoomResult<()>;
-
-    // Questions Management
-    async fn set_question_priority(
-        &mut self,
-        question: QuestionID,
-        priority: QuestionPriority,
-    ) -> RoomResult<()>;
-
-    async fn delete_question(&mut self, question: QuestionID) -> RoomResult<()>;
-    async fn delete_low_priority_questions(&mut self, priority: QuestionPriority)
-        -> RoomResult<()>;
-
-    /// Message Management
-    async fn new_message(&mut self, from: RoomIdentityID, message: String) -> RoomResult<()>;
-    async fn message_allow_level(&self) -> RoomResult<AllowLevel>;
-    async fn set_message_allow_level(&mut self, allow_level: AllowLevel) -> RoomResult<()>;
-
-    /// Survey
-    async fn is_survey_open(&self) -> RoomResult<bool>;
-    async fn open_survey(&mut self) -> RoomResult<()>;
-    async fn close_survey(&mut self) -> RoomResult<()>;
-    async fn finished_survey(&mut self) -> RoomResult<()>;
 }
 
-pub async fn apply_event<A: RoomState>(
+/*pub async fn identity_role<R:RoomState, A>(room_state: &R, identity: IdentityID<MaskID, A>) -> RoomResult<Role> {
+    match identity {
+        IdentityID::User(user) => room_state.user_role(user).await,
+        IdentityID::RoomID => Ok(Role::Duty(SharingDutyRole {
+            duty: DutyRole::Owner,
+            giver: true,
+        })),
+        IdentityID::Mask(mask) => match room_state.mask_role(mask).await? {
+            Some(r) => Ok(Role::Regular(r)),
+            None => Ok(Role::Banned),
+        },
+        IdentityID::Answer(_) => Err(RoomError::NoSuchIdentity),
+    }
+}*/
+
+pub async fn apply_room_event<A: RoomState>(
     room_state: &mut A,
     from: RoomIdentityID,
     event: RoomEvent,
 ) -> Result<(), RoomError> {
+    use RegularRole::*;
+    use Role::*;
+    use RoomError::*;
+    use RoomEvent::*;
+
     macro_rules! identity_role {
         ($identity:expr) => {
             match $identity {
-                IdentityID::User(user) => room_state.user_role(user).await?,
+                IdentityID::User(user) => room_state.user_role(user, None).await?,
                 IdentityID::RoomID => Role::Duty(SharingDutyRole {
                     duty: DutyRole::Owner,
                     giver: true,
                 }),
-                IdentityID::Mask(mask) => match room_state.mask_role(mask).await? {
+                IdentityID::Mask(mask) => match room_state.mask_role(mask, None).await? {
                     Some(r) => Role::Regular(r),
                     None => Role::Banned,
                 },
@@ -248,38 +278,44 @@ pub async fn apply_event<A: RoomState>(
             if from != RoomIdentityID::RoomID {
                 return Err(Unauthorized);
             }
-            if room_state.known_key(&id.sign_key).await?
-                || room_state.known_key(&id.encrypt_key.value).await?
+            if room_state.find_id_by_key(&id.sign_key).await?.is_some()
+                || room_state
+                    .find_id_by_key(&id.encrypt_key.value)
+                    .await?
+                    .is_some()
             {
                 return Err(PublicKeyAlreadyUsed);
             }
             room_state
                 .new_user(IdentityInfo {
                     crypto_id: *id,
-                    nonce: Nonce::new(),
                     role: Regular(Asker),
                     name: None,
                     description: None,
                 })
                 .await
+                .map(|_| ())
         }
         NewMask(id) => {
-            if room_state.known_key(&id.sign_key).await?
-                || room_state.known_key(&id.encrypt_key.value).await?
+            if room_state.find_id_by_key(&id.sign_key).await?.is_some()
+                || room_state
+                    .find_id_by_key(&id.encrypt_key.value)
+                    .await?
+                    .is_some()
             {
                 return Err(PublicKeyAlreadyUsed);
             }
             room_state
                 .new_mask(IdentityInfo {
                     crypto_id: *id,
-                    nonce: Nonce::new(),
                     role: Regular(Asker),
                     name: None,
                     description: None,
                 })
                 .await
+                .map(|_| ())
         }
-        SetRole { identity, role } => {
+        SetRole { identity, role, .. } => {
             use IdentityID::*;
             use Role::*;
             use RoomError::*;
@@ -307,7 +343,15 @@ pub async fn apply_event<A: RoomState>(
                 Err(Unauthorized)
             }
         }
-        SetName(name) => room_state.set_name(from, name).await,
+        SetName(name) => {
+            match name {
+                Some(n) if room_state.find_id_by_name(&n).await?.is_some() => {
+                    return Err(NameAlreadyTaken)
+                }
+                _ => (),
+            }
+            room_state.set_name(from, name).await
+        }
         SetDescription(description) => room_state.set_description(from, description).await,
         // Room
         SetRoomName(name) => when_duty!(room_state.set_name(IdentityID::RoomID, name).await),
@@ -322,84 +366,5 @@ pub async fn apply_event<A: RoomState>(
         SetMaxConnectedUsers(nb_users) => {
             when_duty!(room_state.set_max_connected_users(nb_users).await)
         }
-        // Questions
-        NewQuestion { kind, question } => {
-            let from_role = identity_role!(from);
-
-            if from_role >= Role::Regular(RegularRole::Asker)
-                && room_state.question_allow_level().await?
-                    <= AllowLevel::from_role_id(from_role, from).ok_or(Unauthorized)?
-            {
-                room_state.new_question(from, kind, question).await
-            } else {
-                Err(Unauthorized)
-            }
-        }
-        ClarifyQuestion {
-            question,
-            clarification,
-        } => {
-            if room_state.question_author(question).await? == from && identity_role!(from) != Banned
-            {
-                room_state
-                    .add_question_clarification(question, clarification)
-                    .await
-            } else {
-                Err(Unauthorized)
-            }
-        }
-        LikeQuestion { question, like } => match from {
-            IdentityID::User(user_id)
-                if room_state.user_role(user_id).await? != Banned
-                    && room_state.is_question_alive(question).await? =>
-            {
-                room_state.like_question(user_id, question, like).await
-            }
-            _ => Err(Unauthorized),
-        },
-        SetQuestionPriority { question, priority } => {
-            when_duty!(room_state.set_question_priority(question, priority).await)
-        }
-        DeleteQuestion(question) => when_duty!(room_state.delete_question(question).await),
-        DeleteLowPriorityQuestions(priority) => {
-            when_duty!(room_state.delete_low_priority_questions(priority).await)
-        }
-        // Question Rights
-        SetMaxQuestions(nb_questions) => {
-            when_duty!(room_state.set_max_questions(nb_questions).await)
-        }
-        SetQuestionLevel(level) => when_duty!(room_state.set_question_allow_level(level).await),
-
-        // Messages
-        Message(msg) => {
-            let from_role = identity_role!(from);
-
-            if from_role >= Role::Regular(RegularRole::Messager)
-                && room_state.message_allow_level().await?
-                    <= AllowLevel::from_role_id(from_role, from).ok_or(Unauthorized)?
-            {
-                room_state.new_message(from, msg).await
-            } else {
-                Err(Unauthorized)
-            }
-        }
-        SetMessageLevel(level) => when_duty!(room_state.set_message_allow_level(level).await),
-
-        // Survey
-        OpenSurvey => when_duty!(if room_state.alive_question_count().await? >= 1 {
-            room_state.open_survey().await
-        } else {
-            Err(NoSurvey)
-        }),
-        CloseSurvey => when_duty!(if room_state.is_survey_open().await? {
-            room_state.close_survey().await
-        } else {
-            Err(NoSurvey)
-        }),
-        FinishedSurvey => when_duty!(if room_state.is_survey_open().await? {
-            room_state.finished_survey().await
-        } else {
-            Err(NoSurvey)
-        }),
     }
 }

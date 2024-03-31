@@ -1,10 +1,15 @@
 use std::marker::PhantomData;
-
 use subtle::ConstantTimeEq;
-
 use crate::crypto::{Bin, Signed};
+use super::{questions::QuestionID};
 
-use super::identity::IdentityID;
+pub enum ChainID {
+    Room,
+    Questions,
+    Survey { id: QuestionID },
+    QuestionsMessages,
+    SurveyMessages { id: QuestionID }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
 #[repr(transparent)]
@@ -79,3 +84,10 @@ pub struct Block<ChainId, MaskId, AnswerId, Event> {
 
 pub type SignedBlock<ChainId, MaskId, AnswerId, Event> =
     Signed<Block<ChainId, MaskId, AnswerId, Event>>;
+
+
+pub type RoomTransaction = Transaction<(), MaskID, Never, RoomEvent>;
+pub type RoomSignedTransaction = SignedTransaction<(), MaskID, Never, RoomEvent>;
+pub type RoomBlock = Block<(), MaskID, Never, RoomEvent>;
+pub type RoomSignedBlock = SignedBlock<(), MaskID, Never, RoomEvent>;
+    
