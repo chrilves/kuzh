@@ -5,11 +5,10 @@ use super::events::AnsweringEvent;
 use super::Answer;
 use super::ClearAnswer;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct AnsweringState {
-    pub question: Question,
-    pub phase: Phase,
+pub trait AnsweringState {
+    
 }
+
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Phase {

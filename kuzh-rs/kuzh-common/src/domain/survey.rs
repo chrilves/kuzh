@@ -11,6 +11,7 @@ pub enum DecryptedAnswerBody {
     Closed(bool),
     Poll(u8),
 }
+id_type!(AnswerID, u8);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Answer {
@@ -54,16 +55,12 @@ pub enum SurveyEvent {
     PrivatePartialKey(Box<SecretKey>),
 }
 
-pub type SurveyIdentityID = IdentityID<MaskID, AnswerID>;
+pub type SurveyIdentityID = IdentityID<Never, AnswerID>;
 pub const ANSWER_SIZE: usize = 300;
-
-pub type SurveyTransaction = Transaction<QuestionID, MaskID, AnswerID, SurveyEvent>;
-pub type SurveySignedTransaction = SignedTransaction<QuestionID, MaskID, AnswerID, SurveyEvent>;
-pub type SurveyRawBlock = Block<QuestionID, MaskID, AnswerID, SurveyEvent>;
-pub type SurveyBlock = SignedBlock<QuestionID, MaskID, AnswerID, SurveyEvent>;
 
 pub enum SurveyError {
     SurveyAlreadyCreated,
+    Cheater,
 }
 
 type SurveyResult<A> = Result<A, SurveyError>;
@@ -71,7 +68,7 @@ type SurveyResult<A> = Result<A, SurveyError>;
 trait RoomState4Survey {}
 
 pub enum Phase {
-    Lobby,
+    Startup,
     PublicKeys,
     Answers,
     SecretKeys,
@@ -79,29 +76,31 @@ pub enum Phase {
     Failed
 }
 
+pub enum UserState {
+    Present,
+    Absent,
+    Kicked
+}
 
 pub trait SurveyState {
-
     // ALL
     async fn phase(&self) -> SurveyResult<Phase>;
 
-    async fn new_mask(&mut self, mask: CryptoID) -> SurveyResult<MaskID>;
-    async fn new_message(&mut self, from: SurveyIdentityID, message: String) -> SurveyResult<()>;
+    async fn user_state(&self, user_id: UserID) -> SurveyResult<UserState>;
+    async fn set_user_state(&self, user_id: UserID, user_state: UserState) -> SurveyResult<()>;
 
-    // LOBBY
-    async fn lobby_can_join(&self) -> SurveyResult<bool>;
-    async fn lobby_set_can_join(&mut self, can_join: bool) -> SurveyResult<()>;
+    // Startup
+    async fn is_joinable(&self) -> SurveyResult<bool>;
+    async fn set_joinable(&mut self, joinable: bool) -> SurveyResult<()>;
 
     async fn lobby_can_proceed(&self) -> SurveyResult<bool>;
     async fn lobby_set_can_proceed(&mut self, can_proceeed: bool) -> SurveyResult<()>;
 
     async fn lobby_new_user(&mut self, user: UserID) -> SurveyResult<()>;
-    
 }
 
 pub async fn apply_survey_event<R: RoomState4Survey, S: SurveyState>(
     survey_state: &mut S,
-    room_state: &R,
     from: SurveyIdentityID,
     event: SurveyEvent,
 ) -> SurveyResult<()> {
@@ -160,21 +159,3 @@ pub async fn apply_survey_event<R: RoomState4Survey, S: SurveyState>(
         }
     }
 }
-
-
-        // Survey
-        OpenSurvey => when_duty!(if room_state.alive_question_count().await? >= 1 {
-            room_state.open_survey().await
-        } else {
-            Err(NoSurvey)
-        }),
-        CloseSurvey => when_duty!(if room_state.is_survey_open().await? {
-            room_state.close_survey().await
-        } else {
-            Err(NoSurvey)
-        }),
-        FinishedSurvey => when_duty!(if room_state.is_survey_open().await? {
-            room_state.finished_survey().await
-        } else {
-            Err(NoSurvey)
-        }),

@@ -1,8 +1,10 @@
-use crate::domain::room::{IdentityID, RegularRole};
+use crate::{crypto::CryptoID, domain::room::{RegularRole, RoomIdentityID}};
 
-use super::room::{AllowLevel, Role, RoomIdentityID, UserID};
+use super::room::{AllowLevel, Role, UserID};
 
 id_type!(QuestionID, u16);
+id_type!(AnonymousID, u16);
+
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum QuestionKind {
@@ -12,9 +14,16 @@ pub enum QuestionKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum LobbyIdentityID {
+    Room,
+    User(UserID),
+    Anonymous(AnonymousID)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Question {
     pub id: QuestionID,
-    pub from: RoomIdentityID,
+    pub from: LobbyIdentityID,
     pub kind: QuestionKind,
     pub question: String,
     pub clarifications: Vec<String>,
@@ -59,6 +68,8 @@ pub enum Like {
 }
 
 pub enum LobbyEvent {
+    NewAnonymous(Box<CryptoID>),
+
     // Questions
     NewQuestion {
         kind: QuestionKind,
@@ -150,7 +161,7 @@ pub trait LobbyState {
 
 pub async fn apply_room_event<L: LobbyState>(
     lobby_state: &mut L,
-    from: RoomIdentityID,
+    from: LobbyIdentityID,
     from_role: Role,
     event: LobbyEvent,
 ) -> LobbyResult<()> {

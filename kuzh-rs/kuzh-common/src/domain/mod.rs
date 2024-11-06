@@ -45,8 +45,7 @@ macro_rules! id_type {
 
 id_type!(BlockHeight, u32);
 
-pub mod chat;
-pub mod lobby;
 pub mod room;
-
+pub mod lobby;
 //pub mod survey;
+//pub mod chat;

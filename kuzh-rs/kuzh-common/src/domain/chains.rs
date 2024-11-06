@@ -40,19 +40,7 @@ impl ConstantTimeEq for Nonce {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
-#[repr(transparent)]
-pub struct BlockHeight<Event> {
-    height: u64,
-    _marker: PhantomData<Event>,
-}
 
-impl<Event> ConstantTimeEq for BlockHeight<Event> {
-    #[inline]
-    fn ct_eq(&self, other: &Self) -> subtle::Choice {
-        self.height.ct_eq(&other.height)
-    }
-}
 
 pub struct Transaction<ChainId, MaskId, AnswerId, Event> {
     pub chain: ChainId,
@@ -90,4 +78,8 @@ pub type RoomTransaction = Transaction<(), MaskID, Never, RoomEvent>;
 pub type RoomSignedTransaction = SignedTransaction<(), MaskID, Never, RoomEvent>;
 pub type RoomBlock = Block<(), MaskID, Never, RoomEvent>;
 pub type RoomSignedBlock = SignedBlock<(), MaskID, Never, RoomEvent>;
-    
+
+pub type SurveyTransaction = Transaction<QuestionID, MaskID, AnswerID, SurveyEvent>;
+pub type SurveySignedTransaction = SignedTransaction<QuestionID, MaskID, AnswerID, SurveyEvent>;
+pub type SurveyRawBlock = Block<QuestionID, MaskID, AnswerID, SurveyEvent>;
+pub type SurveyBlock = SignedBlock<QuestionID, MaskID, AnswerID, SurveyEvent>;
